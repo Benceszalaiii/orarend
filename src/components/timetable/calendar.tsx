@@ -7,7 +7,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
+  // ExternalLink, //! a szakmai portál linkjével együtt visszakapcsolni
   Info,
   Merge,
   Sparkles,
@@ -757,6 +757,10 @@ export function TimetableCalendar({
               //* egy 100dvh-s lapon ~40 px-et venne el a rácstól, pedig egyszer
               //* olvassa el az ember. A billentyűk is itt vannak kiírva. */}
           {fullscreen && <LegendMenu />}
+          {/*//! TODO: visszakapcsolni, ha a szakmai portál élesedik. Addig nem
+              //! mutatunk linket egy nem létező oldalra. Az `ExternalLink`
+              //! import is ki van kommentezve a fájl tetején. */}
+          {/*
           <a
             href="https://szakkor.jedlik.eu"
             target="_blank"
@@ -766,6 +770,7 @@ export function TimetableCalendar({
             Az órarend a Jedlik Szakmai Portál része
             <ExternalLink className="size-3 shrink-0" aria-hidden />
           </a>
+          */}
           {hasClass && (
             <PreferencesMenu rows={rows} onUndo={undo} onReset={reset} />
           )}
