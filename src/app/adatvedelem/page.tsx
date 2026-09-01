@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Adatvédelem – Órarend",
+  title: "Adatvédelem - Órarend",
   description: "Adatvédelmi tájékoztató az Órarend alkalmazáshoz.",
 };
 
