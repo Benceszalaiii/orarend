@@ -2,13 +2,9 @@
 
 A Jedlik heti órarendje teljes képernyőn, bejelentkezés nélkül.
 
-A suli saját felülete ([Jedlikinfo](https://jedlikinfo.jedlik.eu)) belépést kér,
-és telefonon nehezen olvasható. Ez az alkalmazás ugyanazt a nyilvános órarend
-API-t olvassa, feloldja az osztály csoportbontásait arra a csoportra, ahová a
+A nyilvános órarend API-t olvassa, feloldja az osztály csoportbontásait arra a csoportra, ahová a
 diák tényleg jár, és a hetet teljes képernyős rácsként mutatja — ami egy A4-es
 fekvő lapra is kinyomtatható.
-
-A felület és a forráskód kommentjei magyarul vannak; az app nincs lokalizálva.
 
 ## Mit tud
 
@@ -21,10 +17,6 @@ A felület és a forráskód kommentjei magyarul vannak; az app nincs lokalizál
   órarendje, nem az osztályé.
 - **Most sáv.** Aktuális óra, szünet vagy *Mára vége*, visszaszámlálóval a
   következő váltásig.
-- **Duális nézet** (`/dualis`). A munkahelyi napokat az API saját A/B
-  hét-jelöléséből vezeti le (B hét szerda–péntek + A hét hétfő–kedd), nem egy
-  rögzített kezdődátumból számolva — így egy szünet miatti eltolódás nem csúsztatja
-  el a ciklust.
 - **Nyomtatás.** `@page { size: A4 landscape }`, saját világos palettával, ami
   megtartja a tantárgyak színeit: a szín itt információ, nem dekoráció.
 - **Megnevezett hibák.** Az órarend adatai nem a mieink, ezért minden hibafajtának
