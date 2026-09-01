@@ -96,6 +96,48 @@ export function removePreference(
   return prefs.filter((p) => p.clusterKey !== clusterKey);
 }
 
+//* ---------------------------------------------------------------------------
+//* EGYETLEN ÓRA ELREJTÉSE — ütköző pár nélkül
+//* ---------------------------------------------------------------------------
+//! A CSOPORTBONTÁS NEM MINDIG ÜTKÖZÉS. Ha szerdán az első óra CSAK az „A"
+//! csoporté, a „B" csoport helyén egyszerűen nincs kártya — nincs mivel
+//! összevonni, tehát a rácson nem jelenik meg az összevonás gombja sem. Eddig
+//! ezt az órát a B csoport tagja SEHOGY nem tudta eltüntetni: a saját órarendje
+//! végig hazudott neki egy órát, amire nem jár.
+//!
+//! Nem új tárolási forma oldja meg, hanem ugyanaz a döntés-modell: az elrejtés
+//! egy olyan „klaszter", aminek EGYETLEN ága van, és egyiket sem választottuk.
+//! Így a `suppressedIdentities`, a `preferencesHiding` (visszavonás) és a
+//! beállítások listája mind változtatás nélkül kezeli.
+export function hideIdentity(
+  prefs: MergePreference[],
+  identity: string,
+): MergePreference[] {
+  //! A KORÁBBI DÖNTÉSEK IS ELENGEDIK. Ha egy másik napon ez az óra épp a
+  //! GYŐZTES ága volt egy ütközésnek, az a döntés erősebb az elrejtésnél (lásd
+  //! `resolveDay`: a klaszterre mentett választás felülírja az általános
+  //! elnémítást) — vagyis az óra ott továbbra is látszana. Ezért az elrejtés
+  //! kiveszi magát minden korábbi választásból; különben az „elrejtettem" és a
+  //! rács két különböző dolgot állítana.
+  const stripped = prefs.map((pref) => {
+    const kept = chosenIdentities(pref.chosen);
+    if (!kept.includes(identity)) return pref;
+    return {
+      ...pref,
+      chosen: kept.filter((id) => id !== identity).join(CLUSTER_SEP),
+    };
+  });
+  return upsertPreference(stripped, { clusterKey: identity, chosen: "" });
+}
+
+//* Elrejtés-e a döntés (nem összevonás): egyetlen ág, és azt sem tartjuk meg.
+export function isHidePreference(pref: MergePreference): boolean {
+  return (
+    clusterIdentities(pref.clusterKey).length === 1 &&
+    chosenIdentities(pref.chosen).length === 0
+  );
+}
+
 export function preferencesHiding(
   prefs: MergePreference[],
   identities: string[],

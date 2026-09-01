@@ -1,19 +1,19 @@
 "use client";
 
 import { CalendarDays, CornerDownRight } from "lucide-react";
-import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { accentStyle } from "@/lib/accent";
 import { cn } from "@/lib/utils";
+import { DrainBar } from "./drain-bar";
 import {
   type AgendaItem,
   countdownLabel,
-  type NowSpan,
   type NowState,
   nowState,
   spanFraction,
 } from "./now";
 import { addDaysKey, minLabel, rangeLabel, todayKey } from "./shared";
+import { useClock, useVisibilityEpoch } from "./use-clock";
 
 //* ---------------------------------------------------------------------------
 //* „Most" sáv — a lap egyetlen sora, ami a diák tényleges kérdésére felel
@@ -29,83 +29,6 @@ import { addDaysKey, minLabel, rangeLabel, todayKey } from "./shared";
 //! KLIENS-OLDALI ÁLLAPOT. A pillanat a látogató órájából jön, ezért a sáv a
 //! szerver-HTML-ben ÜRESEN, de TELJES MAGASSÁGGAL renderel — így hidratáláskor
 //! nincs elugró elrendezés, és nincs hidratálási eltérés sem.
-
-type Clock = { min: number; sec: number };
-
-function useClock(): Clock | null {
-  const [clock, setClock] = useState<Clock | null>(null);
-  useEffect(() => {
-    const tick = () => {
-      const d = new Date();
-      const sec = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
-      setClock({ min: sec / 60, sec });
-    };
-    tick();
-    //* Másodperces ütem: 10 perc alatt a visszaszámláló másodpercet mutat, és
-    //* csak EZ a sáv rajzolódik újra tőle — a rács a saját perces ütemén megy.
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-  return clock;
-}
-
-//! Láthatóvá válás = ÚJ HORGONY. A CSS-animáció a saját indulásához méri a
-//! fázist, a rejtett lapon viszont EL SEM INDUL (a böngésző nem rajzol). A
-//! zsebben töltött óra után tehát elavult ponttól indulna — ez az epoch minden
-//! visszatéréskor újjáépítteti a sávot, friss horgonnyal.
-function useVisibilityEpoch(): number {
-  const [epoch, setEpoch] = useState(0);
-  useEffect(() => {
-    const onShow = () => {
-      if (document.visibilityState === "visible") setEpoch((e) => e + 1);
-    };
-    document.addEventListener("visibilitychange", onShow);
-    return () => document.removeEventListener("visibilitychange", onShow);
-  }, []);
-  return epoch;
-}
-
-//! A haladás-sávot NEM másodpercenként animáljuk újra: a CSS-animáció egyszer
-//! indul el a szakasz elejéhez horgonyozva (negatív késleltetés), és magától jár
-//! tovább — a `--tt-*` változók ezért a sáv SZÜLETÉSEKOR dőlnek el, és onnantól
-//! állnak. A `--tt-elapsed` ugyanis a *futó* animáció kezdetéhez képest tol a
-//! fázison: ha ütemenként újraírnánk, a saját múlása MELLÉ számolna, és a sáv
-//! kétszeres sebességgel szaladna végig. Új szakasz = új elem (`key`), ott
-//! számolunk újra.
-//*
-//* Az inline `transform` az animáció nélküli igazság: `prefers-reduced-motion`
-//* mellett (`animation: none`) EGYEDÜL ez mozgatja a sávot, ezért a `fraction`
-//* minden óraütésre frissül. Ahol az animáció fut, ott az írja felül (az
-//* animáció kaszkád-rétege erősebb az inline stílusnál) — a kettő nem harcol.
-function DrainBar({
-  span,
-  fraction,
-  accentSeed,
-}: {
-  span: NowSpan;
-  fraction: number;
-  accentSeed: string;
-}) {
-  const [anchor] = useState<React.CSSProperties>(() => {
-    const d = new Date();
-    const nowSec = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
-    return {
-      "--tt-dur": `${(span.toMin - span.fromMin) * 60}s`,
-      "--tt-elapsed": `${-(nowSec - span.fromMin * 60)}s`,
-    } as React.CSSProperties;
-  });
-  return (
-    <div
-      className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] origin-left animate-tt-drain acc-dot"
-      style={{
-        ...accentStyle(accentSeed),
-        ...anchor,
-        transform: `scaleX(${fraction})`,
-      }}
-      aria-hidden
-    />
-  );
-}
 
 export function NowRail({
   today,

@@ -32,6 +32,14 @@
   --spacing: 0.25rem;
   --brand: oklch(0.565 0.22 27.5);
   --brand-foreground: oklch(1 0 0);
+  /*! A HERO-FELÜLET. Ugyanaz a szótár, mint a jedlik-szakkor kezdőlapján: a
+     hero nem külön festett sáv, hanem a lap alapja EGY megvilágított jelenettel
+     — a címer fénytere. A piros (`--brand`) kizárólag élő és cselekvő
+     szerepben szólal meg, sosem dekorációként. */
+  --hero: var(--background);
+  --hero-foreground: var(--foreground);
+  --hero-crest-glow: oklch(0.72 0.13 258 / 0.32);
+  --hero-crest-aura: oklch(0.8 0.08 258 / 0.26);
   --font-sans: ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, Menlo, monospace;
 }
@@ -58,6 +66,10 @@
   --ring: oklch(0.6818 0.1584 243.354);
   --brand: oklch(0.5856 0.228 27.56);
   --brand-foreground: oklch(1 0 0);
+  --hero: var(--background);
+  --hero-foreground: var(--foreground);
+  --hero-crest-glow: oklch(0.45 0.16 258 / 0.55);
+  --hero-crest-aura: oklch(0.5 0.15 258 / 0.28);
 }
 
 @theme inline {
@@ -79,6 +91,8 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+  --color-hero: var(--hero);
+  --color-hero-foreground: var(--hero-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -103,6 +117,21 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer base {
+  /*//! A BÖNGÉSZŐ SAJÁT FELÜLETEI IS A LAPHOZ TARTOZNAK. A kijelölés, a kurzor
+      //! és a görgetősáv alapból egy semmilyen rendszerhez nem tartozó kéket és
+      //! szürkét hoz — sötét alapon mindkettő idegen test. */
+  ::selection {
+    background-color: color-mix(in oklab, var(--brand) 32%, transparent);
+    color: var(--foreground);
+  }
+  html {
+    caret-color: var(--brand);
+    scrollbar-color: var(--border) transparent;
+    scrollbar-width: thin;
   }
 }
 
@@ -176,6 +205,18 @@
   }
   .dark .acc-dot {
     background-color: oklch(0.74 0.15 var(--acc-h));
+  }
+
+  /*//! A TANTÁRGY SZÍNE SZÖVEGSZÍNKÉNT. A napi nézet nem festi ki vele a
+      //! felületeket: a kitöltött színes dobozokból a lap a heti rács
+      //! nagyítása lenne. A szín itt jelölés — pötty és felirat —, a felületek
+      //! pedig végig semlegesek. A világosság a KONTRASZTHOZ van hangolva, nem
+      //! a telítettséghez: sötét alapon fényesebb, világoson sötétebb. */
+  .acc-text {
+    color: oklch(0.5 0.16 var(--acc-h));
+  }
+  .dark .acc-text {
+    color: oklch(0.8 0.13 var(--acc-h));
   }
 
   .acc-break {

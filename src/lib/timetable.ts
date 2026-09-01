@@ -202,6 +202,15 @@ type RawCard = {
   dayOfWeek: number;
   startMinuteFromMidnight: number;
   endMinuteFromMidnight: number;
+  //! A JEDLIKINFO SAJÁT „ÁTHELYEZVE" JELÖLÉSE. Nincs helyettesítés-végpont
+  //! (`timetable/substitutions` → 404), ez az EGYETLEN elsődleges forrásból jövő
+  //! jelzés arról, hogy egy óra elmozdult a rendes helyéről. Ritkán van
+  //! bekapcsolva — ezért a rá épülő figyelmeztetésnek akkor is értelmesnek kell
+  //! lennie, amikor egyetlen óra sincs megjelölve.
+  movedCard?: boolean;
+  //* `"class"` a tanóra; egyéb értékek (vizsga, rendezvény) előfordulhatnak,
+  //* ezért nyitva hagyjuk.
+  type?: string;
 };
 
 type RawPeriod = {
@@ -247,6 +256,9 @@ export type TimetableDay = {
 
 export type TimetableLesson = {
   key: string;
+  //* A NAP, amelyre az óra esik (`YYYY-MM-DD`). A heti rács a `dayOfWeek`-kel
+  //* dolgozik, a napi nézetnek viszont a dátum kell — a kártya amúgy is hozza.
+  dateKey: string;
   dayOfWeek: number;
   startMin: number;
   endMin: number;
@@ -258,8 +270,34 @@ export type TimetableLesson = {
   group: string;
   groupColumn: number;
   groupCount: number;
+  //! CSAK EGY CSOPORTÉ, VAGY AZ EGÉSZ OSZTÁLYÉ — EZT A FORRÁS MEGMONDJA.
+  //! Az egész osztályos kártyán `groupCount === 1` (a csoport neve ilyenkor
+  //! „Egész osztály"), a bontott órán 2 vagy több, és a `groupColumn` mondja
+  //! meg, hányadik csoporté. Nem mi következtetjük ki: ebből a két mezőből
+  //! derül ki, hogy egy óra elrejthető-e („ez nem az én csoportom"), és hogy a
+  //! rácson fél oszlopot kap-e.
+  wholeClass: boolean;
   week: string;
+  //* A forrás „áthelyezve" jelölése, változatlanul továbbadva. Nem mi
+  //* következtetjük ki: vagy a Jedlikinfo mondja, vagy nincs.
+  moved: boolean;
+  //* A kártya fajtája a forrás szerint (rendszerint `"class"`).
+  kind: string;
 };
+
+//! MELYIK FÉL OSZLOP A CSOPORTÉ. A bontott óra fél oszlopot kap a rácson — de
+//! ez csak akkor mond igazat, ha ugyanaz a csoport MINDIG ugyanazon az oldalon
+//! áll. Ezért nem a rajzolás sorrendje dönt, hanem a forrás oszlop-indexe: a
+//! bontás első fele bal, a második jobb. Egész osztályos órán nincs oldal —
+//! az a teljes oszlopot birtokolja.
+export function groupHalf(lesson: {
+  wholeClass: boolean;
+  groupColumn: number;
+  groupCount: number;
+}): 0 | 1 | null {
+  if (lesson.wholeClass || lesson.groupCount <= 1) return null;
+  return lesson.groupColumn * 2 >= lesson.groupCount ? 1 : 0;
+}
 
 export type TimetableWeek = {
   ok: boolean;
@@ -488,6 +526,7 @@ export async function getTimetableWeek(options: {
     })
     .map((c) => ({
       key: `${c.dayOfWeek}-${c.startMinuteFromMidnight}-${c.groupColumn}-${c.text}`,
+      dateKey: toDateKey(c.date),
       dayOfWeek: c.dayOfWeek,
       startMin: c.startMinuteFromMidnight,
       endMin: c.endMinuteFromMidnight,
@@ -499,7 +538,10 @@ export async function getTimetableWeek(options: {
       group: c.groupName,
       groupColumn: c.groupColumn,
       groupCount: c.groupCount,
+      wholeClass: (c.groupCount ?? 1) <= 1,
       week: c.week,
+      moved: c.movedCard === true,
+      kind: c.type ?? "class",
     }));
 
   return {

@@ -3,7 +3,7 @@
 import { MapPin, Sparkles } from "lucide-react";
 import { motion } from "motion/react";
 import { accentStyle } from "@/lib/accent";
-import type { LessonRun } from "@/lib/timetable-merge";
+import { groupLabel, type LessonRun } from "@/lib/timetable-merge";
 import { cn } from "@/lib/utils";
 import { MergedBadge } from "./merge-controls";
 import { CELL_RADIUS, durationLabel, minLabel, rangeLabel } from "./shared";
@@ -116,8 +116,17 @@ export function LessonBlock({
   const span = rangeLabel(run.startMin, run.endMin);
   const lessonCount = run.lessonCount;
 
+  //! A FÉL OSZLOP MELLÉ KELL A NÉV IS. A rácson a csoportbontott óra fél
+  //! szélességű — ez a jelzés helyből érkezik, és a keskeny kártyán nincs hely
+  //! kiírni, MELYIK csoporté. A buborék és a képernyőolvasónak szánt felirat
+  //! ezért mindig kimondja; a részletlapon pedig külön sorban is ott van.
+  const group = lesson.wholeClass
+    ? ""
+    : groupLabel(lesson.group, lesson.subject) || lesson.group;
+
   const title = [
     lesson.subject,
+    group ? `${group} csoport` : null,
     span,
     lessonCount > 1 ? `${lessonCount} egymást követő óra` : null,
     lesson.teacher || null,

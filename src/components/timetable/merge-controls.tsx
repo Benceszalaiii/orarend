@@ -283,8 +283,10 @@ export function MergedBadge({
   );
 }
 
-//* Teljesen elrejtett sáv: minden ága le van szavazva. Vékony szaggatott csík
-//* marad a helyén — így a szabad sáv nem hibának, hanem a te döntésednek látszik.
+//* Teljesen elrejtett sáv: minden ága le van szavazva — vagy mert a diák a sáv
+//* egy másik órájára jár, vagy mert egyszerűen elrejtette („nem az én
+//* csoportom"). Vékony szaggatott csík marad a helyén — így a szabad sáv nem
+//* hibának, hanem a te döntésednek látszik.
 export function GhostCard({
   ghost,
   style,
@@ -296,6 +298,10 @@ export function GhostCard({
 }) {
   const [open, setOpen] = useState(false);
   const compact = (style.height as number) < 30;
+  //! EGY ÓRA VAGY EGY LESZAVAZOTT SÁV — MÁS A MONDAT. Az „egyik órára sem jársz"
+  //! egyetlen elrejtett óránál félrevezető: ott nem volt miből választani, a
+  //! diák egyszerűen kivette a saját órarendjéből.
+  const single = ghost.hidden.length === 1;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -303,7 +309,7 @@ export function GhostCard({
         <button
           type="button"
           style={style}
-          title={`${ghost.hidden.length} elrejtett óra — ${rangeLabel(ghost.startMin, ghost.endMin)}`}
+          title={`${single ? "Elrejtett óra" : `${ghost.hidden.length} elrejtett óra`} — ${rangeLabel(ghost.startMin, ghost.endMin)}`}
           className={cn(
             "absolute flex items-center justify-center gap-1 overflow-hidden border border-dashed border-border/80 bg-transparent px-1.5 text-[11px] text-muted-strong",
             "transition-colors hover:border-border hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
@@ -312,7 +318,9 @@ export function GhostCard({
         >
           <Merge className="size-3 shrink-0" aria-hidden />
           {!compact && (
-            <span className="truncate">{ghost.hidden.length} rejtett óra</span>
+            <span className="truncate">
+              {single ? "rejtett óra" : `${ghost.hidden.length} rejtett óra`}
+            </span>
           )}
         </button>
       </PopoverTrigger>
@@ -320,10 +328,14 @@ export function GhostCard({
         align="center"
         className="w-[min(21rem,calc(100vw-1.5rem))] p-3"
       >
-        <p className="text-sm font-semibold text-foreground">Rejtett sáv</p>
+        <p className="text-sm font-semibold text-foreground">
+          {single ? "Elrejtett óra" : "Rejtett sáv"}
+        </p>
         <p className="mt-0.5 text-xs text-muted-strong">
-          {rangeLabel(ghost.startMin, ghost.endMin)} — erre a sávra egyik órára
-          sem jársz a korábbi döntéseid szerint.
+          {rangeLabel(ghost.startMin, ghost.endMin)} —{" "}
+          {single
+            ? "ezt az órát elrejtetted, mert nem a te csoportodé."
+            : "erre a sávra egyik órára sem jársz a korábbi döntéseid szerint."}
         </p>
         <div className="mt-2.5 flex flex-col gap-1.5">
           {ghost.hidden.map((option) => (
@@ -363,7 +375,7 @@ export function GhostCard({
           }}
         >
           <Undo2 className="size-3.5" aria-hidden />
-          Órák visszahozása
+          {single ? "Óra visszahozása" : "Órák visszahozása"}
         </Button>
       </PopoverContent>
     </Popover>

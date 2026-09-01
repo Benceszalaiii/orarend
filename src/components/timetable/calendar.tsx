@@ -13,6 +13,7 @@ import {
   Merge,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -31,6 +32,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
+import { DUAL_LABEL, type DualStatus, dualStatusOf } from "@/lib/dualis";
 import type {
   CalendarEvent,
   TimetableClass,
@@ -41,6 +43,7 @@ import type {
 import {
   buildTimetableView,
   describeTimetableFailure,
+  groupHalf,
   saveCachedClass,
 } from "@/lib/timetable";
 import {
@@ -132,6 +135,55 @@ type LayoutItem = {
   ghost?: GhostBlock;
 };
 
+//! ─── FÉL OSZLOP A CSOPORTBONTOTT ÓRÁNAK ────────────────────────────────────
+//! Az egész osztályos óra és a csak egy csoportnak szóló óra eddig UGYANÚGY
+//! nézett ki: mindkettő kitöltötte a nap oszlopát. A rács ezzel elhallgatta a
+//! csoportbontás legfontosabb tényét — hogy az osztály fele nem ül ott. Ahol a
+//! bontott órák egymásra estek, a sávozás véletlenül megmutatta; ahol csak az
+//! egyik csoportnak van órája (szerda első óra), ott semmi nem jelezte.
+//!
+//! A forrás `groupColumn`/`groupCount` párosa mondja meg, hányadik csoporté a
+//! kártya (lásd `groupHalf`) — ebből lesz a fél oszlop ÉS az oldala. Az oldal
+//! nem esztétika: attól olvasható a rács, hogy ugyanaz a csoport minden nap
+//! ugyanott van, és a szemközti üres fél mindig ugyanazt jelenti.
+type SideItem = { startMin: number; endMin: number };
+
+function itemHalf(it: LayoutItem): 0 | 1 | null {
+  if (it.run) return groupHalf(it.run.lesson);
+  //* A rejtett sáv szellemkártyája ugyanannyi helyet kap, mint az óra, amit
+  //* eltakar — de csak akkor, ha minden benne rejlő óra ugyanazé a csoporté.
+  if (it.ghost) {
+    const halves = it.ghost.hidden.map((o) => groupHalf(o.lesson));
+    const first = halves[0] ?? null;
+    return first !== null && halves.every((h) => h === first) ? first : null;
+  }
+  return null;
+}
+
+function overlapping(a: SideItem, b: SideItem): boolean {
+  return a.startMin < b.endMin && b.startMin < a.endMin;
+}
+
+//* Sikerül-e a klasztert a csoport-oldalak szerint kiosztani. Csak akkor, ha
+//* MINDEN elemnek van oldala, és egy oldalon belül semmi nem fedi egymást —
+//* különben a fél oszlop kártyákat takarna el, ami rosszabb a teljesnél.
+function assignByHalf(cluster: LayoutItem[]): boolean {
+  const halves = cluster.map(itemHalf);
+  if (halves.some((half) => half === null)) return false;
+  for (let i = 0; i < cluster.length; i++) {
+    for (let j = i + 1; j < cluster.length; j++) {
+      if (halves[i] === halves[j] && overlapping(cluster[i], cluster[j])) {
+        return false;
+      }
+    }
+  }
+  cluster.forEach((it, i) => {
+    it.lane = halves[i] as number;
+    it.lanes = 2;
+  });
+  return true;
+}
+
 //* Napon belüli elrendezés: az időben átfedő elemek sávokra bomlanak.
 function layoutDay(
   runs: LessonRun[],
@@ -169,6 +221,14 @@ function layoutDay(
   let cluster: LayoutItem[] = [];
   let clusterEnd = -1;
   const flush = () => {
+    //! ELŐBB A CSOPORT-OLDAL, csak utána a szabad helykeresés. Egyetlen bontott
+    //! óra is így kap fél oszlopot (egyelemű klaszter), a két egymásra eső
+    //! csoport pedig mindig ugyanabban a sorrendben áll — nem aszerint, melyik
+    //! kezdődött előbb.
+    if (assignByHalf(cluster)) {
+      cluster = [];
+      return;
+    }
     const laneEnds: number[] = [];
     for (const it of cluster) {
       let lane = laneEnds.findIndex((end) => end <= it.startMin);
@@ -206,11 +266,14 @@ function DayHeadCell({
   style,
   paging,
   onJump,
+  dualStatus,
 }: {
   day: Day;
   style?: React.CSSProperties;
   paging: boolean;
   onJump?: () => void;
+  //* Csak a duális lapon van megadva — az órarendi nézet fejléce változatlan.
+  dualStatus?: DualStatus;
 }) {
   const inner = (
     <>
@@ -230,6 +293,24 @@ function DayHeadCell({
       >
         {day.dateLabel}
       </div>
+      {/*//! A JELÖLŐ MINDKÉT ÁLLAPOTOT KIÍRJA, nem csak a duálisat. Egy csak a
+          //! duális napokon megjelenő jelvénynél a hiányzó jelvény kétértelmű
+          //! lenne: „iskolai nap” vagy „még nincs adat”? Így a fejléc minden
+          //! tanítási napról állít valamit. */}
+      {dualStatus && (
+        <div
+          className={cn(
+            "mt-1 rounded-[5px] px-1 py-px text-[10px] font-semibold leading-[1.4]",
+            dualStatus === "dual"
+              ? "bg-primary/15 text-primary"
+              : dualStatus === "school"
+                ? "bg-muted text-muted-strong"
+                : "text-muted-foreground/60",
+          )}
+        >
+          {DUAL_LABEL[dualStatus]}
+        </div>
+      )}
       {day.isToday && (
         <span
           className="absolute inset-x-0 bottom-0 h-0.5 bg-primary"
@@ -273,6 +354,9 @@ export function TimetableCalendar({
   variant = "embedded",
   heading,
   trailing,
+  dual = false,
+  loadView,
+  reloadToken,
 }: {
   initialView: TimetableView;
   classes: TimetableClass[];
@@ -289,6 +373,20 @@ export function TimetableCalendar({
   //* Beágyazva egyik sincs átadva, így az /event kártyája változatlan.
   heading?: React.ReactNode;
   trailing?: React.ReactNode;
+  //! DUÁLIS JELÖLÉS. A `/dualis` lapé: ugyanez a rács, ugyanaz a betöltés és
+  //! lapozás, csak minden tanítási nap megkapja, hogy munkahelyen vagy
+  //! iskolában telik. Alapból ki van kapcsolva, így a `/orarend` változatlan.
+  dual?: boolean;
+  //! SAJÁT BETÖLTŐ. A `/dualis` nem egy osztály órarendjét lapozza, hanem egy
+  //! TERVET, ami két osztály óráiból áll össze — a hét-lapozás viszont
+  //! ugyanaz a mozdulat. Ha meg van adva, a rács ezen keresztül kér új hetet
+  //! az `buildTimetableView` helyett; minden más (lapozás, billentyűk,
+  //! nyomtatás) változatlanul működik.
+  loadView?: (weekStart: string) => Promise<TimetableView>;
+  //! ÚJRATÖLTÉSI JEL. A tervválasztó nem hetet vált, hanem ugyanannak a hétnek
+  //! egy MÁSIK tervét kéri — hálózat nélkül. A szülő ennek az értéknek a
+  //! változtatásával kéri újra a `loadView`-t az aktuális hétre.
+  reloadToken?: string | number;
 }) {
   const [view, setView] = useState<TimetableView>(initialView);
   const [selectedClass, setSelectedClass] = useState<string>(
@@ -330,7 +428,7 @@ export function TimetableCalendar({
   const prefsApi = useMergePreferences({
     classShort,
   });
-  const { prefs, choose, undo, undoMany, reset } = prefsApi;
+  const { prefs, choose, hide, undo, undoMany, reset } = prefsApi;
 
   //* Aktuális perc (a "most" vonalhoz) — csak a kliensen, hydration-biztosan.
   const [nowMin, setNowMin] = useState<number | null>(null);
@@ -356,11 +454,13 @@ export function TimetableCalendar({
     setAnimateGrid(true);
     setPending(true);
     try {
-      const res = await buildTimetableView({
-        userClass: cls || null,
-        weekStart: nextWeek,
-        classOverride: cls || undefined,
-      });
+      const res = loadView
+        ? await loadView(nextWeek)
+        : await buildTimetableView({
+            userClass: cls || null,
+            weekStart: nextWeek,
+            classOverride: cls || undefined,
+          });
       const next = res.resolvedClass?.short ?? cls;
       weekTransition(
         () => {
@@ -371,7 +471,10 @@ export function TimetableCalendar({
       );
       //* A választást csak SIKERES betöltés után jegyezzük meg, hogy a
       //* következő megnyitás ne a `PUBLIC_DEFAULT_CLASS`-ra essen vissza.
-      if (next) saveCachedClass(next);
+      //! SAJÁT BETÖLTŐNÉL NEM MENTÜNK: a `/dualis` „osztálya" egy terv, nem
+      //! létező osztály — elmentve az `/orarend` következő megnyitása próbálná
+      //! betölteni, és ismeretlen osztályra futna.
+      if (next && !loadView) saveCachedClass(next);
     } catch (err) {
       //! Ide csak akkor jutunk, ha maga a betöltés dobott (a hálózati hibákat
       //! a `buildTimetableView` már nevesítve adja vissza) — a kivétel fajtáját
@@ -385,6 +488,26 @@ export function TimetableCalendar({
       setPending(false);
     }
   };
+
+  //! A TERVVÁLTÁS ÚJRATÖLTÉS, DE NEM HÁLÓZATI. A `loadView` a szülőnél a már
+  //! letöltött hét nyers adatából állítja elő a másik tervet, tehát ez a
+  //! „betöltés" azonnali. A `load` függvényt szándékosan NEM tesszük a
+  //! függőségek közé: minden renderben új, és a hatás ettől végtelen ciklusba
+  //! esne — a jelre viszont pontosan egyszer kell lefutnia.
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const firstToken = useRef(true);
+  useEffect(() => {
+    if (reloadToken === undefined) return;
+    if (firstToken.current) {
+      firstToken.current = false;
+      return;
+    }
+    loadRef.current(view.weekStart);
+    //* `view.weekStart` szándékosan kimarad: a jel az egyetlen kiváltó ok, a
+    //* hetet a friss `load` úgyis a ref-ből olvassa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadToken]);
 
   //* Hét-lapozás egy lépéssel — a gombok és a billentyűk közös bejárata.
   const step = (delta: number) =>
@@ -829,6 +952,11 @@ export function TimetableCalendar({
   }, [pinLeft, weekStart, selectedClass]);
 
   const abWeek = days.find((d) => d.week === "A" || d.week === "B")?.week;
+  //! A NAP SAJÁT JELÖLÉSE HIÁNYOZHAT (a Jedlikinfo üres `week`-et ad pl. egy
+  //! tanítás nélküli hétfőre), a HÉTÉ viszont nem: a duális állapotot ezért a
+  //! hét betűjéből számoljuk, nem a napéból.
+  const dualOf = (dayOfWeek: number): DualStatus | undefined =>
+    dual ? dualStatusOf(dayOfWeek, abWeek ?? "") : undefined;
   const hasClass = Boolean(view.resolvedClass);
   const noData = view.ok && lessons.length === 0 && events.length === 0;
   const isCurrentWeek = weekStart === mondayKey(todayKey());
@@ -1296,6 +1424,28 @@ export function TimetableCalendar({
                       <span className="text-[10px] leading-tight tabular-nums">
                         {d.dateLabel.replace(/\.$/, "")}
                       </span>
+                      {/*//! TELEFONON EZ AZ EGYETLEN NAP-FEJLÉC: az `effCols === 1`
+                          //! ág helyett nem fut a `DayHeadCell` sor, tehát a
+                          //! duális jelölésnek ITT kell megjelennie — különben a
+                          //! lapozgatás közben sehol nem látszana. */}
+                      {(() => {
+                        const status = dualOf(d.dayOfWeek);
+                        if (!status) return null;
+                        return (
+                          <span
+                            className={cn(
+                              "mt-0.5 rounded-[4px] px-1 text-[9px] font-semibold leading-[1.5]",
+                              status === "dual"
+                                ? "bg-primary/15 text-primary"
+                                : status === "school"
+                                  ? "bg-muted text-muted-strong"
+                                  : "text-muted-foreground/60",
+                            )}
+                          >
+                            {DUAL_LABEL[status]}
+                          </span>
+                        );
+                      })()}
                       {d.isToday && (
                         <span
                           className="mt-0.5 h-0.5 w-4 rounded-full bg-primary"
@@ -1323,6 +1473,7 @@ export function TimetableCalendar({
                           style={colStyle}
                           paging={paging}
                           onJump={() => goToDay(i)}
+                          dualStatus={dualOf(d.dayOfWeek)}
                         />
                       ))}
                     </div>
@@ -1405,7 +1556,12 @@ export function TimetableCalendar({
                       aria-hidden
                     />
                     {gridDays.map((d) => (
-                      <DayHeadCell key={d.dateKey} day={d} paging={false} />
+                      <DayHeadCell
+                        key={d.dateKey}
+                        day={d}
+                        paging={false}
+                        dualStatus={dualOf(d.dayOfWeek)}
+                      />
                     ))}
                   </div>
                 )}
@@ -1522,6 +1678,24 @@ export function TimetableCalendar({
                         )}
                         style={{ ...colStyle, height }}
                       >
+                        {/*//! A DUÁLIS OSZLOP SÁVOZOTT, NEM SZÍNEZETT. Egy tömör
+                            //! alapszín-tint itt összekeverhető lenne a mai nap
+                            //! már meglévő tintjével (`bg-primary/[0.05]`) — a
+                            //! rézsútos sávozás viszont semmi mással nem
+                            //! téveszthető össze, és a mai + duális nap is
+                            //! egyértelmű marad. Elsőként áll a sorban, tehát a
+                            //! vonalak és a kártyák fölé rajzolódnak. */}
+                        {dualOf(d.dayOfWeek) === "dual" && (
+                          <div
+                            className="pointer-events-none absolute inset-0"
+                            style={{
+                              backgroundImage:
+                                "repeating-linear-gradient(135deg, color-mix(in oklab, var(--primary) 9%, transparent) 0 5px, transparent 5px 11px)",
+                            }}
+                            aria-hidden
+                          />
+                        )}
+
                         {/* Óra-elválasztó vonalak (a gutter időcímkéivel egy vonalban) */}
                         {gridPeriods.map((p) => (
                           <div
@@ -1703,6 +1877,7 @@ export function TimetableCalendar({
           morph={canMorph}
           onClose={closeFocus}
           onUndoMerge={undoByIdentity}
+          onHide={hide}
         />
       )}
     </div>
@@ -1795,6 +1970,12 @@ function LegendMenu() {
           </dt>
           <dd>Részletlap bezárása</dd>
         </dl>
+        <Link
+          href="/adatvedelem"
+          className="mt-3 block border-t border-border pt-3 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          Adatvédelmi tájékoztató
+        </Link>
       </PopoverContent>
     </Popover>
   );

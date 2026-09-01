@@ -1,0 +1,87 @@
+{
+  "title": "„Ma” — choose the structure",
+  "question": "The visual world is already settled: dark ground, accent-hue subject colors, tabular countdowns. This round is composition only — how the day arranges itself on a phone during a 10-minute break. The roll dealt these three.",
+  "options": [
+    {
+      "id": "deck",
+      "label": "Egy kártya",
+      "kicker": "THE ROLL",
+      "lineage": "One thing on screen, the day as a deck you step through",
+      "thesis": "The screen shows exactly one lesson — the one that answers the question right now — and nothing else.",
+      "palette": ["#000000", "#22232a", "#e8ebee", "#e5213c", "#7b8087"],
+      "materials": ["full-bleed accent tint", "oversized room number", "drain bar as card edge", "step dots"],
+      "viewport": "One accent-tinted card owning the whole viewport: subject at display scale, the room number set larger than anything else on the page, the countdown beneath it, a drain bar draining along the bottom edge. A thin „Ma · 13C · szept. 1.” strip above, step dots below. Swipe or arrow to step to the next lesson.",
+      "case": "The most reduced answer, and the one that survives being read at arm's length while walking. Every secondary fact (teacher, group, whole day) is one tap away, not on screen.",
+      "risk": "Hides the shape of the day. A student who wants to know when they finish has to step through the deck to find out, and the moved-lesson alert has no permanent home.",
+      "wireframe": {
+        "cols": 12, "rows": 16,
+        "regions": [
+          { "label": "Ma · osztály · dátum", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "áthelyezve — figyelmeztetés", "x": 0, "y": 1, "w": 12, "h": 1, "accent": true },
+          { "label": "tantárgy", "x": 0, "y": 3, "w": 12, "h": 3 },
+          { "label": "TEREM", "x": 0, "y": 6, "w": 12, "h": 5, "accent": true },
+          { "label": "visszaszámláló", "x": 0, "y": 11, "w": 12, "h": 2 },
+          { "label": "tanár · csoport", "x": 0, "y": 13, "w": 12, "h": 1 },
+          { "label": "lépés-pöttyök", "x": 3, "y": 14, "w": 6, "h": 1 },
+          { "label": "hét ▸", "x": 0, "y": 15, "w": 12, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "itinerary",
+      "label": "Útvonal",
+      "lineage": "The day as a journey with legs and transfers",
+      "thesis": "Lessons are legs; the gaps between them are transfers, and the transfer is where the room change lives.",
+      "palette": ["#000000", "#22232a", "#e8ebee", "#e5213c", "#2f9ada"],
+      "materials": ["connector rail", "room → room transfer rows", "acc-break hatching for gaps", "floor-change marker"],
+      "viewport": "A single column of legs joined by a continuous rail. Each leg carries subject, time range and room; between two legs sits a transfer row reading „102 → 303 · 2. emelet · 10 perc”. Lyukasórák render as the existing acc-break hatching, sized to their real length. The running leg is lit; passed legs keep their rail but drop to hairline weight.",
+      "case": "Takes „where do I have to go next” literally: the answer is a movement, not a location, and floor changes become visible the way a connection time is on a rail itinerary.",
+      "risk": "Transfer rows are pure invention — Jedlikinfo gives room labels, not a building map, so „2. emelet” has to be parsed out of the room number and can be wrong.",
+      "wireframe": {
+        "cols": 12, "rows": 16,
+        "regions": [
+          { "label": "Ma · osztály · dátum · hét ▸", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "rail", "x": 0, "y": 2, "w": 1, "h": 13 },
+          { "label": "leg — lezárt", "x": 1, "y": 2, "w": 11, "h": 1 },
+          { "label": "átszállás 102 → 303", "x": 1, "y": 3, "w": 11, "h": 1 },
+          { "label": "MOST — futó leg", "x": 1, "y": 4, "w": 11, "h": 3, "accent": true },
+          { "label": "átszállás · terem változott", "x": 1, "y": 7, "w": 11, "h": 1, "accent": true },
+          { "label": "következő leg", "x": 1, "y": 8, "w": 11, "h": 2 },
+          { "label": "lyukasóra (sávozott)", "x": 1, "y": 10, "w": 11, "h": 1 },
+          { "label": "leg", "x": 1, "y": 11, "w": 11, "h": 2 },
+          { "label": "leg", "x": 1, "y": 13, "w": 11, "h": 2 },
+          { "label": "érkezés 15:15", "x": 1, "y": 15, "w": 11, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "split",
+      "label": "Most + Utána",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "A live panel over a scrubbable day",
+      "thesis": "The top of the screen answers „now”, the bottom holds the whole day as one scrubbable strip you never leave the page to read.",
+      "palette": ["#000000", "#22232a", "#e8ebee", "#e5213c", "#2f9ada"],
+      "materials": ["live panel with drain bar", "segmented day strip in accent hues", "thumb-height controls", "sticky alert lane"],
+      "viewport": "Upper two-thirds: the running lesson as a large panel — subject, room, teacher, a countdown at display scale, the drain bar draining across its foot. Directly beneath, a single „Utána” row naming the next lesson and its room. Bottom: the whole day as one horizontal strip of proportional segments in subject accent hues, now marked by a live rule, tappable to preview any segment into the panel above.",
+      "case": "Answers both questions at once — where I am now, and what shape the rest of the day has — without a scroll, and puts every control in the thumb zone. Reuses the NowRail state machine (most / szünet / mára vége / ma szabad) that already exists and is already correct.",
+      "risk": "The most conventional of the three, and the closest to what the existing week grid already shows. It has to earn its own route rather than reading as /orarend zoomed in.",
+      "wireframe": {
+        "cols": 12, "rows": 16,
+        "regions": [
+          { "label": "Ma · osztály ▾ · dátum · hét ▸", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "napi eligazítás — „5 óra · 15:15-kor vége · 1 áthelyezve”", "x": 0, "y": 1, "w": 12, "h": 1, "accent": true },
+          { "label": "MOST — futó óra", "x": 0, "y": 2, "w": 12, "h": 6, "accent": true },
+          { "label": "visszaszámláló", "x": 8, "y": 3, "w": 4, "h": 2 },
+          { "label": "drain bar", "x": 0, "y": 8, "w": 12, "h": 1 },
+          { "label": "UTÁNA — következő óra + terem", "x": 0, "y": 9, "w": 12, "h": 2 },
+          { "label": "a nap, arányos szegmensekben", "x": 0, "y": 12, "w": 12, "h": 3 },
+          { "label": "most-vonal", "x": 5, "y": 12, "w": 1, "h": 3, "accent": true },
+          { "label": "telepítés / offline jelzés", "x": 0, "y": 15, "w": 12, "h": 1 }
+        ]
+      }
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "code", "toggle": true },
+  "steer": true
+}

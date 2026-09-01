@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SiteNav } from "@/components/site-nav";
 import { TimetableCalendar } from "@/components/timetable/calendar";
 import { MorphingInfinity } from "@/components/ui/morphing-infinity";
 import {
@@ -63,6 +64,9 @@ export function OrarendPage() {
           classes={classes}
           classesError={classesError}
           variant="fullscreen"
+          //* A három nézet közti váltó az eszköztár jobb szélén ül — ez az
+          //* egyetlen hely, ahonnan a másik két lap egyáltalán elérhető.
+          trailing={<SiteNav />}
           heading={
             <h1 className="shrink-0 text-base font-bold tracking-tight text-foreground max-sm:sr-only">
               Órarend

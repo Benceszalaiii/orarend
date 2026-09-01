@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { accentStyle } from "@/lib/accent";
-import type { LessonRun } from "@/lib/timetable-merge";
+import { groupLabel, type LessonRun } from "@/lib/timetable-merge";
 import { cn } from "@/lib/utils";
 import { durationLabel, rangeLabel } from "./shared";
 
@@ -59,12 +59,15 @@ export function LessonSheet({
   morph,
   onClose,
   onUndoMerge,
+  onHide,
 }: {
   target: FocusTarget;
   //* Fut-e view transition — ilyenkor a Radix saját be-/kifutása nem kell.
   morph: boolean;
   onClose: () => void;
   onUndoMerge: (identities: string[]) => void;
+  //* Csoportbontott óra elrejtése („ez nem az én csoportom").
+  onHide: (identity: string) => void;
 }) {
   return (
     <Dialog
@@ -103,6 +106,7 @@ export function LessonSheet({
             run={target.run}
             dayLabel={target.dayLabel}
             onUndoMerge={onUndoMerge}
+            onHide={onHide}
             onClose={onClose}
           />
         ) : (
@@ -174,16 +178,24 @@ function LessonBody({
   run,
   dayLabel,
   onUndoMerge,
+  onHide,
   onClose,
 }: {
   run: LessonRun;
   dayLabel: string;
   onUndoMerge: (identities: string[]) => void;
+  onHide: (identity: string) => void;
   onClose: () => void;
 }) {
   const { lesson } = run;
   const seed = lesson.subjectShort || lesson.subject;
   const rooms = run.rooms.filter(Boolean);
+  //! CSAK A BONTOTT ÓRA REJTHETŐ EL. Az egész osztályos órán ez a gomb hazugság
+  //! lenne: arra mindenki jár, az elrejtése nem „nem az én csoportom", hanem a
+  //! saját órarend meghamisítása. A forrás megmondja a különbséget
+  //! (`wholeClass`), tehát nem kell találgatni.
+  const groupOnly = !lesson.wholeClass;
+  const group = groupLabel(lesson.group, lesson.subject) || lesson.group;
   return (
     <>
       <SheetHead
@@ -252,6 +264,44 @@ function LessonBody({
           <Row icon={Users} label="Csoport">
             {lesson.group}
           </Row>
+        )}
+
+        {groupOnly && (
+          //! EZ AZ A HIÁNY, AMIT A VISSZAJELZÉS TALÁLT MEG. Az összevonás gombja
+          //! csak ÜTKÖZŐ órák közé kerül ki — de a csoportbontás nem mindig
+          //! ütközés: ha szerdán az első óra csak az „A" csoporté, a „B" csoport
+          //! helyén nincs kártya, tehát nincs mit összevonni sem. A másik
+          //! csoport tagjának így az órarendje végig mutatott egy órát, amire
+          //! nem jár, és semmi nem volt, amivel eltüntethette volna.
+          <div className="px-4 py-3">
+            <p className="flex items-start gap-2 text-xs text-muted-strong">
+              <Users className="mt-px size-3.5 shrink-0" aria-hidden />
+              <span className="text-pretty">
+                Ez az óra az osztálynak csak az egyik csoportjáé
+                {group ? ` („${group}")` : ""} — nem jár rá mindenki.
+              </span>
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 w-full gap-1.5"
+              onClick={() => {
+                onHide(run.identity);
+                onClose();
+              }}
+            >
+              <EyeOff className="size-3.5" aria-hidden />
+              Nem járok rá — elrejtem
+            </Button>
+            {/*//! AZ ELREJTÉS NEM NÉMA ÉS NEM VÉGLEGES. A diák egy kattintással
+                //! tünteti el az órát MINDEN hétről; ha nem mondanánk meg, hol
+                //! hozhatja vissza, egy elgépelt koppintás után azt hinné, hogy
+                //! az órarendből tűnt el az óra. */}
+            <p className="mt-1.5 text-pretty text-[11px] text-muted-foreground">
+              Minden héten eltűnik az órarendedből. A rácson halvány csík marad
+              a helyén, és a Szűrések menüből bármikor visszahozhatod.
+            </p>
+          </div>
         )}
 
         {run.hidden.length > 0 && (

@@ -25,6 +25,12 @@ function MorphingInfinity(props: React.ComponentProps<"svg">) {
       {...props}
     >
       <motion.path
+        //! KEZDŐ ALAK KELL. `d` nélkül az első képkockákon a `d` attribútum
+        //! literálisan „undefined" lesz, amit a böngésző hibaként naplóz — az
+        //! animáció csak utána veszi át. A kiindulási alak ugyanaz, mint a
+        //! ciklus első eleme, így a mozgás változatlan.
+        d={circleA}
+        initial={{ d: circleA }}
         animate={{
           d: [circleA, infinity, circleB, infinity, circleA],
         }}
