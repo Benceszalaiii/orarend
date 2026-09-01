@@ -10,7 +10,6 @@ import {
   // ExternalLink, //! a szakmai portál linkjével együtt visszakapcsolni
   Info,
   Merge,
-  Sparkles,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
@@ -44,7 +43,7 @@ import type {
   TimetableLesson,
   TimetableView,
 } from "@/lib/timetable";
-import { buildTimetableView } from "@/lib/timetable";
+import { buildTimetableView, saveCachedClass } from "@/lib/timetable";
 import {
   type GhostBlock,
   type LessonRun,
@@ -359,13 +358,17 @@ export function TimetableCalendar({
         weekStart: nextWeek,
         classOverride: cls || undefined,
       });
+      const next = res.resolvedClass?.short ?? cls;
       weekTransition(
         () => {
           setView(res);
-          setSelectedClass(res.resolvedClass?.short ?? cls);
+          setSelectedClass(next);
         },
         { enabled: canMorph, dir },
       );
+      //* A választást csak SIKERES betöltés után jegyezzük meg, hogy a
+      //* következő megnyitás ne a `PUBLIC_DEFAULT_CLASS`-ra essen vissza.
+      if (next) saveCachedClass(next);
     } catch {
       setView((w) => ({
         ...w,
@@ -421,6 +424,17 @@ export function TimetableCalendar({
   //! GÖRÖG-E FÜGGŐLEGESEN IS a rács. Ez nem statisztika: ettől függ, milyen
   //! erős a vízszintes tapadás (lásd a görgetődoboz osztályainál).
   const [vScroll, setVScroll] = useState(false);
+  //! A KIS VIEWPORT MÉRŐSZALAGJA. A `window.innerHeight` mobilon NEM állandó: a
+  //! böngésző címsora görgetéskor be- és kicsúszik, és ezzel ~100 képponttal
+  //! változtatja meg. Ha ebből számolnánk a léptéket, a rács MAGASSÁGA MOZOGNA
+  //! görgetés közben — és egy `scroll-snap` doboz minden átméretezéskor újra
+  //! tapad, vagyis a lap magától átlapozna a szomszéd napra. Pont ez volt a
+  //! „nem lehet rendesen görgetni" hibája.
+  //! A `100svh` a KIS viewport (kint a címsor): erre méretezve a rács akkor is
+  //! kifér, amikor a címsor látszik, tehát függőleges görgetés — és vele a
+  //! tapadás elbizonytalanodása — egyáltalán nem keletkezik. A mérőszalag egy
+  //! 0 széles, rögzített elem: nem rajzol, nem foglal helyet, nem is látszik.
+  const svhRef = useRef<HTMLDivElement>(null);
   //! MÉRÉS FESTÉS ELŐTT. Az oszlopszám a keret TÉNYLEGES szélességéből jön, nem
   //! médialekérdezésből (így a beágyazott/osztott ablak is jól méretez) — de
   //! effektben mérve az első képkockán még az alapérték, öt nap látszana,
@@ -452,9 +466,13 @@ export function TimetableCalendar({
       //! állapotban mérve a `top` már negatív, és a lépték ugrálna görgetés
       //! közben — pont akkor, amikor a rács magassága nem mozdulhat.
       const docTop = f.getBoundingClientRect().top + window.scrollY;
-      const room = Math.max(window.innerHeight - docTop, 220);
+      //* A mérőszalag a kis viewportot adja; ha a böngésző nem ismeri az `svh`
+      //* egységet, marad a pillanatnyi magasság.
+      const viewport = svhRef.current?.clientHeight || window.innerHeight;
+      const room = Math.max(viewport - docTop, 220);
       setFitScale(Math.max(room / span, MIN_PX_PER_MIN));
-      //* Függőleges görgetés csak akkor van, ha a lépték-határ ütött be.
+      //! Függőleges görgetés CSAK akkor van, ha a lépték-határ ütött be — a
+      //! címsor mozgása már nem csinál ilyet, mert a kis viewporthoz mérünk.
       setVScroll(MIN_PX_PER_MIN * span > room + 1);
     };
     //* `pending` csak azért a függőségben, mert a betöltés után a keret tényleges
@@ -528,26 +546,25 @@ export function TimetableCalendar({
   //* Szűk eszköztár: ugyanaz a mérés dönt róla, mint az oszlopszámról — egy nap
   //* fér ki, tehát a fejléc sora is szűk, tehát rövid hét-címke megy ki.
   const narrowBar = variant === "fullscreen" && cols === 1;
-  //! ─── A TAPADÁS ERŐSSÉGE ──────────────────────────────────────────────────
-  //! A `mandatory` a lapozás legjobb formája: a félbehagyott swipe is egész
-  //! napra áll be, sosem maradsz két nap között. De van egy ára, és pont ott
-  //! jelentkezik, ahol a lapot a legtöbbet használják.
+  //! ─── A TAPADÁS ─────────────────────────────────────────────────────────
+  //! A `mandatory` az egyetlen jó lapozás: a félbehagyott swipe is egész napra
+  //! áll be, sosem maradsz két nap között, és sosem kell „pontosan" görgetni.
+  //! Ezért NEM gyengítjük — sem mutatóeszköz, sem görgetés miatt.
   //!
-  //! Ha a lap FÜGGŐLEGESEN IS görög, a felfelé húzás sosem tökéletesen
-  //! függőleges — a néhány képpontos vízszintes elcsúszást a `mandatory`
-  //! KÖTELEZŐEN kiigazítja a szomszéd napra: a diák görgetni akar, a rács meg
-  //! lapoz. Ráadásul a mobil böngésző címsora ki-be csúszik, ezzel átméretezi a
-  //! viewportot, a rács pedig ÚJRA tapad — vagyis a lap magától vált napot.
-  //! És mivel a rács a képernyő magasságához igazodik, tehát pontosan kitölti
-  //! azt, érintős eszközön a görgethetőség MINDIG egy címsor-mozdulatnyira van,
-  //! nem csak akkor, amikor a lépték-határ ütött be.
+  //! A régi ütközésnek két oka volt, és mindkettőt a forrásánál oldjuk meg:
   //!
-  //! Szigorú tapadás ezért csak ott van, ahol egyik kockázat sem áll fenn:
-  //! finom mutatóeszköz (egér) ÉS nincs függőleges görgetés. Máshol
-  //! `proximity`: a valódi swipe attól is átlapoz, a pár pixeles elcsúszás
-  //! viszont nem visz sehova. A determinista ugrás pedig változatlanul megvan —
-  //! nap-sáv, nap-fejléc, 1–5 billentyű.
-  const snapStrict = canHover && !vScroll;
+  //!  1. A mobil böngésző címsora ki-be csúszott, ezzel átméretezte a rácsot, a
+  //!     snap-doboz pedig minden átméretezéskor ÚJRA tapad — a lap magától
+  //!     lapozott. Megoldás: a lépték a KIS viewporthoz (`100svh`) igazodik,
+  //!     tehát a rács magassága görgetés közben meg sem mozdul (lásd `svhRef`).
+  //!
+  //!  2. Ahol a nap tényleg nem fér ki (fekvő telefon, nagyon hosszú nap), ott
+  //!     függőlegesen is görögni kell — és a felfelé húzás sosem tökéletesen
+  //!     függőleges. A pár képpontos vízszintes elcsúszást a `mandatory`
+  //!     kötelezően kiigazítja a szomszéd napra. Megoldás lentebb: a tapadás a
+  //!     függőleges görgetés IDEJÉRE szünetel, majd visszakapcsol — és mivel
+  //!     közben a vízszintes pozíció nem mozdult el érdemben, a visszakapcsolás
+  //!     ugyanarra a napra igazít vissza, ahol voltál.
   const colStyle: React.CSSProperties | undefined = paging
     ? { width: colWidth ?? undefined, flex: "0 0 auto" }
     : undefined;
@@ -626,7 +643,6 @@ export function TimetableCalendar({
   //* --- Mobil: naponkénti lapozás (scroll-snap) --------------------------------
   const scrollRef = useRef<HTMLDivElement>(null);
   const dayRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const gutterRef = useRef<HTMLDivElement>(null);
   //* A rácson KÍVÜLI nap-fejléc sínje — a rács vízszintes görgetését tükrözi.
   const headerTrackRef = useRef<HTMLDivElement>(null);
   const [activeDay, setActiveDay] = useState(0);
@@ -658,24 +674,27 @@ export function TimetableCalendar({
   //* A görgetés percenként több száz eseményt is adhat — képkockánként egyszer
   //* számolunk belőle.
   const scrollFrame = useRef<number | null>(null);
-  //* A bal idősáv (és a fejléc-behúzása) MINDIG a képernyő bal szélén marad:
-  //* vízszintes görgetéskor a `translateX(scrollLeft)` kompenzálja a görgetés
-  //* által elmozdított távolságot. A `position: sticky; left: 0` egy vízszintes
-  //* görgetődobozban nem megbízható, ezért ez a determinista, JS-es út.
+  //! A NAP-FEJLÉC A GÖRGETŐDOBOZON KÍVÜL ÜL. Belül nem lehet: a vízszintes
+  //! `overflow` görgetési dobozt csinál a keretből, és a benne lévő
+  //! `position: sticky` ehhez a dobozhoz igazodna — vagyis függőleges
+  //! görgetéskor a fejléc elúszna a rács tetejével együtt. Kívül viszont
+  //! magától nem követi a vízszintes lapozást: a sínjét ezért ELLENTÉTES
+  //! irányban toljuk el ugyanannyival.
+  //!
+  //! A BAL IDŐSÁV NINCS ITT — az `position: sticky; left: 0`-val ragad, natívan.
+  //! Ez nem szépészeti különbség: a swipe és a lendülete a kompozitor szálán
+  //! fut, a `scroll` eseményre írt `transform` viszont a fő szálon, egy-két
+  //! képkockával KÉSŐBB. Az idősáv így úszott a rács után, majd a mozdulat
+  //! végén visszarándult — ettől érződött olcsónak az egész lapozás. A natív
+  //! tapadás ugyanazon a szálon mozog, mint a görgetés: nem tud lemaradni.
+  //! A fejléc-sín azért maradhat JS-es, mert csak két-öt oszlopos elrendezésben
+  //! (tábla, fekvő telefon) van egyáltalán, ahol a görgetés nem érintéses
+  //! lendület, hanem egér/érintőpad — ott a fő szál együtt fut a görgetéssel.
   const pinLeft = useCallback(() => {
     const container = scrollRef.current;
-    if (!container) return;
-    const x = container.scrollLeft;
-    if (gutterRef.current)
-      gutterRef.current.style.transform = `translateX(${x}px)`;
-    //! A NAP-FEJLÉC A GÖRGETŐDOBOZON KÍVÜL ÜL. Belül nem lehet: a vízszintes
-    //! `overflow` görgetési dobozt csinál a keretből, és a benne lévő
-    //! `position: sticky` ehhez a dobozhoz igazodna — vagyis függőleges
-    //! görgetéskor a fejléc elúszna a rács tetejével együtt. Kívül viszont
-    //! magától nem követi a vízszintes lapozást: a sínjét ezért ELLENTÉTES
-    //! irányban toljuk el ugyanannyival. Egy képkocka, két elem, egy igazság.
-    if (headerTrackRef.current)
-      headerTrackRef.current.style.transform = `translateX(${-x}px)`;
+    const track = headerTrackRef.current;
+    if (!container || !track) return;
+    track.style.transform = `translateX(${-container.scrollLeft}px)`;
   }, []);
   const handleScroll = useCallback(() => {
     if (scrollFrame.current !== null) return;
@@ -694,6 +713,54 @@ export function TimetableCalendar({
     [],
   );
 
+  //! FORGATÁS UTÁN NE MARADJ KÉT NAP KÖZÖTT. Ha megváltozik, hány nap fér ki,
+  //! az oszlopok szélessége is más lesz — a régi görgetés-pozíció ilyenkor
+  //! félúton áll meg. Ugyanahhoz a naphoz igazítunk vissza, amit néztél.
+  const alignRef = useRef<(index: number) => void>(() => {});
+  //* A látott nap ref-ben is: az igazítás a FRISS értéket olvassa, de nem
+  //* indul újra minden lapozáskor — csak akkor, ha az elrendezés változott.
+  const activeDayRef = useRef(0);
+  activeDayRef.current = activeDay;
+  useEffect(() => {
+    if (variant !== "fullscreen") return;
+    //* Az oszlopszám SZÁNDÉKOSAN kiváltó ok, nem felhasznált érték: csak az
+    //* elrendezés változására igazítunk vissza, a görgetés közbeni apró
+    //* szélesség-változás nem ránthatja el a lapot a kéz alól.
+    void cols;
+    const id = requestAnimationFrame(() =>
+      alignRef.current(activeDayRef.current),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [variant, cols]);
+
+  //! A TAPADÁS SZÜNETELTETÉSE FÜGGŐLEGES GÖRGETÉS ALATT.
+  //! Csak ott kell, ahol egyáltalán VAN függőleges görgetés (`vScroll`) — a
+  //! normál, kiférő napon a figyelő fel sem kerül. A lap görgetése közben a
+  //! doboz nem tapad, tehát a mozdulat vízszintes összetevője nem visz sehova;
+  //! a görgetés elülte után visszakapcsol, és a legközelebbi naphoz igazít —
+  //! ez az az egy nap, ahol amúgy is álltál.
+  //* A `scrollSnapType` közvetlenül a stíluson, nem állapotban: egy görgetés
+  //* több száz eseményt ad, és ebből egyetlen React-újrarajzolás sem kell.
+  useEffect(() => {
+    if (variant !== "fullscreen" || !vScroll) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    let restore: number | undefined;
+    const onScroll = () => {
+      el.style.scrollSnapType = "none";
+      window.clearTimeout(restore);
+      restore = window.setTimeout(() => {
+        el.style.scrollSnapType = "";
+      }, 140);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.clearTimeout(restore);
+      el.style.scrollSnapType = "";
+    };
+  }, [variant, vScroll]);
+
   const goToDay = (index: number) => {
     const container = scrollRef.current;
     const el = dayRefs.current[index];
@@ -704,6 +771,14 @@ export function TimetableCalendar({
       left: el.offsetLeft - GUTTER,
       behavior: reduce ? "auto" : "smooth",
     });
+  };
+  //* Az átméretezés utáni visszaigazítás ugrás, nem mozdulat: nincs animáció.
+  alignRef.current = (index: number) => {
+    const container = scrollRef.current;
+    const el = dayRefs.current[index];
+    if (!container || !el) return;
+    if (container.scrollWidth <= container.clientWidth) return;
+    container.scrollTo({ left: el.offsetLeft - GUTTER, behavior: "auto" });
   };
 
   //! Mobilon a mai napra ugrunk induláskor — a diák a MAI órarendjéért nyitja
@@ -724,12 +799,13 @@ export function TimetableCalendar({
   }, [variant, gridDays]);
 
   //* Új hét/osztály betöltése után a keret újra renderelődhet görgetett állapotban:
-  //* ilyenkor azonnal vissza kell tűzni az idősávot, nehogy a lefordított helyzete
-  //* a betöltés utáni első görgetésig a rossz pozícióban tétlenkedjen.
+  //* ilyenkor azonnal vissza kell tűzni a nap-fejléc sínjét, nehogy a lefordított
+  //* helyzete a betöltés utáni első görgetésig a rossz pozícióban tétlenkedjen.
+  //* (Az idősáv natívan ragad, azzal itt nincs teendő.)
   useEffect(() => {
     //* `weekStart`/`selectedClass` csak azért kell a függőségben, mert ezek
     //* cserélik a rács kulcsát (keret-remount); a remount után itt tűzzük
-    //* vissza az idősávot, ha a görgetés pozíciója megmaradt.
+    //* vissza a sínt, ha a görgetés pozíciója megmaradt.
     void weekStart;
     void selectedClass;
     pinLeft();
@@ -900,6 +976,15 @@ export function TimetableCalendar({
           : "overflow-hidden rounded-2xl border border-border shadow-sm",
       )}
     >
+      {/*//* A kis viewport mérőszalagja — lásd `svhRef`. Nem rajzol semmit. */}
+      {fullscreen && (
+        <div
+          ref={svhRef}
+          aria-hidden
+          className="pointer-events-none invisible fixed left-0 top-0 h-[100svh] w-0 print:hidden"
+        />
+      )}
+
       {/*//! NYOMTATOTT FEJLÉC. A papíron nincs eszköztár — vagyis nincs, ami
           //! megmondja, KINEK és MELYIK hétnek az órarendje lóg a falon. Ez a
           //! sor csak nyomtatásban jelenik meg, és pontosan ezt mondja meg. */}
@@ -1231,8 +1316,9 @@ export function TimetableCalendar({
                   ? paging &&
                       cn(
                         "snap-x scroll-pl-12 overflow-x-auto overscroll-x-contain",
-                        //* A döntés a `snapStrict`-nél van megindokolva.
-                        snapStrict ? "snap-mandatory" : "snap-proximity",
+                        //* Mindig kötelező tapadás — a részletes indoklás
+                        //* fentebb, „A TAPADÁS" szakaszban.
+                        "snap-mandatory",
                       )
                   : "overflow-x-auto",
               )}
@@ -1270,13 +1356,33 @@ export function TimetableCalendar({
                   </div>
                 )}
 
-                {/* Test: idősáv + naposzlopok */}
-                <div className="relative flex bg-muted/25">
+                {/*//! Test: idősáv + naposzlopok.
+                    //! `w-max` LAPOZÓS MÓDBAN KÖTELEZŐ. Egy vízszintes
+                    //! görgetődobozban a blokk-szintű gyerek szélessége a
+                    //! DOBOZÉ marad (egy képernyőnyi), a nap-oszlopok pedig
+                    //! túllógnak rajta. A `position: sticky` viszont a SAJÁT
+                    //! szülődobozán belül ragad: egy képernyőnyi sor mellett az
+                    //! idősáv az első oszlop után elengedne és kiúszna balra.
+                    //! A `max-content` szélességgel a sor a teljes hetet
+                    //! átfogja, tehát a tapadásnak végig van hova ragadnia.
+                    //! (Mellékhaszon: a nap-vonal `inset-x-0`-ja is az egész
+                    //! héten fut végig, nem csak a látható képernyőn.) */}
+                <div
+                  className={cn(
+                    "relative flex bg-muted/25",
+                    //* Nem lapozós módban a napok `flex-1`-gyel osztoznak a
+                    //* lapon — ott a `max-content` összehúzná őket.
+                    paging && "w-max",
+                  )}
+                >
                   {/* Idősáv (órák sorszáma + kezdés) */}
                   <div
-                    ref={gutterRef}
                     data-tt-gutter
-                    className="relative z-20 w-12 shrink-0 border-r border-border bg-card"
+                    //! `sticky left-0`: a natív tapadás a görgetéssel EGY
+                    //! szálon mozog, tehát képkockára pontos — lásd `pinLeft`.
+                    //! A `z-20` azért kell, mert görgetés közben a nap-oszlopok
+                    //! ALÁ csúsznak be, a `bg-card` pedig azért, hogy takarjon.
+                    className="sticky left-0 z-20 w-12 shrink-0 border-r border-border bg-card"
                     style={{ height }}
                     aria-hidden
                   >
@@ -1348,7 +1454,10 @@ export function TimetableCalendar({
                           "relative min-w-0 border-l border-border/70",
                           fullscreen
                             ? paging
-                              ? "shrink-0 snap-start"
+                              ? //! `snap-always`: a lendületes swipe sem
+                                //! szaladhat át több napon. Egy mozdulat = egy
+                                //! nap, akármekkora a lendület.
+                                "shrink-0 snap-start snap-always"
                               : "flex-1 shrink"
                             : "flex-1",
                           d.isToday && "bg-primary/[0.05]",
@@ -1556,40 +1665,20 @@ function LegendItems({ stacked = false }: { stacked?: boolean }) {
           className={cn("size-3 shrink-0 border acc-tint", CELL_RADIUS)}
           style={{ ["--acc-h"]: 210 } as React.CSSProperties}
         />
-        Tanóra — a szín a tantárgy
-      </span>
-      <span
-        className={cn(row, !stacked && "hidden items-center gap-1.5 sm:flex")}
-      >
-        <span
-          className={cn(
-            "flex size-3 shrink-0 items-center justify-center border acc-tint-strong",
-            CELL_RADIUS,
-          )}
-          style={{ ["--acc-h"]: 22 } as React.CSSProperties}
-        >
-          <span className="size-1 rounded-full acc-dot" />
-        </span>
-        Szakkör-alkalmad
+        Tanóra
       </span>
       <span className={row}>
         <span
           className={cn("size-3 shrink-0 border acc-break", CELL_RADIUS)}
           style={{ ["--acc-h"]: 210 } as React.CSSProperties}
         />
-        Szünet a blokkon belül
+        Szünet
       </span>
       <span className={row}>
         <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
           <Merge className="size-2" aria-hidden />
         </span>
-        Ütköző órák — válassz
-      </span>
-      <span
-        className={cn(row, !stacked && "hidden items-center gap-1.5 lg:flex")}
-      >
-        <Sparkles className="size-3 shrink-0 text-brand" />
-        Közösségi óra jár
+        Ütköző órák
       </span>
       <span
         className={cn(

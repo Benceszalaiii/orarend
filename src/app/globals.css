@@ -368,10 +368,16 @@
     /* biome-ignore lint/complexity/noImportantStyles: a görgetődobozt a `paging` állapot kapcsolja, itt fel kell oldani. */
     overflow: visible !important;
   }
-  [data-day-track],
-  [data-tt-gutter] {
+  [data-day-track] {
     /* biome-ignore lint/complexity/noImportantStyles: az eltolást a `pinLeft` írja soron belüli `transform`-ként. */
     transform: none !important;
+  }
+  /*//* Az idősáv a képernyőn `position: sticky` — papíron nincs mihez tapadnia,
+      //* de `relative`-nak MARADNIA KELL: a benne lévő óraszámok abszolút
+      //* pozícióval ülnek a helyükön. */
+  [data-tt-gutter] {
+    /* biome-ignore lint/complexity/noImportantStyles: a képernyős `sticky`-t kell feloldani. */
+    position: relative !important;
   }
   [data-tt-sticky] {
     /* biome-ignore lint/complexity/noImportantStyles: a ragadó fejléc a papíron egyszerűen a lap teteje. */

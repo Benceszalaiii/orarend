@@ -11,7 +11,7 @@ import {
   type TimetableClass,
   type TimetableView,
 } from "@/lib/timetable";
-
+import { MorphingInfinity } from "@/components/ui/morphing-infinity";
 export function OrarendPage() {
   const [classes, setClasses] = useState<TimetableClass[]>([]);
   const [view, setView] = useState<TimetableView | null>(null);
@@ -55,7 +55,7 @@ export function OrarendPage() {
         />
       ) : (
         <div className="flex flex-1 items-center justify-center py-16">
-          <Spinner className="size-5 text-muted-foreground" />
+          <MorphingInfinity className="size-24 text-muted-foreground" />
         </div>
       )}
     </main>
