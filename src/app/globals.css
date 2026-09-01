@@ -134,12 +134,24 @@
   .top-site-header {
     top: var(--site-header-h);
   }
-  .top-site-header-rail {
-    top: calc(var(--site-header-h) + 3.25rem);
+
+  /*//! BIZTONSÁGOS SÁVOK. A lap `viewport-fit=cover`-rel fut, hogy fekvő
+      //! telefonon a rács a lekerekített sarkokig érjen — cserébe NEKÜNK kell
+      //! kikerülni a bevágást és a „home indicator"-t. Az idősáv a bal szélen
+      //! ül: enélkül pont az órák sorszámai csúsznának a bevágás alá. */
+  .tt-safe {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
   }
-  @media (min-width: 40rem) {
-    .top-site-header-rail {
-      top: calc(var(--site-header-h) + 3.5rem);
+
+  /*//! ÉRINTÉSI CÉLPONT. A méret NEM a képernyő szélességéből következik: egy
+      //! érintőkijelzős laptop is durva mutatóeszköz, egy 320 px-es ablak
+      //! egérrel viszont nem az. A mutatóeszközt kérdezzük, nem a viewportot. */
+  @media (pointer: coarse) {
+    .touch-target {
+      min-height: 44px;
+      min-width: 44px;
     }
   }
 
@@ -267,5 +279,102 @@
     .animate-tt-drain {
       animation: none;
     }
+  }
+}
+
+/*//! ---------------------------------------------------------------------------
+    //! NYOMTATÁS — a hét egy fekvő A4-en
+    //! ---------------------------------------------------------------------------
+    //! Az órarendet kinyomtatják és kiteszik a falra; ez nem szélső eset, hanem a
+    //! lap MÁSODIK médiuma. A képernyős nézet viszont sötét: a nyomtató ebből
+    //! vagy egy fekete téglalapot köp ki, vagy — alapértelmezés szerint, hátterek
+    //! nélkül — fehér kártyákat fehér lapon, keret nélkül. Ezért itt nem
+    //! „ugyanaz kicsiben" van, hanem SAJÁT paletta: világos alap, MEGTARTOTT
+    //! tantárgyszínek, kezelőfelület nélkül.
+    //!
+    //! Ezek a szabályok szándékosan RÉTEGEN KÍVÜL állnak: a `@layer utilities`
+    //! tartalmát a kaszkád rétegtelen szabályai verik, így a sötét `.dark`
+    //! változatokat felül tudják írni. */
+@page {
+  size: A4 landscape;
+  margin: 10mm;
+}
+
+@media print {
+  /*//* A `color-scheme` a lapon SORON BELÜLI stílus (sötét űrlapelemek miatt) —
+      //* egy `!important` az egyetlen út, ami ezt nyomtatásra visszabontja. */
+  html {
+    /* biome-ignore lint/complexity/noImportantStyles: soron belüli stílusból jön (layout.tsx), ezt más nem üti. */
+    color-scheme: light !important;
+  }
+  html,
+  body {
+    /* biome-ignore lint/complexity/noImportantStyles: a sötét alapot a `body` osztályai adják. */
+    background: oklch(1 0 0) !important;
+  }
+
+  :root,
+  .dark {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.2 0.012 248);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.2 0.012 248);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.2 0.012 248);
+    --muted: oklch(0.95 0.002 286);
+    --muted-foreground: oklch(0.45 0.008 248);
+    --primary: oklch(0.52 0.16 245);
+    --primary-foreground: oklch(1 0 0);
+    --border: oklch(0.78 0.012 232);
+    --brand: oklch(0.5 0.2 27.5);
+    --brand-foreground: oklch(1 0 0);
+  }
+
+  /*//! A KÁRTYA SZÍNE ADAT, nem dísz: a tantárgyat azonosítja. A böngésző
+      //! alapból elhagyja a háttereket nyomtatáskor — itt ezt visszakérjük, és
+      //! a papírra hangolt (világos, de telített) változatot adjuk. */
+  .dark .acc-tint {
+    background-color: oklch(0.955 0.035 var(--acc-h));
+    border-color: oklch(0.72 0.09 var(--acc-h));
+  }
+  .dark .acc-tint-strong {
+    background-color: oklch(0.92 0.065 var(--acc-h));
+    border-color: oklch(0.62 0.13 var(--acc-h));
+  }
+  .dark .acc-dot {
+    background-color: oklch(0.55 0.18 var(--acc-h));
+  }
+  .dark .acc-break {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      oklch(0.55 0.18 var(--acc-h) / 0.22) 0 3px,
+      transparent 3px 8px
+    );
+    border-top-color: oklch(0.6 0.1 var(--acc-h) / 0.8);
+    border-bottom-color: oklch(0.6 0.1 var(--acc-h) / 0.8);
+  }
+  * {
+    /* biome-ignore lint/complexity/noImportantStyles: a böngésző saját „hátterek nélkül" beállítása ellen szól. */
+    -webkit-print-color-adjust: exact !important;
+    /* biome-ignore lint/complexity/noImportantStyles: ugyanaz: a kártya háttere itt adat, nem dísz. */
+    print-color-adjust: exact !important;
+  }
+
+  /*//! A rácsot a komponens kapcsolja át nyomtatás előtt (öt oszlop, fix
+      //! lépték). Itt csak a GÖRGETÉS maradványait szedjük ki: a vízszintes
+      //! görgetődoboz és a hozzá kikötött, JS-ből írt eltolások a papíron
+      //! levágnák a hét felét. */
+  [data-tt-scroll] {
+    /* biome-ignore lint/complexity/noImportantStyles: a görgetődobozt a `paging` állapot kapcsolja, itt fel kell oldani. */
+    overflow: visible !important;
+  }
+  [data-day-track],
+  [data-tt-gutter] {
+    /* biome-ignore lint/complexity/noImportantStyles: az eltolást a `pinLeft` írja soron belüli `transform`-ként. */
+    transform: none !important;
+  }
+  [data-tt-sticky] {
+    /* biome-ignore lint/complexity/noImportantStyles: a ragadó fejléc a papíron egyszerűen a lap teteje. */
+    position: static !important;
   }
 }

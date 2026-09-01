@@ -13,7 +13,15 @@ import {
   Sparkles,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Kbd } from "@/components/ui/kbd";
@@ -78,8 +86,40 @@ const EMBED_PX_PER_MIN = 1.45;
 //! terem/tanár, a rácson viszont több óra látszik egyszerre, kevesebbet kell
 //! görgetni.
 const FULL_PX_PER_MIN = 1.5;
-//* A ragadó idősáv szélessége (px) — a mobil nap-oszlop ebből számol.
+//! A LEGKISEBB LÉPTÉK. A teljes nézet a napot a képernyő magasságához igazítja —
+//! de csak addig, amíg a kártya még MOND is valamit. Fekvő telefonon (390 px
+//! magas ablak) a „férjen ki" szabály 0,5 px/percet adna: a 45 perces óra 22 px,
+//! a tantárgy neve elfogy, az idősáv számai egymásra csúsznak. Ez alatt a határ
+//! alatt tehát nem zsugorítunk tovább — inkább görögjön a lap. A kiférés
+//! kényelem, az olvashatóság feltétel.
+const MIN_PX_PER_MIN = 1.05;
+//! NYOMTATÁS: fix lépték, hogy a teljes tanítási nap kiférjen egy fekvő A4-re.
+//! (500 perc × 1,15 ≈ 575 px ≈ 152 mm, a 190 mm-es szedéstükörbe a fejléccel
+//! együtt is belefér.)
+const PRINT_PX_PER_MIN = 1.15;
+//* A ragadó idősáv szélessége (px) — a nap-oszlop szélessége ebből számol.
 const GUTTER = 48;
+//! A NAPOSZLOP OLVASHATÓ ALSÓ HATÁRA. Ez alatt a tantárgy neve két betűre
+//! csonkul („k…", „n…"), vagyis a rács pont azt az adatot dobja el, amiért
+//! egyáltalán ránéznek. A nézet ezért nem egy töréspontnál vált egy napról
+//! ötre: ANNYI napot mutat, amennyi ilyen oszlop kifér.
+const MIN_COL = 176;
+//! A KÖVETKEZŐ NAP KIKANDIKÁLÁSA. Ha nem fér ki mind az öt nap, a csonka
+//! hatodik oszlop mondja meg, hogy van tovább. Ez a görgethetőség egyetlen
+//! őszinte jelzése — nyíl és pötty nélkül, és nem vesz el helyet a hét elől.
+const PEEK = 28;
+//! Telefonon MARAD az egy nap. Két 190 px-es oszlop elférne, de a telefonos
+//! kérdés nem „milyen a hetem", hanem „hova megyek most": egy teljes szélességű
+//! oszlopon a kártya kiírja a termet ÉS a tanárt is, és a nap-sáv a navigáció.
+const ONE_DAY_MAX = 560;
+//* Ennél szélesebb ablakon a rács már nem nő tovább, hanem középre áll: öt
+//* oszlop 400 px fölött nem lesz olvashatóbb, csak üresebb.
+const MAX_SHELL = "max-w-[120rem]";
+
+//! A layout-effekt a szerveren nem futtatható (és figyelmeztet is): ott az
+//! effekt-változat áll be, ami sosem fut le renderelés közben.
+const useIsoLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 type Day = TimetableView["days"][number];
 
@@ -154,6 +194,78 @@ function layoutDay(
   flush();
 
   return items;
+}
+
+//* ---------------------------------------------------------------------------
+//* Nap-fejléc cellája
+//* ---------------------------------------------------------------------------
+//! Lapozós módban a cella GOMB: ha a hétnek csak egy része látszik, a fejléc a
+//! leggyorsabb út a péntekhez — ugyanaz a mozdulat, amit a nap-sáv ad egy nap
+//! esetén. Ahol viszont az egész hét kifér, ott nincs hova ugrani: ott sima
+//! felirat, mert a semmit nem csináló gomb rosszabb, mint a szöveg.
+function DayHeadCell({
+  day,
+  style,
+  paging,
+  onJump,
+}: {
+  day: Day;
+  style?: React.CSSProperties;
+  paging: boolean;
+  onJump?: () => void;
+}) {
+  const inner = (
+    <>
+      <div
+        className={cn(
+          "text-sm font-semibold",
+          day.isToday ? "text-primary" : "text-foreground",
+        )}
+      >
+        {day.name}
+      </div>
+      <div
+        className={cn(
+          "text-xs tabular-nums",
+          day.isToday ? "font-medium text-primary/80" : "text-muted-strong",
+        )}
+      >
+        {day.dateLabel}
+      </div>
+      {day.isToday && (
+        <span
+          className="absolute inset-x-0 bottom-0 h-0.5 bg-primary"
+          aria-hidden
+        />
+      )}
+    </>
+  );
+  const base = cn(
+    "relative min-w-0 border-l border-border/70 px-2 py-2.5 text-center",
+    paging ? "shrink-0" : "flex-1 shrink",
+    day.isToday && "bg-primary/[0.06]",
+  );
+  if (!paging) {
+    return (
+      <div className={base} style={style}>
+        {inner}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onJump}
+      style={style}
+      aria-label={`Ugrás ide: ${day.name} ${day.dateLabel}`}
+      className={cn(
+        base,
+        "transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
+      )}
+    >
+      {inner}
+    </button>
+  );
 }
 
 export function TimetableCalendar({
@@ -295,30 +407,55 @@ export function TimetableCalendar({
 
   //* A morf-átmenet ezen az elemen ül (lásd view-transition.ts).
   const frameRef = useRef<HTMLDivElement>(null);
-  //! TELJES NÉZET: a lépték a KÉPERNYŐRE igazodik — a nap (az első és az utolsó
-  //! óra közötti tartomány) pontosan egy képernyőnyi legyen, vagyis egy normál,
-  //! 8 tanórás napon 8 óra látszik egyszerre, görgetés nélkül. A tényleges
-  //! tartomány (dayStart..dayEnd) a heti adatból jön, ezért a képpont/perc arányt
-  //! futásidőben mérésből számoljuk; a beágyazott nézet marad fix léptékű.
+  //! ─── A RÁCS KÉT TENGELYE KÉT KÜLÖN KÉRDÉS ────────────────────────────────
+  //! Eddig egyetlen töréspont (`sm`) döntött mindkettőről: alatta egy nap,
+  //! fölötte öt. 640 px-en tehát az öt oszlop 118 px-re szorult — a tantárgy
+  //! neve két betűre csonkult —, fekvő telefonon meg a „férjen ki magasságban"
+  //! szabály lapította 22 px-esre a tanórát. A két tengelynek MÁS a szűkössége,
+  //! ezért mostantól külön mérjük:
+  //!  • vízszintesen ANNYI nap látszik, ahány olvasható oszlop kifér;
+  //!  • függőlegesen a nap a képernyőhöz igazodik, de csak a lépték-határig.
+  const [cols, setCols] = useState(5);
+  const [colWidth, setColWidth] = useState<number | null>(null);
   const [fitScale, setFitScale] = useState<number | null>(null);
-  //* A nap-fejléc (sticky) magassága a számolt sáv fölött; mobilon rejtett.
-  useEffect(() => {
+  //! GÖRÖG-E FÜGGŐLEGESEN IS a rács. Ez nem statisztika: ettől függ, milyen
+  //! erős a vízszintes tapadás (lásd a görgetődoboz osztályainál).
+  const [vScroll, setVScroll] = useState(false);
+  //! MÉRÉS FESTÉS ELŐTT. Az oszlopszám a keret TÉNYLEGES szélességéből jön, nem
+  //! médialekérdezésből (így a beágyazott/osztott ablak is jól méretez) — de
+  //! effektben mérve az első képkockán még az alapérték, öt nap látszana,
+  //! telefonon egy teljes képernyőnyi ugrással. A layout-effekt ugyanabban a
+  //! képkockában, festés előtt javít.
+  useIsoLayoutEffect(() => {
     if (variant !== "fullscreen") return;
     const measure = () => {
       const f = frameRef.current;
       if (!f) return;
+
+      //* — Vízszintes: hány nap fér ki olvashatóan
+      const avail = f.clientWidth - GUTTER;
+      const fits =
+        f.clientWidth < ONE_DAY_MAX
+          ? 1
+          : Math.max(1, Math.min(5, Math.floor(avail / MIN_COL)));
+      setCols(fits);
+      //* Egy nap: teljes szélesség (a nap-sáv navigál, nincs mit kikandikálni).
+      //* Öt nap: nincs tovább, tehát nincs kikandikálás sem.
+      setColWidth(
+        fits === 1 || fits === 5 ? avail / fits : (avail - PEEK) / fits,
+      );
+
+      //* — Függőleges: a nap a képernyőhöz igazodik, a lépték-határig
       const span = dayEnd - dayStart;
       if (span <= 0) return;
-      const headerH =
-        window.innerWidth >= 640
-          ? (f.querySelector("[data-day-header]")?.getBoundingClientRect()
-              .height ?? 48)
-          : 0;
-      const avail = Math.max(
-        window.innerHeight - f.getBoundingClientRect().top - headerH,
-        220,
-      );
-      setFitScale(avail / span);
+      //! A keret DOKUMENTUMBELI teteje kell, nem a képernyőbeli: görgetett
+      //! állapotban mérve a `top` már negatív, és a lépték ugrálna görgetés
+      //! közben — pont akkor, amikor a rács magassága nem mozdulhat.
+      const docTop = f.getBoundingClientRect().top + window.scrollY;
+      const room = Math.max(window.innerHeight - docTop, 220);
+      setFitScale(Math.max(room / span, MIN_PX_PER_MIN));
+      //* Függőleges görgetés csak akkor van, ha a lépték-határ ütött be.
+      setVScroll(MIN_PX_PER_MIN * span > room + 1);
     };
     //* `pending` csak azért a függőségben, mert a betöltés után a keret tényleges
     //* geometriája csak később áll be — ilyenkor újra mértünk.
@@ -327,23 +464,115 @@ export function TimetableCalendar({
     const ro = new ResizeObserver(measure);
     if (frameRef.current) ro.observe(frameRef.current);
     window.addEventListener("resize", measure);
+    //* Fekvőre fordítás után a méretek csak a következő képkockán állnak be.
+    const onOrient = () => requestAnimationFrame(measure);
+    window.addEventListener("orientationchange", onOrient);
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", onOrient);
     };
   }, [variant, dayStart, dayEnd, pending]);
 
-  const pxPerMin =
-    variant === "fullscreen" ? (fitScale ?? FULL_PX_PER_MIN) : EMBED_PX_PER_MIN;
+  //! ─── NYOMTATÁS ───────────────────────────────────────────────────────────
+  //! A papírra a TELJES hét megy, fix léptékkel — az oszlopszám a képernyő
+  //! szűkössége, a lapé nem az. A kapcsolást `flushSync` köti el, mert a
+  //! `beforeprint` után a böngésző azonnal pillanatképet készít: egy szokásos,
+  //! aszinkron állapotfrissítés még a régi rácsot nyomtatná ki.
+  const [printing, setPrinting] = useState(false);
+  useEffect(() => {
+    if (variant !== "fullscreen") return;
+    const set = (on: boolean) => {
+      flushSync(() => setPrinting(on));
+    };
+    const before = () => set(true);
+    const after = () => set(false);
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    //* Safari a `beforeprint` helyett a médialekérdezés váltását adja.
+    const mq = window.matchMedia("print");
+    const onChange = (e: MediaQueryListEvent) => set(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+      mq.removeEventListener("change", onChange);
+    };
+  }, [variant]);
+
+  //! ─── MUTATÓESZKÖZ ────────────────────────────────────────────────────────
+  //! A tantárgy-kiemelés egérrel remek, érintéssel viszont BERAGAD: a „hover"
+  //! az utolsó koppintás helyén marad, és a fél rács tompán áll, amíg máshova
+  //! nem koppintanak. Nem a képernyő szélességét kérdezzük — érintőkijelzős
+  //! laptop is van —, hanem magát a mutatóeszközt.
+  const [canHover, setCanHover] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const sync = () => setCanHover(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  //* A nyomtatott lapon nincs görgetés és nincs szűk hely: mindig az öt nap megy.
+  const effCols = printing ? 5 : cols;
+  //* „Lapozós" mód: nem fér ki a hét, tehát vízszintesen görgethető és tapad.
+  const paging = variant === "fullscreen" && !printing && effCols < 5;
+  const pxPerMin = printing
+    ? PRINT_PX_PER_MIN
+    : variant === "fullscreen"
+      ? (fitScale ?? FULL_PX_PER_MIN)
+      : EMBED_PX_PER_MIN;
+  //* A nap-oszlop és a fejléc-cellája UGYANEZT a szélességet kapja — a fejléc a
+  //* rácson kívül él (lásd lentebb), a két sáv csak így marad egy vonalban.
+  //* Szűk eszköztár: ugyanaz a mérés dönt róla, mint az oszlopszámról — egy nap
+  //* fér ki, tehát a fejléc sora is szűk, tehát rövid hét-címke megy ki.
+  const narrowBar = variant === "fullscreen" && cols === 1;
+  //! ─── A TAPADÁS ERŐSSÉGE ──────────────────────────────────────────────────
+  //! A `mandatory` a lapozás legjobb formája: a félbehagyott swipe is egész
+  //! napra áll be, sosem maradsz két nap között. De van egy ára, és pont ott
+  //! jelentkezik, ahol a lapot a legtöbbet használják.
+  //!
+  //! Ha a lap FÜGGŐLEGESEN IS görög, a felfelé húzás sosem tökéletesen
+  //! függőleges — a néhány képpontos vízszintes elcsúszást a `mandatory`
+  //! KÖTELEZŐEN kiigazítja a szomszéd napra: a diák görgetni akar, a rács meg
+  //! lapoz. Ráadásul a mobil böngésző címsora ki-be csúszik, ezzel átméretezi a
+  //! viewportot, a rács pedig ÚJRA tapad — vagyis a lap magától vált napot.
+  //! És mivel a rács a képernyő magasságához igazodik, tehát pontosan kitölti
+  //! azt, érintős eszközön a görgethetőség MINDIG egy címsor-mozdulatnyira van,
+  //! nem csak akkor, amikor a lépték-határ ütött be.
+  //!
+  //! Szigorú tapadás ezért csak ott van, ahol egyik kockázat sem áll fenn:
+  //! finom mutatóeszköz (egér) ÉS nincs függőleges görgetés. Máshol
+  //! `proximity`: a valódi swipe attól is átlapoz, a pár pixeles elcsúszás
+  //! viszont nem visz sehova. A determinista ugrás pedig változatlanul megvan —
+  //! nap-sáv, nap-fejléc, 1–5 billentyű.
+  const snapStrict = canHover && !vScroll;
+  const colStyle: React.CSSProperties | undefined = paging
+    ? { width: colWidth ?? undefined, flex: "0 0 auto" }
+    : undefined;
 
   const height = Math.max((dayEnd - dayStart) * pxPerMin, 320);
   const top = useCallback(
     (m: number) => (m - dayStart) * pxPerMin,
     [dayStart, pxPerMin],
   );
-  const lastPeriodEnd = periods.length
-    ? periods[periods.length - 1].endMin
-    : dayEnd;
+  //! A RÁCSON KÍVÜLI CSENGETÉSI SOROK. A `periods` a 0. és a 9. órát is
+  //! tartalmazza, a rács idő-tartománya viszont a TÉNYLEGES órákból jön. Az
+  //! ezen kívül eső óra-vonalak és sorszámok eddig is kirajzolódtak — abszolút
+  //! pozícióban, a rács alja ALÁ —, és ezzel ~80 képponttal a képernyő alá
+  //! nyújtották a lapot. Vagyis a „a nap kifér egy képernyőre" ígéret nem volt
+  //! igaz, és a lap görgethetővé vált anélkül, hogy lett volna rajta bármi:
+  //! pont ez a néma függőleges görgetés harcolt telefonon a nap-lapozással.
+  const gridPeriods = periods.filter(
+    (p) => p.startMin >= dayStart && p.startMin <= dayEnd,
+  );
+  const lastLine = gridPeriods.length
+    ? gridPeriods[gridPeriods.length - 1].endMin
+    : null;
+  //* A záróvonal csak akkor kell, ha a tartományon BELÜL van.
+  const lastPeriodEnd =
+    lastLine !== null && lastLine <= dayEnd ? lastLine : null;
 
   //* Ha az API csak fallback napokat adott (hiba), a hét 5 tanítási napját mutatjuk.
   const gridDays: Day[] =
@@ -398,7 +627,8 @@ export function TimetableCalendar({
   const scrollRef = useRef<HTMLDivElement>(null);
   const dayRefs = useRef<(HTMLDivElement | null)[]>([]);
   const gutterRef = useRef<HTMLDivElement>(null);
-  const headerGutterRef = useRef<HTMLDivElement>(null);
+  //* A rácson KÍVÜLI nap-fejléc sínje — a rács vízszintes görgetését tükrözi.
+  const headerTrackRef = useRef<HTMLDivElement>(null);
   const [activeDay, setActiveDay] = useState(0);
 
   //! MELYIK NAP LÁTSZIK — két úton, szándékosan.
@@ -438,8 +668,14 @@ export function TimetableCalendar({
     const x = container.scrollLeft;
     if (gutterRef.current)
       gutterRef.current.style.transform = `translateX(${x}px)`;
-    if (headerGutterRef.current)
-      headerGutterRef.current.style.transform = `translateX(${x}px)`;
+    //! A NAP-FEJLÉC A GÖRGETŐDOBOZON KÍVÜL ÜL. Belül nem lehet: a vízszintes
+    //! `overflow` görgetési dobozt csinál a keretből, és a benne lévő
+    //! `position: sticky` ehhez a dobozhoz igazodna — vagyis függőleges
+    //! görgetéskor a fejléc elúszna a rács tetejével együtt. Kívül viszont
+    //! magától nem követi a vízszintes lapozást: a sínjét ezért ELLENTÉTES
+    //! irányban toljuk el ugyanannyival. Egy képkocka, két elem, egy igazság.
+    if (headerTrackRef.current)
+      headerTrackRef.current.style.transform = `translateX(${-x}px)`;
   }, []);
   const handleScroll = useCallback(() => {
     if (scrollFrame.current !== null) return;
@@ -654,16 +890,40 @@ export function TimetableCalendar({
         //! görgető dobozhoz igazodna — vagyis a „most" sáv és a nap-fejléc néma
         //! maradna. Az órarend itt maga a lap, nem egy kártya rajta: teljes
         //! szélességben ül, keret nélkül.
+        //! ULTRASZÉLES KIJELZŐN a rács nem nő tovább. Öt oszlop 2400 px-en
+        //! 470 px széles lenne: a kártya ugyanazt mondja, csak háromszor
+        //! nagyobb üres felülettel, az eszköztár két végén álló gombok közé
+        //! meg egy méternyi semmi kerül. A keret ezért középre áll, és a
+        //! szélek `bg-card`-ja lesz a lap margója.
         fullscreen
-          ? "border-t border-border"
+          ? cn("mx-auto w-full border-t border-border tt-safe", MAX_SHELL)
           : "overflow-hidden rounded-2xl border border-border shadow-sm",
       )}
     >
+      {/*//! NYOMTATOTT FEJLÉC. A papíron nincs eszköztár — vagyis nincs, ami
+          //! megmondja, KINEK és MELYIK hétnek az órarendje lóg a falon. Ez a
+          //! sor csak nyomtatásban jelenik meg, és pontosan ezt mondja meg. */}
+      {fullscreen && (
+        <p className="hidden pb-2 text-[15px] font-bold text-foreground print:block">
+          {view.resolvedClass?.name ?? view.resolvedClass?.short ?? "Órarend"}
+          <span className="ml-2 font-medium text-muted-strong">
+            {weekLabel(weekStart)}
+          </span>
+          {abWeek && (
+            <span className="ml-2 font-medium text-muted-strong">
+              · {abWeek} hét
+            </span>
+          )}
+        </p>
+      )}
+
       {/* Eszköztár — teljes nézetben ez a lap fejléce is */}
       <div
         className={cn(
           "flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2.5 sm:px-4",
           fullscreen && "gap-x-2 py-2 sm:gap-x-3",
+          //* A papíron a hét maga a tartalom; a vezérlők nem nyomtathatók.
+          "print:hidden",
         )}
       >
         {heading}
@@ -671,7 +931,7 @@ export function TimetableCalendar({
           <Button
             variant="ghost"
             size="icon"
-            className="size-8 rounded-full"
+            className="size-8 rounded-full touch-target"
             aria-label="Előző hét"
             title={fullscreen ? "Előző hét (←)" : "Előző hét"}
             disabled={pending}
@@ -685,7 +945,7 @@ export function TimetableCalendar({
             aria-pressed={fullscreen ? isCurrentWeek : undefined}
             title={fullscreen ? "Mai hét (T)" : undefined}
             className={cn(
-              "h-8 rounded-full px-3 font-medium",
+              "h-8 touch-target rounded-full px-3 font-medium",
               //* A mai hét megjelölése: a gomb megmondja, hogy MÁR ott vagy.
               fullscreen && isCurrentWeek && "bg-primary/12 text-primary",
             )}
@@ -697,7 +957,7 @@ export function TimetableCalendar({
           <Button
             variant="ghost"
             size="icon"
-            className="size-8 rounded-full"
+            className="size-8 rounded-full touch-target"
             aria-label="Következő hét"
             title={fullscreen ? "Következő hét (→)" : "Következő hét"}
             disabled={pending}
@@ -707,20 +967,30 @@ export function TimetableCalendar({
           </Button>
         </div>
 
-        <div className="flex min-w-0 items-center gap-2">
+        {/*//! SZŰK ESZKÖZTÁRON EZ A CSOPORT FELBOMLIK. Egyben a hét-címke, az
+            //! A/B jelvény és a töltésjelző ~240 px — a lapozó gombokkal együtt
+            //! nem fér ki 390 px-en, tehát az egész csoport a HARMADIK sorba
+            //! esik. Egy 100dvh-s lapon a harmadik sor nem a fejlécből megy el,
+            //! hanem a rácsból: ~44 px, és onnantól a rács függőlegesen is
+            //! görög. `display: contents`-szel a három elem külön-külön tördel,
+            //! így a sáv két sor marad. Ahol elfér, ott marad az egyben tartott,
+            //! szorosan tördelő csoport. */}
+        <div className="contents sm:flex sm:min-w-0 sm:items-center sm:gap-2">
           <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
             <PopoverTrigger asChild>
               <button
                 type="button"
                 disabled={pending}
                 aria-label="Hét kiválasztása naptárból"
-                className="group/date -mx-1 flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[15px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60"
+                className="group/date -mx-1 flex min-w-0 touch-target items-center gap-1.5 rounded-full px-2.5 py-1 text-[15px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60"
               >
                 <CalendarDays
                   className="size-4 shrink-0 text-muted-foreground"
                   aria-hidden
                 />
-                <span className="truncate">{weekLabel(weekStart)}</span>
+                <span className="truncate">
+                  {weekLabel(weekStart, narrowBar)}
+                </span>
                 <ChevronDown
                   className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]/date:rotate-180 motion-reduce:transition-none"
                   aria-hidden
@@ -772,7 +1042,12 @@ export function TimetableCalendar({
           </a>
           */}
           {hasClass && (
-            <PreferencesMenu rows={rows} onUndo={undo} onReset={reset} />
+            <PreferencesMenu
+              rows={rows}
+              onUndo={undo}
+              onReset={reset}
+              className="touch-target"
+            />
           )}
           {classes.length > 0 && (
             <Select
@@ -781,7 +1056,7 @@ export function TimetableCalendar({
               onValueChange={(v) => load(weekStart, v)}
             >
               <SelectTrigger
-                className="h-9 w-[104px] rounded-full data-[size=default]:h-9"
+                className="h-9 w-[104px] touch-target rounded-full data-[size=default]:h-9"
                 aria-label="Osztály"
               >
                 <SelectValue placeholder="Osztály" />
@@ -816,8 +1091,12 @@ export function TimetableCalendar({
               //! állítja be az ember. z-40: a rács belső rétegei (kártya, „most"
               //! vonal, összevonás-gomb) alatta, a fix fejléc (z-50) fölötte. */}
           {fullscreen && (
-            <div className="sticky top-site-header z-40 flex flex-col bg-card">
+            <div
+              data-tt-sticky
+              className="sticky top-site-header z-40 flex flex-col bg-card"
+            >
               <NowRail
+                className="print:hidden"
                 today={todayItems}
                 later={laterItems}
                 inCurrentWeek={weekHasToday}
@@ -852,37 +1131,65 @@ export function TimetableCalendar({
                 }}
               />
 
-              {/* Mobil nap-sáv: ugrás a napok között lapozás nélkül */}
-              <div className="flex shrink-0 gap-1 border-b border-border px-2 py-1.5 sm:hidden">
-                {gridDays.map((d, i) => (
-                  <button
-                    key={d.dateKey}
-                    type="button"
-                    onClick={() => goToDay(i)}
-                    aria-current={activeDay === i ? "true" : undefined}
-                    className={cn(
-                      "flex min-w-0 flex-1 flex-col items-center rounded-lg px-1 py-1 text-center transition-colors",
-                      "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                      activeDay === i
-                        ? "bg-primary/12 text-foreground"
-                        : "text-muted-strong hover:bg-muted",
-                    )}
-                  >
-                    <span className="text-[13px] font-semibold leading-tight">
-                      {DAY_SHORT[i] ?? d.name.slice(0, 2)}
-                    </span>
-                    <span className="text-[10px] leading-tight tabular-nums">
-                      {d.dateLabel.replace(/\.$/, "")}
-                    </span>
-                    {d.isToday && (
-                      <span
-                        className="mt-0.5 h-0.5 w-4 rounded-full bg-primary"
-                        aria-hidden
-                      />
-                    )}
-                  </button>
-                ))}
-              </div>
+              {/*//! EGY NAP LÁTSZIK (telefon): a nap-sáv A navigáció. Öt cél,
+                  //! mind egy hüvelykujjnyira, és mindegyik megmondja a dátumát
+                  //! is — a fejléc-sor itt csak megismételné azt az egy napot,
+                  //! amit már úgyis nézel. */}
+              {effCols === 1 && (
+                <div className="flex shrink-0 gap-1 border-b border-border px-2 py-1 print:hidden">
+                  {gridDays.map((d, i) => (
+                    <button
+                      key={d.dateKey}
+                      type="button"
+                      onClick={() => goToDay(i)}
+                      aria-current={activeDay === i ? "true" : undefined}
+                      className={cn(
+                        "flex min-w-0 flex-1 touch-target flex-col items-center justify-center rounded-lg px-1 py-1 text-center transition-colors",
+                        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                        activeDay === i
+                          ? "bg-primary/12 text-foreground"
+                          : "text-muted-strong hover:bg-muted",
+                      )}
+                    >
+                      <span className="text-[13px] font-semibold leading-tight">
+                        {DAY_SHORT[i] ?? d.name.slice(0, 2)}
+                      </span>
+                      <span className="text-[10px] leading-tight tabular-nums">
+                        {d.dateLabel.replace(/\.$/, "")}
+                      </span>
+                      {d.isToday && (
+                        <span
+                          className="mt-0.5 h-0.5 w-4 rounded-full bg-primary"
+                          aria-hidden
+                        />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/*//! KETTŐ VAGY TÖBB NAP LÁTSZIK: a nap-fejléc mondja meg, melyik
+                  //! oszlop melyik nap — és mivel a rácson KÍVÜL, a ragadó
+                  //! blokkban ül, függőleges görgetéskor is fent marad. A
+                  //! vízszintes lapozást a sínje `pinLeft`-ből követi le. */}
+              {effCols >= 2 && (
+                <div className="flex shrink-0 border-b border-border bg-card">
+                  <div className="w-12 shrink-0 bg-card" aria-hidden />
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <div ref={headerTrackRef} data-day-track className="flex">
+                      {gridDays.map((d, i) => (
+                        <DayHeadCell
+                          key={d.dateKey}
+                          day={d}
+                          style={colStyle}
+                          paging={paging}
+                          onJump={() => goToDay(i)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -907,23 +1214,26 @@ export function TimetableCalendar({
           >
             <div
               ref={scrollRef}
+              data-tt-scroll
               onScroll={fullscreen ? handleScroll : undefined}
               className={cn(
-                //! Mobilon egy nap tölti ki a képernyőt, és a görgetés
-                //! "beakad" a napokra — ez a natív swipe, JS gesztus nélkül.
-                //! A `scroll-pl-12` KÖTELEZŐ a `snap-start` mellé: enélkül a
-                //! böngésző a nap-oszlop bal szélét a KONTÉNER széléhez igazítja,
-                //! vagyis pont a ragadó idősáv (w-12) ALÁ csúsztatja a nap első
-                //! 48 pixelét. A görgetés-belső margó tolja el a "snapportot"
-                //! az idősáv mellé.
-                //! `sm`-TŐL NINCS VÍZSZINTES GÖRGETŐ, és ez nem esztétika: az
-                //! `overflow-x: auto` a függőleges tengelyt is görgetési dobozzá
-                //! teszi, a dobozon BELÜLI `position: sticky` pedig ehhez a soha
-                //! nem görgető dobozhoz igazodna — vagyis a nap-fejléc nem
-                //! ragadna. Mobilon ez nem gond: ott a nap-fejléc rejtve van, a
-                //! nap-sáv mondja meg, hol vagy.
+                //! LAPOZÓS MÓD: a görgetés „beakad" a napokra — ez a natív
+                //! swipe, JS gesztus nélkül. A `scroll-pl-12` KÖTELEZŐ a
+                //! `snap-start` mellé: enélkül a böngésző a nap-oszlop bal
+                //! szélét a KONTÉNER széléhez igazítja, vagyis pont a ragadó
+                //! idősáv (w-12) ALÁ csúsztatja a nap első 48 pixelét. A
+                //! görgetés-belső margó tolja el a „snapportot" az idősáv mellé.
+                //! Ha kifér a hét, a görgetődoboz MEGSZŰNIK — nem esztétikából:
+                //! az `overflow-x: auto` a függőleges tengelyt is görgetési
+                //! dobozzá teszi, és a fölösleges doboz csak elrontja a
+                //! görgetés-horgonyzást ott, ahol nincs is mit görgetni.
                 fullscreen
-                  ? "max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-pl-12 max-sm:overflow-x-auto"
+                  ? paging &&
+                      cn(
+                        "snap-x scroll-pl-12 overflow-x-auto overscroll-x-contain",
+                        //* A döntés a `snapStrict`-nél van megindokolva.
+                        snapStrict ? "snap-mandatory" : "snap-proximity",
+                      )
                   : "overflow-x-auto",
               )}
             >
@@ -943,70 +1253,34 @@ export function TimetableCalendar({
                 //* minimális szélesség: a napok a lap szélességét osztják el.
                 className={cn("origin-top", !fullscreen && "min-w-[760px]")}
               >
-                {/* Fejléc sor */}
-                {/* //! Mobilon a nap nevét a fölötte álló NAP-SÁV mondja el —
-                    //! ez a sor ott csak ismételné, ráadásul ragadó elemként a
-                    //! kártyák fölé úszna. `sm`-től, ahol mind az öt nap
-                    //! egyszerre látszik, viszont ez az egyetlen fejléc. */}
-                <div
-                  data-day-header
-                  className={cn(
-                    "border-b border-border bg-card",
-                    fullscreen
-                      ? "top-site-header-rail sticky z-40 hidden sm:flex"
-                      : "flex",
-                  )}
-                >
-                  <div
-                    ref={headerGutterRef}
-                    className="relative z-10 w-12 shrink-0 bg-card"
-                  />
-                  {gridDays.map((d) => (
+                {/*//! FEJLÉC SOR — CSAK BEÁGYAZVA. A teljes nézetben a
+                    //! nap-fejléc a görgetődobozon KÍVÜLRE költözött (lásd a
+                    //! ragadó blokkot fentebb): odabent a függőleges görgetéskor
+                    //! elúszna. A beágyazott kártya rácsa nem ragad sehol, ott
+                    //! ez marad a fejléc. */}
+                {!fullscreen && (
+                  <div className="flex border-b border-border bg-card">
                     <div
-                      key={d.dateKey}
-                      className={cn(
-                        "relative min-w-0 border-l border-border/70 px-2 py-2.5 text-center",
-                        fullscreen
-                          ? "w-[calc(100vw-3rem)] shrink-0 sm:w-auto sm:flex-1 sm:shrink"
-                          : "flex-1",
-                        d.isToday && "bg-primary/[0.06]",
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          "text-sm font-semibold",
-                          d.isToday ? "text-primary" : "text-foreground",
-                        )}
-                      >
-                        {d.name}
-                      </div>
-                      <div
-                        className={cn(
-                          "text-xs tabular-nums",
-                          d.isToday
-                            ? "font-medium text-primary/80"
-                            : "text-muted-strong",
-                        )}
-                      >
-                        {d.dateLabel}
-                      </div>
-                      {d.isToday && (
-                        <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
-                      )}
-                    </div>
-                  ))}
-                </div>
+                      className="relative z-10 w-12 shrink-0 bg-card"
+                      aria-hidden
+                    />
+                    {gridDays.map((d) => (
+                      <DayHeadCell key={d.dateKey} day={d} paging={false} />
+                    ))}
+                  </div>
+                )}
 
                 {/* Test: idősáv + naposzlopok */}
                 <div className="relative flex bg-muted/25">
                   {/* Idősáv (órák sorszáma + kezdés) */}
                   <div
                     ref={gutterRef}
+                    data-tt-gutter
                     className="relative z-20 w-12 shrink-0 border-r border-border bg-card"
                     style={{ height }}
                     aria-hidden
                   >
-                    {periods.map((p) => (
+                    {gridPeriods.map((p) => (
                       <div
                         key={p.number}
                         className="absolute inset-x-0 flex flex-col items-end pr-2 leading-none"
@@ -1073,24 +1347,28 @@ export function TimetableCalendar({
                         className={cn(
                           "relative min-w-0 border-l border-border/70",
                           fullscreen
-                            ? "w-[calc(100vw-3rem)] shrink-0 snap-start sm:w-auto sm:flex-1 sm:shrink"
+                            ? paging
+                              ? "shrink-0 snap-start"
+                              : "flex-1 shrink"
                             : "flex-1",
                           d.isToday && "bg-primary/[0.05]",
                         )}
-                        style={{ height }}
+                        style={{ ...colStyle, height }}
                       >
                         {/* Óra-elválasztó vonalak (a gutter időcímkéivel egy vonalban) */}
-                        {periods.map((p) => (
+                        {gridPeriods.map((p) => (
                           <div
                             key={p.number}
                             className="pointer-events-none absolute inset-x-0 border-t border-border/45"
                             style={{ top: top(p.startMin) }}
                           />
                         ))}
-                        <div
-                          className="pointer-events-none absolute inset-x-0 border-t border-border/45"
-                          style={{ top: top(lastPeriodEnd) }}
-                        />
+                        {lastPeriodEnd !== null && (
+                          <div
+                            className="pointer-events-none absolute inset-x-0 border-t border-border/45"
+                            style={{ top: top(lastPeriodEnd) }}
+                          />
+                        )}
 
                         {/* Kártyák */}
                         <AnimatePresence initial={false}>
@@ -1185,14 +1463,17 @@ export function TimetableCalendar({
                                   (run.lesson.subjectShort ||
                                     run.lesson.subject) !== hoveredSubject
                                 }
-                                onHoverChange={(subject, hovering) =>
-                                  setHoveredSubject((cur) =>
-                                    hovering
-                                      ? subject
-                                      : cur === subject
-                                        ? null
-                                        : cur,
-                                  )
+                                onHoverChange={
+                                  canHover
+                                    ? (subject, hovering) =>
+                                        setHoveredSubject((cur) =>
+                                          hovering
+                                            ? subject
+                                            : cur === subject
+                                              ? null
+                                              : cur,
+                                        )
+                                    : undefined
                                 }
                                 onUndoMerge={undoByIdentity}
                               />
@@ -1333,7 +1614,7 @@ function LegendMenu() {
         <Button
           variant="ghost"
           size="icon"
-          className="size-9 rounded-full text-muted-foreground hover:text-foreground"
+          className="size-9 rounded-full touch-target text-muted-foreground hover:text-foreground"
           aria-label="Jelmagyarázat és billentyűk"
           title="Jelmagyarázat és billentyűk"
         >

@@ -56,10 +56,16 @@ const fullFmt = new Intl.DateTimeFormat("hu-HU", {
   day: "numeric",
 });
 
-export function weekLabel(weekStart: string): string {
+//! A HÉT CÍMKÉJE KÉT HOSSZBAN. Az évszám a sor legkevésbé hasznos adata —
+//! majdnem mindig az idei év —, viszont ~70 px-et kér. Pont annyit, amennyitől
+//! a telefonos eszköztár HARMADIK sorba törik, és a harmadik sor egy 100dvh-s
+//! lapon nem a fejlécből megy el, hanem a rácsból. Szűk eszköztáron ezért az
+//! évszám nélküli alak megy ki; a teljes alak marad ott, ahol elfér.
+export function weekLabel(weekStart: string, compact = false): string {
   const start = dateFromKey(weekStart);
   const end = dateFromKey(addDaysKey(weekStart, 4));
-  return `${fullFmt.format(start)} – ${rangeFmt.format(end)}`;
+  const from = compact ? rangeFmt.format(start) : fullFmt.format(start);
+  return `${from} – ${rangeFmt.format(end)}`;
 }
 
 export const DAY_NAMES = ["Hétfő", "Kedd", "Szerda", "Csütörtök", "Péntek"];

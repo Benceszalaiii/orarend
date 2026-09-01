@@ -102,8 +102,13 @@ export function NowRail({
   //! MINDEN ÁG UGYANAZT A MAGASSÁGOT KAPJA. A sáv a rács fölött ül: ha a
   //! tartalma magasságot váltana (mert becsengettek), alatta ugrana az egész
   //! rács — pont a lapozás közben.
+  //! ALACSONY ABLAK (fekvő telefon: ~390 px). Ott a magasság a szűkös
+  //! erőforrás, nem a szélesség: ez az 56 px a rács hetedének felel meg. A sáv
+  //! ezért összehúzódik — de nem tűnik el, mert pont fekvésben, óra közben
+  //! nézik meg, hogy mennyi van hátra.
   const shell = cn(
     "relative flex h-13 shrink-0 items-center gap-2.5 overflow-hidden border-b border-border bg-card px-3 sm:h-14 sm:gap-3 sm:px-4",
+    "[@media(max-height:480px)]:h-11 [@media(max-height:480px)]:gap-2",
     className,
   );
 

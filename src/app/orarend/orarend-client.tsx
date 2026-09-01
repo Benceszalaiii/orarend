@@ -39,7 +39,9 @@ export function OrarendPage() {
   }, []);
 
   return (
-    <main className="flex min-h-[100dvh] flex-col bg-card">
+    //! `min-h-[100dvh]` a képernyőé; a papíron viszont ez egy fél üres második
+    //! lapot kényszerítene ki, ezért ott elengedjük.
+    <main className="flex min-h-[100dvh] flex-col bg-card print:min-h-0">
       {view ? (
         <TimetableCalendar
           initialView={error ? { ...view, ok: false, error } : view}
