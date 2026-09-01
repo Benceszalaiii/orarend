@@ -32,7 +32,7 @@ export default function AdatvedelemPage() {
           </h2>
           <p>
             Az Órarendet Szalai Bence üzemelteti, magánjellegű, nem hivatalos
-            projektként. Az oldal nem a Jedlik Szakmai Portál vagy az iskola
+            projektként. Az oldal nem az iskola
             hivatalos szolgáltatása, kizárólag a nyilvánosan elérhető
             órarendadatok kényelmesebb megjelenítését szolgálja.
           </p>
