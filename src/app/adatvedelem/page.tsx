@@ -31,7 +31,7 @@ export default function AdatvedelemPage() {
             Ki üzemelteti az oldalt
           </h2>
           <p>
-            Az Órarendet Benceszalaiii üzemelteti, magánjellegű, nem hivatalos
+            Az Órarendet Szalai Bence üzemelteti, magánjellegű, nem hivatalos
             projektként. Az oldal nem a Jedlik Szakmai Portál vagy az iskola
             hivatalos szolgáltatása, kizárólag a nyilvánosan elérhető
             órarendadatok kényelmesebb megjelenítését szolgálja.
@@ -107,7 +107,7 @@ export default function AdatvedelemPage() {
           <h2 className="text-base font-semibold text-foreground">Kapcsolat</h2>
           <p>
             Az adatkezeléssel kapcsolatos kérdéssel az oldal üzemeltetőjéhez,
-            Benceszalaiii-hoz fordulhatsz.
+            Szalai Bencéhez fordulhatsz.
           </p>
         </section>
       </div>
