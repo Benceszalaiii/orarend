@@ -49,29 +49,62 @@ function useClock(): Clock | null {
   return clock;
 }
 
-//! A haladás-sáv beállítását NEM másodpercenként írjuk felül: a CSS-animáció
-//! egyszer indul el a szakasz elejéhez horgonyozva (negatív késleltetés), és
-//! magától jár tovább. Az inline `transform` az animáció nélküli igazság.
-function useDrain(span: NowSpan | null): React.CSSProperties | null {
-  const [style, setStyle] = useState<React.CSSProperties | null>(null);
-  const from = span?.fromMin ?? null;
-  const to = span?.toMin ?? null;
+//! Láthatóvá válás = ÚJ HORGONY. A CSS-animáció a saját indulásához méri a
+//! fázist, a rejtett lapon viszont EL SEM INDUL (a böngésző nem rajzol). A
+//! zsebben töltött óra után tehát elavult ponttól indulna — ez az epoch minden
+//! visszatéréskor újjáépítteti a sávot, friss horgonnyal.
+function useVisibilityEpoch(): number {
+  const [epoch, setEpoch] = useState(0);
   useEffect(() => {
-    if (from === null || to === null || to <= from) {
-      setStyle(null);
-      return;
-    }
+    const onShow = () => {
+      if (document.visibilityState === "visible") setEpoch((e) => e + 1);
+    };
+    document.addEventListener("visibilitychange", onShow);
+    return () => document.removeEventListener("visibilitychange", onShow);
+  }, []);
+  return epoch;
+}
+
+//! A haladás-sávot NEM másodpercenként animáljuk újra: a CSS-animáció egyszer
+//! indul el a szakasz elejéhez horgonyozva (negatív késleltetés), és magától jár
+//! tovább — a `--tt-*` változók ezért a sáv SZÜLETÉSEKOR dőlnek el, és onnantól
+//! állnak. A `--tt-elapsed` ugyanis a *futó* animáció kezdetéhez képest tol a
+//! fázison: ha ütemenként újraírnánk, a saját múlása MELLÉ számolna, és a sáv
+//! kétszeres sebességgel szaladna végig. Új szakasz = új elem (`key`), ott
+//! számolunk újra.
+//*
+//* Az inline `transform` az animáció nélküli igazság: `prefers-reduced-motion`
+//* mellett (`animation: none`) EGYEDÜL ez mozgatja a sávot, ezért a `fraction`
+//* minden óraütésre frissül. Ahol az animáció fut, ott az írja felül (az
+//* animáció kaszkád-rétege erősebb az inline stílusnál) — a kettő nem harcol.
+function DrainBar({
+  span,
+  fraction,
+  accentSeed,
+}: {
+  span: NowSpan;
+  fraction: number;
+  accentSeed: string;
+}) {
+  const [anchor] = useState<React.CSSProperties>(() => {
     const d = new Date();
     const nowSec = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
-    const durationSec = (to - from) * 60;
-    const elapsedSec = nowSec - from * 60;
-    setStyle({
-      "--tt-dur": `${durationSec}s`,
-      "--tt-elapsed": `${-elapsedSec}s`,
-      transform: `scaleX(${spanFraction({ fromMin: from, toMin: to }, nowSec / 60)})`,
-    } as React.CSSProperties);
-  }, [from, to]);
-  return style;
+    return {
+      "--tt-dur": `${(span.toMin - span.fromMin) * 60}s`,
+      "--tt-elapsed": `${-(nowSec - span.fromMin * 60)}s`,
+    } as React.CSSProperties;
+  });
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] origin-left animate-tt-drain acc-dot"
+      style={{
+        ...accentStyle(accentSeed),
+        ...anchor,
+        transform: `scaleX(${fraction})`,
+      }}
+      aria-hidden
+    />
+  );
 }
 
 export function NowRail({
@@ -97,7 +130,7 @@ export function NowRail({
   const state: NowState | null =
     clock && inCurrentWeek ? nowState(today, later, clock.min) : null;
   const span = state && "span" in state ? state.span : null;
-  const drain = useDrain(span);
+  const epoch = useVisibilityEpoch();
 
   //! MINDEN ÁG UGYANAZT A MAGASSÁGOT KAPJA. A sáv a rács fölött ül: ha a
   //! tartalma magasságot váltana (mert becsengettek), alatta ugrana az egész
@@ -257,11 +290,15 @@ export function NowRail({
       )}
 
       {/* Haladás-sáv: a szakasz eltelt része, valós időben */}
-      {drain && primary && (
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] origin-left animate-tt-drain acc-dot"
-          style={{ ...accentStyle(primary.accentSeed), ...drain }}
-          aria-hidden
+      {span && span.toMin > span.fromMin && primary && clock && (
+        <DrainBar
+          //! ÚJ SZAKASZ = ÚJ ELEM. Egy már futó animáció fázisát nem lehet
+          //! visszaállítani, csak újraindítani: `key` nélkül a becsengetés utáni
+          //! sáv a lap megnyitása óta eltelt időt is beleszámolná.
+          key={`${epoch}-${span.fromMin}-${span.toMin}`}
+          span={span}
+          fraction={spanFraction(span, clock.min)}
+          accentSeed={primary.accentSeed}
         />
       )}
     </div>

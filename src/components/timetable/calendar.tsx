@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CloudOff,
   // ExternalLink, //! a szakmai portál linkjével együtt visszakapcsolni
   Info,
   Merge,
@@ -29,21 +30,19 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import type {
   CalendarEvent,
   TimetableClass,
+  TimetableError as TimetableErrorInfo,
   TimetableLesson,
   TimetableView,
 } from "@/lib/timetable";
-import { buildTimetableView, saveCachedClass } from "@/lib/timetable";
+import {
+  buildTimetableView,
+  describeTimetableFailure,
+  saveCachedClass,
+} from "@/lib/timetable";
 import {
   type GhostBlock,
   type LessonRun,
@@ -270,12 +269,16 @@ function DayHeadCell({
 export function TimetableCalendar({
   initialView,
   classes,
+  classesError,
   variant = "embedded",
   heading,
   trailing,
 }: {
   initialView: TimetableView;
   classes: TimetableClass[];
+  //* Ha az osztálylista sem jött meg, a választó üres — a „válassz osztályt”
+  //* felszólítás ilyenkor félrevezető, ezért a lista hibáját is átvesszük.
+  classesError?: TimetableErrorInfo;
   //* `fullscreen` a /orarend lapé: a rács kitölti a képernyőt, mobilon
   //* naponként lapozható. `embedded` az /event kártyáé.
   variant?: "embedded" | "fullscreen";
@@ -369,11 +372,14 @@ export function TimetableCalendar({
       //* A választást csak SIKERES betöltés után jegyezzük meg, hogy a
       //* következő megnyitás ne a `PUBLIC_DEFAULT_CLASS`-ra essen vissza.
       if (next) saveCachedClass(next);
-    } catch {
+    } catch (err) {
+      //! Ide csak akkor jutunk, ha maga a betöltés dobott (a hálózati hibákat
+      //! a `buildTimetableView` már nevesítve adja vissza) — a kivétel fajtáját
+      //! itt sem dobjuk el, mert ez mondja meg, kinél van a hiba.
       setView((w) => ({
         ...w,
         ok: false,
-        error: "Nem sikerült betölteni az órarendet.",
+        error: describeTimetableFailure(err),
       }));
     } finally {
       setPending(false);
@@ -783,20 +789,31 @@ export function TimetableCalendar({
 
   //! Mobilon a mai napra ugrunk induláskor — a diák a MAI órarendjéért nyitja
   //! meg. Csak akkor, ha a betöltött hét tartalmazza a mai napot.
+  //!
+  //! AZ ELSŐ KÉPKOCKÁN MÉG NINCS HOVA UGRANI. Az oszlopszám mérése (`cols`,
+  //! `colWidth`) csak a layout-effektben dől el, tehát a legelső commitban a
+  //! rács még az öt napos, NEM görgethető változat — a lapozós doboz ekkor még
+  //! meg sem született. A „megvolt már" jelzőt ezért csak akkor tesszük ki,
+  //! amikor tényleg oda is igazítottunk; a mérés utáni újrafutásig (`colWidth`
+  //! a függőségben) nyitva marad. Enélkül a hétfőn maradt a lap.
   const jumpedRef = useRef(false);
   useEffect(() => {
     if (variant !== "fullscreen" || jumpedRef.current) return;
     const index = gridDays.findIndex((d) => d.isToday);
     if (index < 0) return;
-    jumpedRef.current = true;
     const container = scrollRef.current;
     const el = dayRefs.current[index];
     if (!container || !el || container.scrollWidth <= container.clientWidth) {
       return;
     }
+    jumpedRef.current = true;
     container.scrollTo({ left: el.offsetLeft - GUTTER, behavior: "auto" });
+    //* A ref-et is KÉZZEL írjuk: az elrendezés-változás utáni visszaigazítás
+    //* (`alignRef`) egy rAF-ban ezt olvassa, és az még a React újrarajzolása
+    //* előtt lefuthat — különben a nulladik napra igazítana vissza.
+    activeDayRef.current = index;
     setActiveDay(index);
-  }, [variant, gridDays]);
+  }, [variant, gridDays, colWidth]);
 
   //* Új hét/osztály betöltése után a keret újra renderelődhet görgetett állapotban:
   //* ilyenkor azonnal vissza kell tűzni a nap-fejléc sínjét, nehogy a lefordított
@@ -1134,37 +1151,74 @@ export function TimetableCalendar({
               className="touch-target"
             />
           )}
+          {/*//! NATÍV `<select>`, nem buborékos lista. Az osztályválasztó az
+              //! egyetlen vezérlő, amit MINDEN eszközön, sokszor, gyorsan
+              //! használnak: mobilon a rendszer saját kerekét kapja, billentyűvel
+              //! a betűre ugrást és a natív keresést — ezt egy egyedi lista sem
+              //! adja vissza. A megjelenést a `appearance-none` + saját nyíl
+              //! tartja a többi eszköztár-gombbal egy sorban. */}
           {classes.length > 0 && (
-            <Select
-              value={selectedClass || undefined}
-              disabled={pending}
-              onValueChange={(v) => load(weekStart, v)}
-            >
-              <SelectTrigger
-                className="h-9 w-[104px] touch-target rounded-full data-[size=default]:h-9"
+            <div className="relative shrink-0">
+              <select
                 aria-label="Osztály"
+                value={selectedClass || ""}
+                disabled={pending}
+                onChange={(event) => load(weekStart, event.target.value)}
+                className={cn(
+                  "h-9 w-[104px] touch-target appearance-none rounded-full border border-input bg-transparent py-1 pr-7 pl-3 text-sm transition-colors outline-none",
+                  "hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                  "disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
+                  //* Placeholder-állapot: a „Osztály" felirat halványabb, mint egy
+                  //* valódi választás — különben kiválasztottnak látszana.
+                  !selectedClass && "text-muted-foreground",
+                )}
               >
-                <SelectValue placeholder="Osztály" />
-              </SelectTrigger>
-              <SelectContent>
+                {!selectedClass && (
+                  <option value="" disabled>
+                    Osztály
+                  </option>
+                )}
                 {classes.map((c) => (
-                  <SelectItem key={c.short} value={c.short}>
+                  <option key={c.short} value={c.short}>
                     {c.name}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+            </div>
           )}
           {trailing}
         </div>
       </div>
 
       {/* Rács / állapotok */}
-      {!hasClass ? (
+      {/*//! A SORREND SZÁMÍT. Az osztály hiánya a leggyakoribb ok, de NEM az
+          //! egyetlen: ha a mentett osztály közben megszűnt, vagy a forrás áll,
+          //! akkor a `resolvedClass` is üres marad — a semleges „válassz
+          //! osztályt” felirat ilyenkor elhallgatná a valódi okot. Ezért előbb
+          //! a nevesített hiba jön, és csak utána a felszólítás. */}
+      {!view.ok && view.error && view.error.kind !== "no-class" ? (
+        <CalendarError
+          error={view.error}
+          pending={pending}
+          onRetry={() => load(weekStart)}
+        />
+      ) : !hasClass && classes.length === 0 && classesError ? (
+        //* Nincs mit választani, mert a lista sem jött meg — a forrás hibája.
+        <CalendarError
+          error={classesError}
+          pending={pending}
+          onRetry={() => load(weekStart)}
+        />
+      ) : !hasClass ? (
         <ChoosePrompt hasClasses={classes.length > 0} />
       ) : !view.ok ? (
         <CalendarError
-          message={view.error ?? "Az órarend most nem elérhető."}
+          error={view.error}
+          pending={pending}
           onRetry={() => load(weekStart)}
         />
       ) : (
@@ -1378,11 +1432,15 @@ export function TimetableCalendar({
                   {/* Idősáv (órák sorszáma + kezdés) */}
                   <div
                     data-tt-gutter
-                    //! `sticky left-0`: a natív tapadás a görgetéssel EGY
-                    //! szálon mozog, tehát képkockára pontos — lásd `pinLeft`.
-                    //! A `z-20` azért kell, mert görgetés közben a nap-oszlopok
-                    //! ALÁ csúsznak be, a `bg-card` pedig azért, hogy takarjon.
-                    className="sticky left-0 z-20 w-12 shrink-0 border-r border-border bg-card"
+                    className={cn(
+                      "z-20 w-12 shrink-0 border-r border-border bg-card",
+                      //! `sticky left-0`: a natív tapadás a görgetéssel EGY
+                      //! szálon mozog, tehát képkockára pontos — lásd
+                      //! `pinLeft`. Csak lapozós módban: máshol nincs
+                      //! vízszintes görgetés, viszont van `relative`-ra
+                      //! szoruló, abszolút pozíciójú óraszám benne.
+                      paging ? "sticky left-0" : "relative",
+                    )}
                     style={{ height }}
                     aria-hidden
                   >
@@ -1762,22 +1820,70 @@ function ChoosePrompt({ hasClasses }: { hasClasses: boolean }) {
   );
 }
 
+//! A HIBAKÉPERNYŐ HÁROM SZINTJE. Cím: mi történt. Mondat: kinél van a hiba —
+//! ez a legfontosabb, mert a diák másképp reagál arra, hogy „a te osztályod
+//! rossz", mint arra, hogy „az iskola szervere áll". Halvány sor alul: mit
+//! tehet. A technikai részlet (HTTP-kód) a legvégén, apró betűvel — nem neki
+//! szól, hanem annak, akinek jelenti a hibát.
+const ERROR_FALLBACK: TimetableErrorInfo = {
+  kind: "network",
+  title: "Az órarend most nem elérhető",
+  message:
+    "A Jedlikinfo API nem érhető el — a hiba külső forrás miatt állt elő, nem ezen az oldalon.",
+  retryable: true,
+};
+
 function CalendarError({
-  message,
+  error,
+  pending,
   onRetry,
 }: {
-  message: string;
+  error?: TimetableErrorInfo;
+  pending?: boolean;
   onRetry: () => void;
 }) {
+  const info = error ?? ERROR_FALLBACK;
+  //* Az „elszakadt a kapcsolat" fajta hibáknak saját ikonja van: egy pillantásból
+  //* látszik, hogy nem az órarenddel, hanem az eléréssel van baj.
+  const external =
+    info.kind === "offline" ||
+    info.kind === "network" ||
+    info.kind === "timeout" ||
+    info.kind === "server";
+  const Icon = external ? CloudOff : AlertTriangle;
+
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-      <AlertTriangle className="size-8 text-muted-foreground" aria-hidden />
-      <p className="max-w-sm text-pretty text-sm text-muted-strong">
-        {message}
-      </p>
-      <Button variant="outline" size="sm" onClick={onRetry}>
-        Újra
-      </Button>
+    <div
+      role="alert"
+      className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center"
+    >
+      <Icon className="size-8 text-muted-foreground" aria-hidden />
+      <div className="flex max-w-sm flex-col gap-1">
+        <p className="text-pretty text-sm font-semibold text-foreground">
+          {info.title}
+        </p>
+        <p className="text-pretty text-sm text-muted-strong">{info.message}</p>
+        {info.hint && (
+          <p className="text-pretty text-xs text-muted-foreground">
+            {info.hint}
+          </p>
+        )}
+      </div>
+      {info.retryable && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRetry}
+          disabled={pending}
+        >
+          {pending ? "Betöltés…" : "Újra"}
+        </Button>
+      )}
+      {info.detail && (
+        <p className="font-mono text-[11px] text-muted-foreground/70">
+          {info.detail}
+        </p>
+      )}
     </div>
   );
 }

@@ -251,18 +251,68 @@
     animation-name: tt-slide-in-start;
   }
 
+  /*//! A BÖNGÉSZŐ NEM RAJZOL `backdrop-filter`-t A PILLANATKÉPBE. Amíg a morf
+      //! fut, nem az élő DOM látszik, hanem a felvett képek — és azokban a
+      //! fátyol elmosás NÉLKÜL, laposan jelenik meg. Így az elmosás felvillan
+      //! a csatolás egyetlen élő képkockáján, ELTŰNIK a morf idejére, majd a
+      //! pillanatképek eldobásakor visszaugrik: pontosan ez a villódzás.
+      //!
+      //! Nem lehet kikényszeríteni, hogy a kép elmosódjon — ezért inkább MEG
+      //! SEM MUTATJUK addig: a fátyol elmosás nélkül indul, a morf végét
+      //! megvárva úszik be. Egyetlen, szándékos felfutás lesz belőle, nem
+      //! oda-vissza kapcsolás. A késleltetés a 280 ms-os morf UTÁNRA esik.
+      //!
+      //! `both`: a késleltetés alatt a `from` (elmosatlan) állapot tartson —
+      //! `forwards`-szal a várakozás alatt a Tailwind `blur(4px)`-e látszana,
+      //! vagyis pont a villanás, amit ki akarunk küszöbölni. */
+  @keyframes tt-scrim-blur {
+    from {
+      backdrop-filter: blur(0px);
+    }
+    to {
+      backdrop-filter: blur(var(--blur-xs));
+    }
+  }
+  .tt-scrim-deferred {
+    animation: tt-scrim-blur 220ms linear 300ms both;
+  }
+
   ::view-transition-group(tt-focus) {
     animation-duration: 280ms;
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
     z-index: 3;
   }
+  /*//! A DOBOZ MORFOL 280 ms-ig, A TARTALOM NEM ÚSZIK ÁT ADDIG. Név nélkül a
+      //! két pillanatkép az alapértelmezett át-tűnést kapja, és ha azt is a
+      //! teljes 280 ms-ra nyújtjuk, a morf FELÉNÉL a kártya is, a lap is
+      //! félig átlátszó — egy szintén áttűnő (élesből elmosottba tartó)
+      //! háttér előtt. Ez az, ami villódzásnak látszik: a lap megjelenik,
+      //! „elhalványul", majd visszajön. A tartalomcserét ezért a morf ELEJÉRE
+      //! sűrítjük: a lap ~90 ms alatt átlátszatlanná válik, és a maradék
+      //! ~190 ms-ban már csak a doboz mozog alatta. */
+  @keyframes tt-morph-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes tt-morph-in {
+    from {
+      opacity: 0;
+    }
+  }
   ::view-transition-old(tt-focus),
   ::view-transition-new(tt-focus) {
-    animation-duration: 280ms;
-    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    animation-duration: 90ms;
+    animation-timing-function: linear;
     height: 100%;
     object-fit: cover;
     overflow: clip;
+  }
+  ::view-transition-old(tt-focus) {
+    animation-name: tt-morph-out;
+  }
+  ::view-transition-new(tt-focus) {
+    animation-name: tt-morph-in;
   }
 
   @media (prefers-reduced-motion: reduce) {

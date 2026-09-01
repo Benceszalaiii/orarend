@@ -2,35 +2,50 @@
 
 import { useEffect, useState } from "react";
 import { TimetableCalendar } from "@/components/timetable/calendar";
-import { Spinner } from "@/components/ui/spinner";
+import { MorphingInfinity } from "@/components/ui/morphing-infinity";
 import {
   buildTimetableView,
-  getTimetableClasses,
+  describeTimetableFailure,
+  fetchTimetableClasses,
   loadCachedClass,
+  mondayOf,
   PUBLIC_DEFAULT_CLASS,
   type TimetableClass,
+  type TimetableError,
   type TimetableView,
 } from "@/lib/timetable";
-import { MorphingInfinity } from "@/components/ui/morphing-infinity";
+
 export function OrarendPage() {
   const [classes, setClasses] = useState<TimetableClass[]>([]);
   const [view, setView] = useState<TimetableView | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  //* Az osztálylista és az órarend külön kérés — külön is tud elbukni, ezért a
+  //* hibájuk sem közös. A rács mindig a saját hibáját mutatja; a lista hibája
+  //* csak akkor kerül elő, ha emiatt nincs miből választani.
+  const [classesError, setClassesError] = useState<
+    TimetableError | undefined
+  >();
+  const [fatal, setFatal] = useState<TimetableError | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const cached = loadCachedClass() || PUBLIC_DEFAULT_CLASS;
     (async () => {
       try {
-        const [cls, initialView] = await Promise.all([
-          getTimetableClasses(),
+        const [list, initialView] = await Promise.all([
+          fetchTimetableClasses(),
           buildTimetableView({ userClass: cached }),
         ]);
         if (cancelled) return;
-        setClasses(cls);
+        setClasses(list.classes);
+        setClassesError(list.error);
         setView(initialView);
-      } catch {
-        if (!cancelled) setError("Nem sikerült betölteni az órarendet.");
+      } catch (err) {
+        //! Ide csak váratlan kivétel jut (a hálózati hibákat a hívott függvények
+        //! már nevesítve adják vissza) — a fajtáját akkor is megőrizzük.
+        if (!cancelled) {
+          setFatal(describeTimetableFailure(err));
+          setView((current) => current ?? emptyView());
+        }
       }
     })();
     return () => {
@@ -44,8 +59,9 @@ export function OrarendPage() {
     <main className="flex min-h-[100dvh] flex-col bg-card print:min-h-0">
       {view ? (
         <TimetableCalendar
-          initialView={error ? { ...view, ok: false, error } : view}
+          initialView={fatal ? { ...view, ok: false, error: fatal } : view}
           classes={classes}
+          classesError={classesError}
           variant="fullscreen"
           heading={
             <h1 className="shrink-0 text-base font-bold tracking-tight text-foreground max-sm:sr-only">
@@ -60,4 +76,21 @@ export function OrarendPage() {
       )}
     </main>
   );
+}
+
+//* A kivételes ág tartaléka: nézet nélkül a naptár nem tud kirajzolódni, így a
+//* hibaüzenetet sem tudná megmutatni. A hét a mostani — az „Újra” gomb így a
+//* helyes hetet tölti újra.
+function emptyView(): TimetableView {
+  return {
+    ok: false,
+    resolvedClass: null,
+    weekStart: mondayOf(),
+    days: [],
+    periods: [],
+    lessons: [],
+    events: [],
+    prefs: [],
+    persistence: "local",
+  };
 }

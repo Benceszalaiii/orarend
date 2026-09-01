@@ -38,7 +38,13 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        //! NINCS `isolate`: az `isolation: isolate` a Filter Effects szerint
+        //! BACKDROP ROOT-tá teszi az elemet, a backdrop root pedig ÜRES
+        //! háttérképet lát — vagyis a saját `backdrop-filter`-e semmit nem
+        //! homályosít. A Chrome ezt (még) elnézi, a WebKit nem: Safariban és
+        //! iOS-en a fátyol emiatt maradt éles. Az elemnek nincs gyereke, így a
+        //! `isolate` amúgy sem rétegzett semmit.
+        "fixed inset-0 z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-20 data-closed:animate-out duration-300 data-closed:fade-out-0",
         className,
       )}
       {...props}
@@ -48,19 +54,26 @@ function DialogOverlay({
 
 function DialogContent({
   className,
+  //! A FÁTYOL IS HANGOLHATÓ KÍVÜLRŐL. Ahol a megnyitást nem a Radix animálja,
+  //! hanem egy View Transition morf (lásd `lesson-sheet.tsx`), ott a fátyol
+  //! saját beúszását EL KELL NÉMÍTANI — különben a pillanatkép még átlátszó
+  //! fátyollal készül, és az elmosás csak az átmenet VÉGÉN, ugrásszerűen
+  //! kapcsol be. A tartalom ezt a kezelést eddig is megkapta, a fátyol nem.
+  overlayClassName,
   children,
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  overlayClassName?: string;
   showCloseButton?: boolean;
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid w-full grid-cols-[minmax(0,1fr)] max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className,
         )}
         {...props}

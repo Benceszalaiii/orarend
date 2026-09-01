@@ -24,6 +24,161 @@ export function saveCachedClass(short: string): void {
 
 const FETCH_TIMEOUT_MS = 15_000;
 
+//* ---------------------------------------------------------------------------
+//* HIBÁK
+//*
+//! Az órarend adatait NEM mi állítjuk elő: a Jedlikinfo API-ról jönnek. Ha ott
+//! valami elromlik, a felhasználó ezen az oldalon látja a hibát — ezért minden
+//! üzenetnek meg kell mondania, hogy KINÉL van a baj, és van-e értelme várni.
+//! Egyetlen „valami hiba történt" felirat helyett a hiba fajtáját visszük végig.
+//* ---------------------------------------------------------------------------
+
+export const TIMETABLE_SOURCE = "Jedlikinfo";
+export const TIMETABLE_SOURCE_HOST = "jedlikinfo.jedlik.eu";
+
+export type TimetableErrorKind =
+  | "no-class" //* nincs (vagy nem ismerhető fel) osztály — nálunk van a labda
+  | "unknown-class" //* az osztály nincs a Jedlikinfo listájában
+  | "offline" //* az eszköz van hálózat nélkül
+  | "network" //* a Jedlikinfo nem érhető el
+  | "timeout" //* elérhető, de nem válaszolt időben
+  | "server" //* 5xx — a Jedlikinfo hibát jelzett
+  | "request" //* 4xx — a kérést utasította el
+  | "payload"; //* válaszolt, de értelmezhetetlent
+
+export type TimetableError = {
+  kind: TimetableErrorKind;
+  /** Rövid cím: mi történt. */
+  title: string;
+  /** Egy mondat arról, hogy ez mit jelent és kinél van a hiba. */
+  message: string;
+  /** Mit tehet ilyenkor a felhasználó. */
+  hint?: string;
+  /** Technikai részlet (HTTP-kód, kivétel neve) — hibajelentéshez. */
+  detail?: string;
+  /** Van-e értelme az „Újra” gombnak. */
+  retryable: boolean;
+};
+
+//* Minden külső eredetű hiba ugyanezt a mondatot viseli, hogy a felhasználó
+//* egy pillanat alatt lássa: nem ő rontott el semmit, és nem is ez az oldal.
+const EXTERNAL = "a hiba külső forrás miatt állt elő";
+
+export function timetableOffline(): TimetableError {
+  return {
+    kind: "offline",
+    title: "Nincs internetkapcsolat",
+    message: `Az eszközöd offline, ezért a ${TIMETABLE_SOURCE} API nem érhető el.`,
+    hint: "Kapcsolódj újra a hálózathoz, majd nyomd meg az Újra gombot.",
+    retryable: true,
+  };
+}
+
+function timetableTimeout(): TimetableError {
+  return {
+    kind: "timeout",
+    title: `A ${TIMETABLE_SOURCE} API nem válaszol`,
+    message: `A ${TIMETABLE_SOURCE} API ${Math.round(FETCH_TIMEOUT_MS / 1000)} másodpercen belül nem válaszolt — ${EXTERNAL}.`,
+    hint: "Az iskolai szerver ilyenkor túlterhelt vagy karbantartás alatt van. Próbáld újra pár perc múlva.",
+    detail: `időtúllépés ${FETCH_TIMEOUT_MS} ms után`,
+    retryable: true,
+  };
+}
+
+function timetableUnreachable(detail?: string): TimetableError {
+  return {
+    kind: "network",
+    title: `A ${TIMETABLE_SOURCE} API nem érhető el`,
+    message: `A ${TIMETABLE_SOURCE} API nem érhető el — ${EXTERNAL}, nem ezen az oldalon.`,
+    hint: `Ha az internetkapcsolatod működik, akkor a ${TIMETABLE_SOURCE_HOST} nem válaszol. Próbáld újra később.`,
+    detail,
+    retryable: true,
+  };
+}
+
+function timetablePayload(detail?: string): TimetableError {
+  return {
+    kind: "payload",
+    title: `Értelmezhetetlen válasz a ${TIMETABLE_SOURCE} API-tól`,
+    message: `A ${TIMETABLE_SOURCE} API a vártól eltérő adatot küldött — ${EXTERNAL}.`,
+    hint: `Ha ez tartósan így marad, valószínűleg megváltozott a ${TIMETABLE_SOURCE} API. Ilyenkor az újratöltés sem segít.`,
+    detail,
+    retryable: true,
+  };
+}
+
+//! A HTTP-kód a leghasznosabb dolog, amit a felhasználó továbbadhat, ha jelent
+//! egy hibát — ezért mindig kiírjuk, akkor is, ha neki magának nem mond semmit.
+function timetableHttp(status: number, statusText?: string): TimetableError {
+  const detail = `HTTP ${status}${statusText ? ` ${statusText}` : ""}`;
+  if (status >= 500) {
+    return {
+      kind: "server",
+      title: `A ${TIMETABLE_SOURCE} API hibát jelzett`,
+      message: `A ${TIMETABLE_SOURCE} szervere hibával válaszolt (${detail}) — ${EXTERNAL}, nem ezen az oldalon.`,
+      hint: "Ez rendszerint magától rendeződik. Próbáld újra néhány perc múlva.",
+      detail,
+      retryable: true,
+    };
+  }
+  if (status === 429) {
+    return {
+      kind: "request",
+      title: "Túl sok kérés",
+      message: `A ${TIMETABLE_SOURCE} API átmenetileg korlátozza a lekérdezéseket (${detail}) — ${EXTERNAL}.`,
+      hint: "Várj egy kicsit, mielőtt újra próbálod.",
+      detail,
+      retryable: true,
+    };
+  }
+  if (status === 401 || status === 403) {
+    return {
+      kind: "request",
+      title: `A ${TIMETABLE_SOURCE} API elutasította a kérést`,
+      message: `A ${TIMETABLE_SOURCE} API nem engedélyezte a lekérdezést (${detail}) — ${EXTERNAL}.`,
+      hint: "Elképzelhető, hogy az órarend csak iskolai belépéssel érhető el.",
+      detail,
+      retryable: false,
+    };
+  }
+  if (status === 404) {
+    return {
+      kind: "request",
+      title: "Nincs ilyen órarend",
+      message: `A ${TIMETABLE_SOURCE} API nem találta a kért órarendet (${detail}).`,
+      hint: "Ellenőrizd a kiválasztott osztályt és a hetet.",
+      detail,
+      retryable: false,
+    };
+  }
+  return {
+    kind: "request",
+    title: `A ${TIMETABLE_SOURCE} API elutasította a kérést`,
+    message: `A ${TIMETABLE_SOURCE} API hibás kérésként utasította el a lekérdezést (${detail}) — ${EXTERNAL}.`,
+    detail,
+    retryable: true,
+  };
+}
+
+//! A `fetch` mindenféle okból dobhat; a névből (`TimeoutError`, `AbortError`,
+//! `TypeError`) derül ki, hogy a hálózat, az időkorlát vagy a válasz feldolgozása
+//! bukott el. Ezt itt EGY helyen fordítjuk le emberi mondatra.
+export function describeTimetableFailure(err: unknown): TimetableError {
+  const name = err instanceof Error ? err.name : "";
+  if (name === "TimeoutError" || name === "AbortError") {
+    return timetableTimeout();
+  }
+  if (name === "SyntaxError") {
+    return timetablePayload("a válasz nem érvényes JSON");
+  }
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return timetableOffline();
+  }
+  return timetableUnreachable(
+    err instanceof Error && err.message ? `${name}: ${err.message}` : undefined,
+  );
+}
+
 type RawCard = {
   date: string;
   dateValue: string;
@@ -108,7 +263,7 @@ export type TimetableLesson = {
 
 export type TimetableWeek = {
   ok: boolean;
-  error?: string;
+  error?: TimetableError;
   resolvedClass: TimetableClass | null;
   weekStart: string;
   days: TimetableDay[];
@@ -157,33 +312,88 @@ function classKey(value: string): string {
   return trimmed.replace(/\s+/g, "");
 }
 
-export async function getTimetableClasses(): Promise<TimetableClass[]> {
+export type TimetableClassList = {
+  classes: TimetableClass[];
+  error?: TimetableError;
+};
+
+//! A LISTA HIBÁJA IS SZÁMÍT: ha nincs osztálylista, a választó üresen marad, és
+//! a felhasználónak tudnia kell, hogy ez sem az ő hibája. Ezért a hiba itt nem
+//! vész el — a hívó dönti el, mutatja-e.
+export async function fetchTimetableClasses(): Promise<TimetableClassList> {
   try {
     const res = await fetch(`${API_BASE}/timetable/classes`, {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      return { classes: [], error: timetableHttp(res.status, res.statusText) };
+    }
     const data = (await res.json()) as TimetableClass[];
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
+    if (!Array.isArray(data)) {
+      return {
+        classes: [],
+        error: timetablePayload("az osztálylista nem tömb"),
+      };
+    }
+    return { classes: data };
+  } catch (err) {
+    return { classes: [], error: describeTimetableFailure(err) };
   }
+}
+
+export async function getTimetableClasses(): Promise<TimetableClass[]> {
+  return (await fetchTimetableClasses()).classes;
+}
+
+type ResolvedClass = {
+  resolved: TimetableClass | null;
+  error?: TimetableError;
+};
+
+async function resolveClassResult(
+  input: string | null | undefined,
+): Promise<ResolvedClass> {
+  if (!input?.trim()) {
+    return {
+      resolved: null,
+      error: {
+        kind: "no-class",
+        title: "Nincs kiválasztott osztály",
+        message: "Nincs beállítva (vagy nem ismerhető fel) az osztályod.",
+        hint: "Válaszd ki az osztályt a fenti listából.",
+        retryable: false,
+      },
+    };
+  }
+  const { classes, error: listError } = await fetchTimetableClasses();
+  //! Ha maga a lista sem jött meg, NEM állunk meg: az órarend-kérés lehet, hogy
+  //! így is sikerül. Ha mégsem, a kártyák hibája úgyis pontosabb lesz ennél.
+  if (classes.length === 0) {
+    const guess = classKey(input);
+    return { resolved: { short: guess, name: guess }, error: listError };
+  }
+  const wanted = classKey(input);
+  const exact = classes.find((c) => c.short === input.trim());
+  if (exact) return { resolved: exact };
+  const byKey = classes.find((c) => classKey(c.short) === wanted);
+  if (byKey) return { resolved: byKey };
+  return {
+    resolved: null,
+    error: {
+      kind: "unknown-class",
+      title: "Ismeretlen osztály",
+      message: `A(z) „${input.trim()}” osztály nincs a ${TIMETABLE_SOURCE} osztálylistájában.`,
+      hint: "Válassz a listából egy létező osztályt.",
+      detail: `${classes.length} osztály a listában`,
+      retryable: false,
+    },
+  };
 }
 
 export async function resolveClass(
   input: string | null | undefined,
 ): Promise<TimetableClass | null> {
-  if (!input?.trim()) return null;
-  const classes = await getTimetableClasses();
-  if (classes.length === 0) {
-    const guess = classKey(input);
-    return { short: guess, name: guess };
-  }
-  const wanted = classKey(input);
-  const exact = classes.find((c) => c.short === input.trim());
-  if (exact) return exact;
-  const byKey = classes.find((c) => classKey(c.short) === wanted);
-  return byKey ?? null;
+  return (await resolveClassResult(input)).resolved;
 }
 
 export async function getTimetableWeek(options: {
@@ -191,7 +401,9 @@ export async function getTimetableWeek(options: {
   weekStart?: string;
 }): Promise<TimetableWeek> {
   const weekStart = mondayOf(options.weekStart);
-  const resolved = await resolveClass(options.class);
+  const { resolved, error: resolveError } = await resolveClassResult(
+    options.class,
+  );
 
   const empty: TimetableWeek = {
     ok: false,
@@ -203,10 +415,7 @@ export async function getTimetableWeek(options: {
   };
 
   if (!resolved) {
-    return {
-      ...empty,
-      error: "Nincs beállítva (vagy nem ismerhető fel) az osztályod.",
-    };
+    return { ...empty, error: resolveError ?? timetableUnreachable() };
   }
 
   let data: RawCardsResponse;
@@ -225,14 +434,28 @@ export async function getTimetableWeek(options: {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!res.ok) {
-      return {
-        ...empty,
-        error: "Az órarend most nem elérhető. Próbáld újra később.",
-      };
+      return { ...empty, error: timetableHttp(res.status, res.statusText) };
     }
     data = (await res.json()) as RawCardsResponse;
-  } catch {
-    return { ...empty, error: "Nem sikerült elérni az órarend szolgáltatást." };
+  } catch (err) {
+    return { ...empty, error: describeTimetableFailure(err) };
+  }
+
+  //! Az API 200-nal is küldhet olyat, amiben nincs se nap, se csengetési rend
+  //! (pl. szünet, vagy elrontott osztálynév). Üres rács helyett — amiről nem
+  //! derül ki, hogy hiba-e — ezt is nevesített hibaként mutatjuk meg.
+  if (!Array.isArray(data?.days) || data.days.length === 0) {
+    return {
+      ...empty,
+      error: {
+        kind: "payload",
+        title: "Nincs adat erre a hétre",
+        message: `A ${TIMETABLE_SOURCE} API nem küldött órarendet a(z) ${resolved.short} osztályra erre a hétre.`,
+        hint: "Lehet, hogy szünet van, vagy még nincs feltöltve a hét. Nézz meg egy másik hetet.",
+        detail: `hét: ${weekStart}`,
+        retryable: true,
+      },
+    };
   }
 
   const todayKey = dateToKey(new Date());

@@ -76,6 +76,20 @@ export function LessonSheet({
       <DialogContent
         showCloseButton={false}
         style={morph ? { viewTransitionName: MORPH_NAME } : undefined}
+        //! UGYANEZ A FÁTYOLRA. A morf pillanatképe közvetlenül a commit után
+        //! készül — ha a fátyol ilyenkor még a 100 ms-os beúszása elején jár,
+        //! a felvett képen se sötétítés, se elmosás nincs. Az átmenet a
+        //! VÉGÉN dobja el a pillanatképeket, és ekkor villan be egyszerre a
+        //! kész elmosás. Némán, kész állapotban kell a képre kerülnie, hogy
+        //! a `root` átúsztatása maga vigye fel az elmosást.
+        overlayClassName={cn(
+          "duration-0 data-open:animate-none data-closed:animate-none",
+          //! Csak morf mellett halasztjuk az elmosást: e nélkül (csökkentett
+          //! mozgás, vagy ahol nincs View Transitions API) nincs pillanatkép,
+          //! ami elnyelné — ott az azonnali elmosás a helyes, és a késleltetés
+          //! csak indokolatlan üresjárat lenne.
+          morph && "tt-scrim-deferred",
+        )}
         className={cn(
           "gap-0 overflow-hidden p-0 sm:max-w-md",
           //* Mobilon alsó lap: a hüvelykujj közelében nyílik.
@@ -252,9 +266,16 @@ function LessonBody({
               {run.hidden.map((option) => (
                 <li
                   key={option.identity}
-                  className="flex items-center justify-between gap-2 text-sm"
+                  className="flex items-start justify-between gap-2 text-sm"
                 >
-                  <span className="min-w-0 truncate text-foreground/80">
+                  {/*//! ITT NEM SZABAD CSONKOLNI, és a `truncate` ráadásul
+                      //! ÁRTOTT is: a `white-space: nowrap` teljes szélessége a
+                      //! lap rács-oszlopának min-content mérete lett (a
+                      //! `min-w-0` ezen nem segít), így a hosszú jedlikes
+                      //! tantárgynevek szétfeszítették a lapot, és mobilon a
+                      //! „Vissza" gomb kilógott a képernyőről. Törjön több
+                      //! sorba — van rá hely függőlegesen. */}
+                  <span className="min-w-0 flex-1 text-pretty break-words text-foreground/80">
                     {option.lesson.subject}
                     {option.lesson.group && (
                       <span className="ml-1.5 text-xs text-muted-strong">
