@@ -217,7 +217,7 @@ export function MaPage() {
     //! sáv. A DOM-ban a fő hasáb áll elöl, így a mobil olvasási sorrend
     //! egyben prioritás-sorrend is.
     <main className="min-h-[100dvh] bg-background tt-safe">
-      <section className="relative w-full overflow-hidden text-hero-foreground">
+      <section className="relative w-full overflow-hidden pt-[env(safe-area-inset-top)] text-hero-foreground">
         {/* A negyedelt címer-mező visszfénye: piros fent balra, kék lent jobbra */}
         <div
           aria-hidden
