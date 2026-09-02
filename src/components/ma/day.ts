@@ -3,7 +3,7 @@ import { sortAgenda } from "@/components/timetable/now";
 import { addDaysKey } from "@/components/timetable/shared";
 import { type DualSchedule, dualStatusFor } from "@/lib/dual-schedule";
 import type { DualStatus } from "@/lib/dualis";
-import type { TimetableView } from "@/lib/timetable";
+import { periodsOfDay, type TimetableView } from "@/lib/timetable";
 import {
   type LessonRun,
   type MergePreference,
@@ -52,6 +52,16 @@ export type DayModel = {
   items: AgendaItem[];
   /** Csak azok az órák, amiket a forrás áthelyezettnek jelölt. */
   moved: LessonRun[];
+  //! A NAP KÖRÜLMÉNYEI, A TANÉV RENDJÉBŐL. Nem az órarendből: a kártyák nem
+  //! mondják meg, hogy aznap rövidítettek-e az órák, vagy hogy van-e tanítás
+  //! egyáltalán (lásd `school-calendar.ts`). Ha ez a két kérés nem sikerült,
+  //! `teaching` `null`, a többi üres — a lap ilyenkor ugyanaz, mint eddig.
+  /** Tanítási nap-e a tanév rendje szerint; `null` = nem tudjuk. */
+  teaching: boolean | null;
+  /** A napra kiírt iskolai bejegyzések. */
+  notes: string[];
+  /** Csak ha a nap csengetése ELTÉR a hét szokásostól. */
+  bells: { id: number; name: string } | null;
   /** A nap első órájának kezdete és utolsó órájának vége (percben). */
   firstMin: number;
   lastMin: number;
@@ -86,7 +96,13 @@ export function buildDayModel(
   //! párhuzamos csoportját visszaadja; feloldás nélkül két óra állítaná
   //! ugyanarról a percről, hogy „most ez megy". A napi nézet feloldva vagy
   //! sehogy.
-  const { runs, conflicts } = resolveDay(dayLessons, prefs, view.periods);
+  const { runs, conflicts } = resolveDay(
+    dayLessons,
+    prefs,
+    //* Rövidített napon a nap SAJÁT csengetése — abból jönnek a többórás
+    //* blokkon belüli szünetek (lásd `periodsOfDay`).
+    periodsOfDay(view, day),
+  );
   const ordered = [...runs].sort(
     (a, b) => a.startMin - b.startMin || a.endMin - b.endMin,
   );
@@ -133,6 +149,9 @@ export function buildDayModel(
     segments,
     items,
     moved: ordered.filter((r) => r.lesson.moved),
+    teaching: day.teaching,
+    notes: day.notes,
+    bells: day.bells ? { id: day.bells.id, name: day.bells.name } : null,
     firstMin: ordered[0]?.startMin ?? 0,
     lastMin: ordered[ordered.length - 1]?.endMin ?? 0,
     lessonCount: ordered.length,
@@ -236,7 +255,7 @@ export function laterItemsOf(
     const { runs } = resolveDay(
       view.lessons.filter((l) => l.dayOfWeek === day.dayOfWeek),
       prefs,
-      view.periods,
+      periodsOfDay(view, day),
     );
     for (const run of runs) items.push(agendaItem(run, day.dateKey, day.name));
   }

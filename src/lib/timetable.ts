@@ -1,14 +1,20 @@
-//! A FORRÁS UGYANAZ, AZ ÚT ODÁIG NEM. A böngészőből a `/api/jedlik` átirányítón
-//! megyünk (lásd `next.config.ts`) — enélkül a kérés más eredetre menne, és a
-//! CORS elbukna. A SZERVEREN viszont nincs se `location`, se átirányító: ott a
-//! relatív útvonalból nem lesz érvényes URL, ezért közvetlenül a Jedlikinfót
-//! hívjuk. Ez a modul így mindkét oldalon fut — az órarend-értesítéseket
-//! kiszámoló háttérfeladat (`/api/ertesites/tick`) UGYANAZT az elemzőt
-//! használja, mint a lap; egy második, önálló másolat előbb-utóbb más órarendet
-//! mutatna, mint amit a diák a képernyőn lát.
-export const JEDLIK_API_ORIGIN = "https://jedlikinfo.jedlik.eu/api/api";
-const API_BASE =
-  typeof window === "undefined" ? JEDLIK_API_ORIGIN : "/api/jedlik";
+//! AZ ÓRAREND ELEMZŐJE — EGY PÉLDÁNYBAN. Ez a modul a böngészőben és a
+//! szerveren is fut: az órarend-értesítéseket kiszámoló háttérfeladat
+//! (`/api/ertesites/tick`) UGYANAZT az elemzőt használja, mint a lap; egy
+//! második, önálló másolat előbb-utóbb más órarendet mutatna, mint amit a diák
+//! a képernyőn lát. Hogy az API útja mindkét oldalon jó legyen, azt egyetlen
+//! hely dönti el: `jedlik-api.ts`.
+
+import { API_BASE, FETCH_TIMEOUT_MS, JEDLIK_API_ORIGIN } from "./jedlik-api";
+import {
+  loadDayBells,
+  loadRingSystemNames,
+  loadSchoolPlan,
+  type SchoolDayPlan,
+} from "./school-calendar";
+
+export { JEDLIK_API_ORIGIN };
+
 export const TIME_ZONE = "Europe/Budapest";
 export const PUBLIC_DEFAULT_CLASS = "13C";
 
@@ -31,8 +37,6 @@ export function saveCachedClass(short: string): void {
     /* privát módban nincs tárhely — a választás ekkor nem marad meg */
   }
 }
-
-const FETCH_TIMEOUT_MS = 15_000;
 
 //* ---------------------------------------------------------------------------
 //* HIBÁK
@@ -262,6 +266,27 @@ export type TimetableDay = {
   week: string;
   dayOfWeek: number;
   isToday: boolean;
+  //! ─── AMIT A TANÉV RENDJE TUD, AZ ÓRAREND VISZONT NEM ─────────────────────
+  //! A `timetable/cards` a kártyákat adja, és nem mond semmit arról, MILYEN nap
+  //! van: hogy tanítás van-e egyáltalán, hogy rövidítettek-e az órák, és hogy
+  //! történik-e aznap valami az iskolában. Ez a három mező a
+  //! `timetable/calendarplan` és a `timetable/ringsystem` válaszából jön (lásd
+  //! `school-calendar.ts`), és mindegyik ELMARADHAT: ha az a két kérés nem
+  //! sikerül, a nap pontosan úgy néz ki, mint eddig.
+  /** Tanítási nap-e a tanév rendje szerint. `null` = nem tudjuk. */
+  teaching: boolean | null;
+  /** A tanév rendjének bejegyzései erre a napra (iskolai események). */
+  notes: string[];
+  //! CSAK AZ ELTÉRÉS KERÜL IDE. Ha a nap a hét szokásos csengetési rendjén megy,
+  //! ez `null`: a rács a hét közös rendjével rajzol, és nincs mit jelölni. Ami
+  //! itt áll, az mindig HÍR — rövidített órák, más kezdés.
+  bells: {
+    id: number;
+    /** A rend neve a forrás szerint („30 perces órák"). */
+    name: string;
+    /** A napra érvényes csengetés; üres, ha a nevét tudjuk, a rendjét nem. */
+    periods: TimetablePeriod[];
+  } | null;
 };
 
 export type TimetableLesson = {
@@ -307,6 +332,20 @@ export function groupHalf(lesson: {
 }): 0 | 1 | null {
   if (lesson.wholeClass || lesson.groupCount <= 1) return null;
   return lesson.groupColumn * 2 >= lesson.groupCount ? 1 : 0;
+}
+
+//! A NAPRA ÉRVÉNYES CSENGETÉSI REND — EGY HELYEN ELDÖNTVE. A hét `periods`
+//! tömbje a szokásos rend; a kilógó napé a napon áll (lásd
+//! `withSchoolCalendar`). Minden nézet — a heti rács, a napi lap, a heti
+//! összesítés — ugyanezt a választ kapja, különben ugyanarra a rövidített
+//! napra más-más órahatárokat számolnának.
+export function periodsOfDay(
+  week: { periods: TimetablePeriod[] },
+  day: Pick<TimetableDay, "bells">,
+): TimetablePeriod[] {
+  return day.bells && day.bells.periods.length > 0
+    ? day.bells.periods
+    : week.periods;
 }
 
 export type TimetableWeek = {
@@ -444,6 +483,96 @@ export async function resolveClass(
   return (await resolveClassResult(input)).resolved;
 }
 
+//* ---------------------------------------------------------------------------
+//* A NAPOK KÖRÜLMÉNYEI — TANÉV RENDJE + CSENGETÉSI REND
+//* ---------------------------------------------------------------------------
+//! MIÉRT KELL EGYÁLTALÁN. A `timetable/cards` válaszában a `periods` MINDIG a
+//! szokásos csengetést írja le, akkor is, ha aznap rövidítettek az órák — a
+//! kártyák ideje viszont a valódi renddel jön. Ilyenkor a rács vonalai és a
+//! rájuk rajzolt kártyák ELLENTMONDANAK egymásnak, és a diák a vonalnak hisz.
+//! A tanév rendje mondja meg, melyik napon melyik rend van érvényben; az
+//! eltérő napokra a tényleges csengetést is lekérjük.
+//!
+//! CSAK AZ ELTÉRÉSRE KÉRDEZÜNK RÁ. Rendes héten mind az öt nap ugyanazon a
+//! renden megy — ott a hét közös `periods` tömbje pontos, és EGYETLEN további
+//! kérés sem indul. Ha egy nap kilóg a hét többi napja közül, csak arra az
+//! egyre kérjük le a csengetést.
+//* Ennek egy határa van, és vállaljuk: ha a hét MINDEN napja ugyanarra az
+//* eltérő rendre váltana, nem lenne mihez képest kilógnia — ilyet a tanév
+//* rendjében egyszer sem találtunk, és a kártyák ideje ekkor is helyes marad.
+function samePeriods(a: TimetablePeriod[], b: TimetablePeriod[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (p, i) =>
+        p.number === b[i].number &&
+        p.startMin === b[i].startMin &&
+        p.endMin === b[i].endMin,
+    )
+  );
+}
+
+async function withSchoolCalendar(
+  days: TimetableDay[],
+  weekPeriods: TimetablePeriod[],
+): Promise<TimetableDay[]> {
+  const plan = await loadSchoolPlan(days.map((d) => d.dateKey));
+  if (plan.size === 0) return days;
+
+  //* A hét „szokásos" rendje a legtöbb napon érvényes rend — a rács vonalzója ezt
+  //* mutatja. Holtversenynél a kisebb azonosító nyer, hogy a válasz ne a napok
+  //* sorrendjén múljon.
+  const counts = new Map<number, number>();
+  for (const day of days) {
+    const id = plan.get(day.dateKey)?.ringSystemId;
+    if (typeof id === "number") counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  const baseline =
+    [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ??
+    null;
+
+  const odd = days.filter((day) => {
+    const id = plan.get(day.dateKey)?.ringSystemId;
+    return typeof id === "number" && id !== baseline;
+  });
+
+  const [names, bells] = await Promise.all([
+    odd.length > 0 ? loadRingSystemNames() : new Map<number, string>(),
+    Promise.all(
+      odd.map(
+        async (day) => [day.dateKey, await loadDayBells(day.dateKey)] as const,
+      ),
+    ).then((entries) => new Map(entries)),
+  ]);
+
+  return days.map((day) => {
+    const planned: SchoolDayPlan | undefined = plan.get(day.dateKey);
+    if (!planned) return day;
+    const id = planned.ringSystemId;
+    const dayPeriods = bells.get(day.dateKey) ?? null;
+    //! A JELÖLÉS CSAK AKKOR HÍR, HA TÉNYLEG MÁS. Két rend viselhet külön
+    //! azonosítót azonos csengetéssel — abból a diáknak semmi nem következik,
+    //! és egy hamis „rövidített órák" jelvény rosszabb, mint a semmi.
+    const differs =
+      typeof id === "number" &&
+      id !== baseline &&
+      (dayPeriods === null || !samePeriods(dayPeriods, weekPeriods));
+    return {
+      ...day,
+      teaching: planned.teaching,
+      notes: planned.notes,
+      bells:
+        differs && typeof id === "number"
+          ? {
+              id,
+              name: names.get(id) ?? `${id}. csengetési rend`,
+              periods: dayPeriods ?? [],
+            }
+          : null,
+    };
+  });
+}
+
 export async function getTimetableWeek(options: {
   class: string | null | undefined;
   weekStart?: string;
@@ -508,7 +637,7 @@ export async function getTimetableWeek(options: {
 
   const todayKey = dateToKey(new Date());
 
-  const days: TimetableDay[] = (data.days ?? []).map((d) => {
+  const rawDays: TimetableDay[] = (data.days ?? []).map((d) => {
     const dateKey = toDateKey(d.date);
     return {
       name: d.name,
@@ -517,6 +646,11 @@ export async function getTimetableWeek(options: {
       week: d.week ?? "",
       dayOfWeek: d.dayOfWeek,
       isToday: dateKey === todayKey,
+      //* Alapállapot: amit a kártyák válaszából tudunk, és semmi többet. A
+      //* tanév rendje ezután kerül rá — ha megjön.
+      teaching: null,
+      notes: [],
+      bells: null,
     };
   });
 
@@ -525,6 +659,11 @@ export async function getTimetableWeek(options: {
     startMin: p.startHour * 60 + p.startMinute,
     endMin: p.endHour * 60 + p.endMinute,
   }));
+
+  //! A NAP KÖRÜLMÉNYEI KÜLÖN KÉRÉSBŐL JÖNNEK, ÉS EL IS MARADHATNAK. A hét
+  //! ettől nem lesz kevésbé kész: a `withSchoolCalendar` a napokat adja vissza,
+  //! nem hibát, és amit nem tudott meg, arról nem állít semmit.
+  const days = await withSchoolCalendar(rawDays, periods);
 
   const dayWeekOf = new Map(days.map((d) => [d.dayOfWeek, d.week] as const));
 

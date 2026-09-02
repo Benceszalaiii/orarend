@@ -1,6 +1,13 @@
 "use client";
 
-import { AlertTriangle, Briefcase, Check, CloudOff } from "lucide-react";
+import {
+  AlertTriangle,
+  BellRing,
+  Briefcase,
+  CalendarDays,
+  Check,
+  CloudOff,
+} from "lucide-react";
 import { minLabel } from "@/components/timetable/shared";
 import { DUAL_DAY_END_MIN, DUAL_DAY_START_MIN } from "@/lib/dualis";
 import { TIMETABLE_SOURCE } from "@/lib/timetable";
@@ -66,6 +73,72 @@ export function ChangeRow({
         {rest > 0 && ` · és még ${rest}`}
       </span>
     </p>
+  );
+}
+
+//* ---------------------------------------------------------------------------
+//* A NAP KÖRÜLMÉNYEI — a tanév rendjéből
+//* ---------------------------------------------------------------------------
+//! EZ NEM AZ ÓRAREND, HANEM AZ, AMI KÖRÜLVESZI. A kártyák nem mondják meg, hogy
+//! aznap rövidítettek-e az órák, hogy van-e egyáltalán tanítás, és hogy
+//! történik-e valami az iskolában — ezt a tanév rendje tudja
+//! (`school-calendar.ts`).
+//!
+//! ÉS ITT NINCS HELYFENNTARTÁS, a `ChangeRow`-val ellentétben. Ott a hiány
+//! kétértelmű lenne („nincs változás" vagy „nem néztük meg"?), mert a sor egy
+//! ELLENŐRZÉS eredményét mutatja. Ez a sor viszont nem ellenőriz semmit: ha a
+//! naphoz nincs bejegyzés, akkor nincs — ezt nem kell kimondani.
+export function DayPlanRow({
+  day,
+  isToday,
+  className,
+}: {
+  day: DayModel;
+  isToday: boolean;
+  className?: string;
+}) {
+  const off = day.teaching === false;
+  if (!off && !day.bells && day.notes.length === 0) return null;
+
+  const title = off
+    ? isToday
+      ? "Ma nincs tanítás"
+      : "Ezen a napon nincs tanítás"
+    : day.bells
+      ? `Eltérő csengetési rend — ${day.bells.name}`
+      : "A tanév rendjéből";
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border px-4 py-3 text-sm",
+        day.bells
+          ? "border-brand/40 bg-brand/10 text-foreground"
+          : "border-border bg-muted/40 text-foreground",
+        className,
+      )}
+    >
+      <p className="flex items-center gap-2 font-medium">
+        {day.bells ? (
+          <BellRing className="size-4 shrink-0 text-brand" aria-hidden />
+        ) : (
+          <CalendarDays
+            className="size-4 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+        )}
+        {title}
+      </p>
+      {/*//* A bejegyzések a forrás szövegével, sorról sorra — se rövidítve, se
+          //* átfogalmazva: az iskola mondatai. */}
+      {day.notes.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5 text-pretty text-muted-strong">
+          {day.notes.map((note, i) => (
+            <li key={`${i}-${note}`}>{note}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

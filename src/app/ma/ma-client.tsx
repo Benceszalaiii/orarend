@@ -10,7 +10,12 @@ import {
   laterItemsOf,
 } from "@/components/ma/day";
 import { DayList, DayRibbon } from "@/components/ma/day-list";
-import { ChangeRow, DualBlock, StaleNote } from "@/components/ma/day-status";
+import {
+  ChangeRow,
+  DayPlanRow,
+  DualBlock,
+  StaleNote,
+} from "@/components/ma/day-status";
 import { DualPanel } from "@/components/ma/dual-setup";
 import { NowBlock } from "@/components/ma/now-block";
 import { buildWeekModel } from "@/components/ma/week";
@@ -502,6 +507,12 @@ export function MaPage() {
                 </Link>
               </div>
             </div>
+
+            {/*//! A NAP KÖRÜLMÉNYEI. Duális napon is kimegy: hogy az iskolában
+                //! rövidítettek az órák, az a munkahelyi napra nem tartozik, de
+                //! a „nincs tanítás" és a napra kiírt esemény igen — a lap
+                //! ilyenkor is EZT a napot mutatja. */}
+            {day && <DayPlanRow day={day} isToday={isToday} className="mb-3" />}
 
             {/*//! A NAPI ELLENŐRZÉS — mindig ott, akkor is, ha nincs hír. */}
             {day && day.dual !== "dual" && (

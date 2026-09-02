@@ -1,6 +1,6 @@
 import { type DualSchedule, dualStatusFor } from "@/lib/dual-schedule";
 import type { DualStatus } from "@/lib/dualis";
-import type { TimetableView } from "@/lib/timetable";
+import { periodsOfDay, type TimetableView } from "@/lib/timetable";
 import {
   type ClusterChoice,
   type ConflictCluster,
@@ -208,10 +208,13 @@ export function buildWeekModel(
   let totalLessons = 0;
 
   for (const day of view.days) {
+    //* A nap saját csengetési rendje szerint — rövidített napon a hét közös
+    //* `periods` tömbje más órahatárokat adna, mint amit a nap ténylegesen fut.
+    const dayRings = periodsOfDay(view, day);
     const { runs, conflicts } = resolveDay(
       view.lessons.filter((l) => l.dayOfWeek === day.dayOfWeek),
       prefs,
-      view.periods,
+      dayRings,
     );
     const ordered = [...runs].sort((a, b) => a.startMin - b.startMin);
     const dayMoved = ordered.filter((r) => r.lesson.moved);
@@ -238,7 +241,7 @@ export function buildWeekModel(
 
     const spans = counts ? mergeSpans(ordered.flatMap(teachingSpans)) : [];
     const dayMinutes = coveredMinutes(spans);
-    const dayLessons = coveredPeriods(spans, view.periods);
+    const dayLessons = coveredPeriods(spans, dayRings);
 
     if (counts) {
       for (const run of ordered) {

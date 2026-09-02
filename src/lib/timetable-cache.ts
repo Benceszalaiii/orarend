@@ -1,4 +1,4 @@
-import type { TimetableView } from "./timetable";
+import type { TimetableDay, TimetableView } from "./timetable";
 
 //! ─── HELYI PÉLDÁNY AZ UTOLSÓ LEKÉRT HÉTRŐL ────────────────────────────────
 //! A lap telepíthető (PWA), és a folyosón rendszeresen nincs térerő. A service
@@ -40,6 +40,29 @@ function readStore(): Store {
   }
 }
 
+//! A MENTETT HÉT RÉGEBBI VERZIÓBÓL IS JÖHET, ÉS NEM DOBJUK EL. A `TimetableDay`
+//! időközben megkapta a tanév rendjéből származó mezőket (`teaching`, `notes`,
+//! `bells`); egy korábbi verzió mentette példányban ezek nincsenek ott. A
+//! tároló kulcsának felemelése ilyenkor a legkényelmesebb lépés lenne — csakhogy
+//! azzal pont az OFFLINE TARTALÉKOT vennénk el attól, aki épp hálózat nélkül
+//! nyitja meg a lapot, és a hiányzó mezők nem is rontanak el semmit az
+//! órarendből. Ezért kiegészítjük: ami hiányzik, az „nem tudjuk" — a nézet
+//! ilyenkor ugyanaz, mint a bővítés előtt volt.
+function withDayDefaults(view: TimetableView): TimetableView {
+  return {
+    ...view,
+    days: view.days.map((day) => {
+      const stored = day as Partial<TimetableDay>;
+      return {
+        ...day,
+        teaching: stored.teaching ?? null,
+        notes: stored.notes ?? [],
+        bells: stored.bells ?? null,
+      };
+    }),
+  };
+}
+
 export function loadCachedWeek(
   classShort: string,
   weekStart: string,
@@ -49,7 +72,7 @@ export function loadCachedWeek(
   //* Csak sikeres lekérést mentünk, de a tárolt alak régebbi verzióból is
   //* jöhet — a `days` megléte a legolcsóbb épség-ellenőrzés.
   if (!entry || !Array.isArray(entry.view?.days)) return null;
-  return entry;
+  return { ...entry, view: withDayDefaults(entry.view) };
 }
 
 export function saveCachedWeek(

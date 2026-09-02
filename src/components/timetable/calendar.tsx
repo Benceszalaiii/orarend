@@ -3,6 +3,7 @@
 import { hu } from "date-fns/locale/hu";
 import {
   AlertTriangle,
+  BellRing,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
@@ -44,12 +45,14 @@ import type {
   TimetableClass,
   TimetableError as TimetableErrorInfo,
   TimetableLesson,
+  TimetablePeriod,
   TimetableView,
 } from "@/lib/timetable";
 import {
   buildTimetableView,
   describeTimetableFailure,
   groupHalf,
+  periodsOfDay,
   saveCachedClass,
 } from "@/lib/timetable";
 import {
@@ -281,6 +284,90 @@ function layoutDay(
 }
 
 //* ---------------------------------------------------------------------------
+//* Az üres hét felirata
+//* ---------------------------------------------------------------------------
+//! ÜRES HÉT: MONDJUK KI AZ OKÁT, HA TUDJUK. A felirat eddig egyetlen
+//! találgatás volt („szünet?") — mert a kártyák válaszából tényleg nem derül
+//! ki. A tanév rendje viszont megmondja: ha a hét MINDEN napja tanítás nélküli,
+//! akkor az a hét nem hiányos, hanem szünet, és rendszerint a nevét is tudjuk.
+//! Ha viszont van tanítási nap, a „szünet?" kérdőjel HAMIS lenne — ott az
+//! adathiány marad a hír.
+function weekPlanLabel(days: Day[]): string {
+  const known = days.filter((d) => d.teaching !== null);
+  if (known.length === 0) return "Erre a hétre nincs órarendi adat (szünet?).";
+  if (known.some((d) => d.teaching)) return "Erre a hétre nincs órarendi adat.";
+
+  //* A szünet nevét a napok többsége viseli („Őszi szünet"); az egy napra szóló
+  //* bejegyzés (egy ünnep neve) nem a hétről szól.
+  const counts = new Map<string, number>();
+  for (const day of known) {
+    for (const note of new Set(day.notes)) {
+      counts.set(note, (counts.get(note) ?? 0) + 1);
+    }
+  }
+  const common = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  return common && common[1] >= 2
+    ? `${common[0]} — ezen a héten nincs tanítás.`
+    : "Ezen a héten nincs tanítás.";
+}
+
+//* ---------------------------------------------------------------------------
+//* A NAP BEJEGYZÉSEI — EGY IKON MÖGÖTT
+//* ---------------------------------------------------------------------------
+//! A TANÉV RENDJE NEM FÉR BELE A FEJLÉCBE, ÉS NEM IS OTT A HELYE. A napra
+//! kiírt bejegyzés egy-két teljes mondat („Szóbeli vizsgák kezdete az
+//! általános felvételi eljárás keretében (Pontos időpont behívás alapján)") —
+//! egy 176 px-es oszlopban ebből három szó látszik, a többi elvész, a rács
+//! fejléce viszont minden nap magasabb lesz tőle. Egy ikon ellenben ANNYIT
+//! mond, amennyit tud: „ezen a napon van bejegyzés", és a teljes szöveget
+//! kattintásra adja — csonkítatlanul, ahogy az iskola írta.
+//!
+//! CSAK OTT VAN, AHOL VAN MIT MONDANI: a napok többségén nincs bejegyzés, és
+//! ott a fejléc pontosan úgy néz ki, mint eddig.
+function DayNotesButton({ day }: { day: Day }) {
+  //* A tanítás hiánya a nap legfontosabb bejegyzése — a jegyzet rendszerint
+  //* csak az OKA („Őszi szünet"), ezért a tény megy elöl.
+  const lines =
+    day.teaching === false ? ["Nincs tanítás", ...day.notes] : day.notes;
+  if (lines.length === 0) return null;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`${day.name} ${day.dateLabel} — a tanév rendjéből`}
+          title={lines.join("\n")}
+          className={cn(
+            //* Papíron egy megnyithatatlan ikon csak zaj — a kinyomtatott hét
+            //* a rácsért készül, nem a vezérlőkért.
+            "absolute right-0.5 top-1.5 rounded-full p-1 transition-colors print:hidden",
+            "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring motion-reduce:transition-none",
+            day.teaching === false
+              ? "text-muted-strong hover:text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <Info className="size-3.5" aria-hidden />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="center" className="w-[16rem] p-3">
+        <p className="text-sm font-semibold text-foreground">
+          {day.name} · {day.dateLabel}
+        </p>
+        {/*//* A forrás mondatai, vágatlanul — se rövidítve, se átfogalmazva. */}
+        <ul className="mt-1.5 space-y-1 text-pretty text-xs text-muted-strong">
+          {/* Kulcs: a sorszám is kell — két bejegyzés szövege egyezhet. */}
+          {lines.map((line, i) => (
+            <li key={`${i}-${line}`}>{line}</li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+//* ---------------------------------------------------------------------------
 //* Nap-fejléc cellája
 //* ---------------------------------------------------------------------------
 //! Lapozós módban a cella GOMB: ha a hétnek csak egy része látszik, a fejléc a
@@ -337,6 +424,19 @@ function DayHeadCell({
           {DUAL_LABEL[dualStatus]}
         </div>
       )}
+      {/*//! A CSENGETÉS VISZONT MARAD KIÍRVA. Nem jegyzet, hanem a nap
+          //! szerkezete: ettől kezdődik máskor minden óra, és a rács vonalai is
+          //! ezért futnak máshol ebben az oszlopban. Ezt egy ikon mögé rejteni
+          //! annyi lenne, mint az eltérést elhallgatni. */}
+      {day.bells && (
+        <div
+          title={`Csengetési rend ezen a napon: ${day.bells.name}`}
+          className="mt-1 flex items-center justify-center gap-1 rounded-[5px] bg-brand/12 px-1 py-px text-[10px] font-semibold leading-[1.4] text-brand"
+        >
+          <BellRing className="size-2.5 shrink-0" aria-hidden />
+          <span className="truncate">{day.bells.name}</span>
+        </div>
+      )}
       {day.isToday && (
         <span
           className="absolute inset-x-0 bottom-0 h-0.5 bg-primary"
@@ -345,31 +445,36 @@ function DayHeadCell({
       )}
     </>
   );
-  const base = cn(
-    "relative min-w-0 border-l border-border/70 px-2 py-2.5 text-center",
+  //! A KERET ÉS A TARTALOM KÜLÖNVÁLIK. Lapozós módban a cella maga a gomb volt
+  //! — csakhogy a bejegyzések ikonja is gomb, és gomb gombban érvénytelen HTML
+  //! (a böngésző szétszedi, a billentyűzetes bejárás elromlik). A szélességet és
+  //! a keretet ezért a burkoló viszi, a kitöltést és a kattintást a tartalom, az
+  //! ikon pedig a kettő MELLETT, a burkoló sarkában ül.
+  const frame = cn(
+    "relative min-w-0 border-l border-border/70",
     paging ? "shrink-0" : "flex-1 shrink",
     day.isToday && "bg-primary/[0.06]",
   );
-  if (!paging) {
-    return (
-      <div className={base} style={style}>
-        {inner}
-      </div>
-    );
-  }
+  const pad = "px-2 py-2.5 text-center";
   return (
-    <button
-      type="button"
-      onClick={onJump}
-      style={style}
-      aria-label={`Ugrás ide: ${day.name} ${day.dateLabel}`}
-      className={cn(
-        base,
-        "transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
+    <div className={frame} style={style}>
+      {paging ? (
+        <button
+          type="button"
+          onClick={onJump}
+          aria-label={`Ugrás ide: ${day.name} ${day.dateLabel}`}
+          className={cn(
+            pad,
+            "block w-full transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
+          )}
+        >
+          {inner}
+        </button>
+      ) : (
+        <div className={pad}>{inner}</div>
       )}
-    >
-      {inner}
-    </button>
+      <DayNotesButton day={day} />
+    </div>
   );
 }
 
@@ -808,15 +913,31 @@ export function TimetableCalendar({
   //! nyújtották a lapot. Vagyis a „a nap kifér egy képernyőre" ígéret nem volt
   //! igaz, és a lap görgethetővé vált anélkül, hogy lett volna rajta bármi:
   //! pont ez a néma függőleges görgetés harcolt telefonon a nap-lapozással.
-  const gridPeriods = periods.filter(
-    (p) => p.startMin >= dayStart && p.startMin <= dayEnd,
+  const linesFor = (list: TimetablePeriod[]) => {
+    const rows = list.filter(
+      (p) => p.startMin >= dayStart && p.startMin <= dayEnd,
+    );
+    const lastLine = rows.length ? rows[rows.length - 1].endMin : null;
+    //* A záróvonal csak akkor kell, ha a tartományon BELÜL van.
+    return {
+      rows,
+      last: lastLine !== null && lastLine <= dayEnd ? lastLine : null,
+    };
+  };
+  const { rows: gridPeriods, last: lastPeriodEnd } = linesFor(periods);
+
+  //! ─── AMELYIK NAPON MÁS A CSENGETÉS, OTT MÁS A VONALZÓ IS ─────────────────
+  //! A hét `periods` tömbje a szokásos rendet írja le — a forrás akkor is ezt
+  //! küldi, ha egy nap rövidített órákon megy (lásd `withSchoolCalendar`). Az
+  //! ilyen nap kártyái a VALÓDI időpontjukon állnak, tehát ha a vonalak a
+  //! rendes rendből jönnének, a nap saját órái csúsznának el a saját
+  //! vonalaihoz képest. Az eltérő nap ezért a SAJÁT csengetésével rajzolódik;
+  //! a bal oldali ragadó idősáv marad a hét szokásos rendjén, mert az öt
+  //! oszlopnak egy közös vonalzója van — a különbség pont ezért látszik.
+  const periodsOf = useCallback(
+    (day: Day) => periodsOfDay({ periods }, day),
+    [periods],
   );
-  const lastLine = gridPeriods.length
-    ? gridPeriods[gridPeriods.length - 1].endMin
-    : null;
-  //* A záróvonal csak akkor kell, ha a tartományon BELÜL van.
-  const lastPeriodEnd =
-    lastLine !== null && lastLine <= dayEnd ? lastLine : null;
 
   //* Ha az API csak fallback napokat adott (hiba), a hét 5 tanítási napját mutatjuk.
   const gridDays: Day[] =
@@ -831,6 +952,10 @@ export function TimetableCalendar({
             week: "",
             dayOfWeek: i + 1,
             isToday: dateKey === todayKey(),
+            //* Tartalék nap: a tanév rendjéből semmit nem tudunk róla.
+            teaching: null,
+            notes: [],
+            bells: null,
           };
         });
 
@@ -847,12 +972,14 @@ export function TimetableCalendar({
     return new Map(
       gridDays.map((d) => [
         d.dayOfWeek,
-        //! A csengetési rend KELL a feloldáshoz: ebből jönnek a többórás blokkon
-        //! BELÜLI szünetek (a suli a dupla órát egy kártyaként adja vissza).
-        resolveDay(byDay.get(d.dayOfWeek) ?? [], prefs, periods),
+        //! A csengetési rend KELL a feloldáshoz: ebből jönnek a többórás
+        //! blokkon BELÜLI szünetek (a suli a dupla órát egy kártyaként adja
+        //! vissza) — rövidített napon tehát a NAP SAJÁT rendjéből, különben a
+        //! 40 perces órák közé 45 perces határokat húznánk.
+        resolveDay(byDay.get(d.dayOfWeek) ?? [], prefs, periodsOf(d)),
       ]),
     );
-  }, [lessons, prefs, gridDays, periods]);
+  }, [lessons, prefs, gridDays, periodsOf]);
 
   const rows = useMemo(() => preferenceRows(prefs, lessons), [prefs, lessons]);
 
@@ -1379,25 +1506,7 @@ export function TimetableCalendar({
         {/* A HÉT hasábja — ez tördel, ha kell */}
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 sm:gap-x-3 lg:order-1">
           {heading}
-          {/*//! A MAI NAP JELVÉNYE A RÁCSÉ, NEM A LAPÉ. A lap fejléce a
-            //! betöltéskor egyszer épül fel — a rácsban viszont osztályt és
-            //! hetet is lehet váltani, és egy ott ragadt „Ma: Duális" a másik
-            //! osztály órarendje fölött már hazugság. Ezért ITT áll, ahol az
-            //! ÉPPEN nézett hét A/B-jelölése és az ÉPPEN nézett osztály is
-            //! ismert. Ha a mai nap nincs a nézett hétben, nincs is mit
-            //! állítani: a jelvény ilyenkor eltűnik. */}
-          {todayDual && (
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold max-sm:sr-only",
-                todayDual === "dual"
-                  ? "bg-primary/15 text-primary"
-                  : "bg-muted text-muted-strong",
-              )}
-            >
-              Ma: {DUAL_LABEL[todayDual]}
-            </span>
-          )}
+
           <div className="inline-flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5">
             <Button
               variant="ghost"
@@ -1483,6 +1592,25 @@ export function TimetableCalendar({
                 />
               </PopoverContent>
             </Popover>
+                      {/*//! A MAI NAP JELVÉNYE A RÁCSÉ, NEM A LAPÉ. A lap fejléce a
+            //! betöltéskor egyszer épül fel — a rácsban viszont osztályt és
+            //! hetet is lehet váltani, és egy ott ragadt „Ma: Duális" a másik
+            //! osztály órarendje fölött már hazugság. Ezért ITT áll, ahol az
+            //! ÉPPEN nézett hét A/B-jelölése és az ÉPPEN nézett osztály is
+            //! ismert. Ha a mai nap nincs a nézett hétben, nincs is mit
+            //! állítani: a jelvény ilyenkor eltűnik. */}
+          {todayDual && (
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold max-sm:sr-only",
+                todayDual === "dual"
+                  ? "bg-primary/15 text-primary"
+                  : "bg-muted text-muted-strong",
+              )}
+            >
+              Ma: {DUAL_LABEL[todayDual]}
+            </span>
+          )}
             {abWeek && (
               <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
                 {abWeek} hét
@@ -1511,7 +1639,9 @@ export function TimetableCalendar({
               <Spinner className="size-4 shrink-0 text-muted-foreground" />
             )}
           </div>
+          
         </div>
+        
       </div>
 
       {/* Rács / állapotok */}
@@ -1638,6 +1768,21 @@ export function TimetableCalendar({
                           </span>
                         );
                       })()}
+                      {/*//* A sávban egyetlen pötty fér el: azt mondja meg,
+                          //* hogy van-e ezen a napon mondanivaló (esemény,
+                          //* eltérő csengetés, tanítás nélküli nap). A szöveg a
+                          //* sáv alatt, a KIVÁLASZTOTT napra áll ki. */}
+                      {(d.bells ||
+                        d.notes.length > 0 ||
+                        d.teaching === false) && (
+                        <span
+                          className={cn(
+                            "mt-0.5 size-1 rounded-full",
+                            d.bells ? "bg-brand" : "bg-muted-foreground/60",
+                          )}
+                          aria-hidden
+                        />
+                      )}
                       {d.isToday && (
                         <span
                           className="mt-0.5 h-0.5 w-4 rounded-full bg-primary"
@@ -1648,6 +1793,41 @@ export function TimetableCalendar({
                   ))}
                 </div>
               )}
+
+              {/*//! TELEFONON EGY NAP LÁTSZIK, ÉS ANNAK A NAPNAK A KÖRÜLMÉNYE
+                  //! IS ELFÉR. A fejléc-cella (`DayPlanNote`) ilyenkor nem
+                  //! rajzolódik ki, a rács mégis mutathat rövidített órákat vagy
+                  //! egy tanítás nélküli napot — ezt a sor mondja ki, szavakkal.
+                  //! Csak akkor van ott, ha van mit mondania. */}
+              {effCols === 1 &&
+                (() => {
+                  const d = gridDays[activeDay];
+                  if (!d) return null;
+                  const parts = [
+                    d.teaching === false ? "Nincs tanítás" : null,
+                    d.bells ? `Csengetés: ${d.bells.name}` : null,
+                    ...d.notes,
+                  ].filter(Boolean) as string[];
+                  if (parts.length === 0) return null;
+                  return (
+                    <div
+                      className={cn(
+                        "flex shrink-0 items-start gap-1.5 border-b border-border px-3 py-1 text-[11px] leading-[1.45] print:hidden",
+                        d.bells ? "text-brand" : "text-muted-strong",
+                      )}
+                    >
+                      {d.bells && (
+                        <BellRing
+                          className="mt-px size-3 shrink-0"
+                          aria-hidden
+                        />
+                      )}
+                      <span className="min-w-0 flex-1 text-pretty">
+                        {parts.join(" · ")}
+                      </span>
+                    </div>
+                  );
+                })()}
 
               {/*//! KETTŐ VAGY TÖBB NAP LÁTSZIK: a nap-fejléc mondja meg, melyik
                   //! oszlop melyik nap — és mivel a rácson KÍVÜL, a ragadó
@@ -1675,9 +1855,13 @@ export function TimetableCalendar({
             </div>
           )}
 
+          {/*//! A FELIRAT A RAGADÓ FEJLÉC ALATT, A FOLYAMBAN ÁLL. Abszolút
+              //! pozícióban (`top-20`) pont a ragadó blokk mögé esett, ami z-40
+              //! — vagyis a hét egyetlen magyarázata láthatatlan volt. Üres
+              //! héten amúgy sincs mit letakarnia: a rács alatta üres. */}
           {noData && (
-            <div className="pointer-events-none absolute inset-x-0 top-20 z-20 mx-auto w-fit rounded-full border border-border bg-background/90 px-4 py-1.5 text-sm text-muted-strong shadow-sm backdrop-blur">
-              Erre a hétre nincs órarendi adat (szünet?).
+            <div className="pointer-events-none z-20 mx-auto mt-4 w-fit max-w-[min(92%,32rem)] text-balance rounded-full border border-border bg-background/90 px-4 py-1.5 text-center text-sm text-muted-strong shadow-sm backdrop-blur">
+              {weekPlanLabel(gridDays)}
             </div>
           )}
 
@@ -1840,6 +2024,12 @@ export function TimetableCalendar({
                     const dayEvents = events.filter(
                       (e) => e.dayOfWeek === d.dayOfWeek,
                     );
+                    //* Rendes napon ez ugyanaz a tömb, amit a gutter mutat —
+                    //* eltérő csengetésnél a nap saját vonalai.
+                    const dayLines =
+                      periodsOf(d) === periods
+                        ? { rows: gridPeriods, last: lastPeriodEnd }
+                        : linesFor(periodsOf(d));
                     const items = layoutDay(
                       resolved.runs,
                       resolved.ghosts,
@@ -1888,18 +2078,31 @@ export function TimetableCalendar({
                           />
                         )}
 
-                        {/* Óra-elválasztó vonalak (a gutter időcímkéivel egy vonalban) */}
-                        {gridPeriods.map((p) => (
+                        {/*//* Óra-elválasztó vonalak. Rendes napon a gutter
+                            //* időcímkéivel egy vonalban; rövidített napon a
+                            //* nap saját csengetése szerint — ott a gutterhez
+                            //* képesti eltérés maga az információ. */}
+                        {dayLines.rows.map((p) => (
                           <div
                             key={p.number}
-                            className="pointer-events-none absolute inset-x-0 border-t border-border/45"
+                            className={cn(
+                              "pointer-events-none absolute inset-x-0 border-t",
+                              d.bells
+                                ? "border-dashed border-brand/35"
+                                : "border-border/45",
+                            )}
                             style={{ top: top(p.startMin) }}
                           />
                         ))}
-                        {lastPeriodEnd !== null && (
+                        {dayLines.last !== null && (
                           <div
-                            className="pointer-events-none absolute inset-x-0 border-t border-border/45"
-                            style={{ top: top(lastPeriodEnd) }}
+                            className={cn(
+                              "pointer-events-none absolute inset-x-0 border-t",
+                              d.bells
+                                ? "border-dashed border-brand/35"
+                                : "border-border/45",
+                            )}
+                            style={{ top: top(dayLines.last) }}
                           />
                         )}
 
