@@ -1,5 +1,4 @@
 "use client";
-
 import { hu } from "date-fns/locale/hu";
 import {
   AlertTriangle,
@@ -14,8 +13,10 @@ import {
   Merge,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import Image from "next/image";
 import Link from "next/link";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -83,6 +84,7 @@ import {
   todayKey,
   weekLabel,
 } from "./shared";
+import { ToolbarMore } from "./toolbar-more";
 import { useMergePreferences } from "./use-merge-preferences";
 import {
   focusMorph,
@@ -703,7 +705,7 @@ export function TimetableCalendar({
   //! ─── A DUÁLIS NAP HELYÉN EGY BLOKK ÁLL ───────────────────────────────────
   //! Azon a napon a munkahelyen vagy: az osztály órarendje NEM a te napod. A
   //! rács ezért nem tesz úgy, mintha lenne órád — a nap óráit egyetlen
-  //! 8:00–16:00 kártya váltja fel, óra-bontás nélkül. (Ugyanaz a döntés, ami a
+  //! 8:00–15:00 kártya váltja fel, óra-bontás nélkül. (Ugyanaz a döntés, ami a
   //! `/dualis` tervei mögött áll, csak ott a terv eleve enélkül épül fel.)
   //!
   //! CSAK OTT, AHOL VAN MIT FELVÁLTANI. Egy adat nélküli hétre (szünet,
@@ -1329,6 +1331,30 @@ export function TimetableCalendar({
     return () => window.removeEventListener("keydown", handler);
   }, [fullscreen]);
 
+  //* A beállítás-csoport tagjai — a sávban `sm`-től ikonsor, telefonon a
+  //* `ToolbarMore` paneljének sorai. Ami nincs (nincs osztály, nem teljes
+  //* nézet), az nem is foglal helyet: üres csoportra a „…" gomb sem jelenik meg.
+  const moreControls = [
+    fullscreen && <LegendMenu key="legend" />,
+    hasClass && (
+      <PreferencesMenu
+        key="prefs"
+        rows={rows}
+        onUndo={undo}
+        onReset={reset}
+        className="touch-target"
+      />
+    ),
+    fullscreen && hasClass && dualSetup ? (
+      <Fragment key="dual">
+        {dualSetup({ classShort, weekLetter: abWeek ?? "" })}
+      </Fragment>
+    ) : null,
+    fullscreen && hasClass && notifySetup ? (
+      <Fragment key="notify">{notifySetup({ classShort })}</Fragment>
+    ) : null,
+  ].filter(Boolean);
+
   return (
     <div
       className={cn(
@@ -1409,7 +1435,10 @@ export function TimetableCalendar({
           //! vezérlő előbb, a nézeten belüli utána. */}
       <div
         className={cn(
-          "grid shrink-0 grid-cols-1 items-start gap-y-2 border-b border-border px-3 py-2.5 sm:px-4 lg:grid-cols-[minmax(0,1fr)_auto]",
+          //* `relative`: a telefonos beállítás-panel igazodási pontja (lásd
+          //* `toolbar-more.tsx`). `z-index` nélkül nem nyit rétegkontextust, a
+          //* rács ragadó fejléce alatta változatlanul működik.
+          "relative grid shrink-0 grid-cols-1 items-start gap-y-2 border-b border-border px-3 py-2.5 sm:px-4 lg:grid-cols-[minmax(0,1fr)_auto]",
           //* Teljes nézetben ez a sáv a lap fejléce is — a mértana ezért a
           //* közös szerződésből jön, nem innen (lásd `site-nav.tsx`).
           fullscreen && cn(SITE_BAR_METRICS, "gap-y-2"),
@@ -1428,10 +1457,27 @@ export function TimetableCalendar({
               //! lett egy 375 px-es kijelzőn. Ez a belső csoport ezért tördel;
               //! a váltó kívüle, a saját dobozában marad az első sorban. */}
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-            {/*//* Teljes nézetben a jelmagyarázat buborékba költözik: állandó sorként
-              //* egy 100dvh-s lapon ~40 px-et venne el a rácstól, pedig egyszer
-              //* olvassa el az ember. A billentyűk is itt vannak kiírva. */}
-            {fullscreen && <LegendMenu />}
+            {/*//! A NÉGY RITKÁN NYÚLT VEZÉRLŐ EGY CSOPORT, ÉS EGY HELYEN ÁLL.
+              //! Eddig kettő itt volt, kettő pedig a hét sávjában — nem
+              //! jelentés szerint, hanem mert ott maradt hely (a régi
+              //! indoklás szó szerint ezt mondta ki). Telefonon ettől a
+              //! fejléc HÁROM sor lett: nyolc vezérlő, egyik sem tud
+              //! kimaradni, és a harmadik sor egy 100dvh-s lapon nem a
+              //! fejlécből megy el, hanem a rácsból (mérve: 171 px fejléc egy
+              //! 812 px-es kijelzőn).
+              //*
+              //* Együtt viszont elférnek EGY gomb mögött: a `ToolbarMore`
+              //* `sm`-től ugyanaz az ikonsor, mint eddig, telefonon feliratos
+              //* lista. Ami itt marad a sávban, az mind a KÉT sorban
+              //* naponta használt: melyik osztály, melyik nézet, melyik hét.
+              //*
+              //! A KÖZÖS DOBOZ NEM CSAK HELYET NYER, HANEM NEVET IS AD. Négy
+              //! csupasz ikon (ⓘ, összevonás, aktatáska, harang) csak
+              //! `aria-label`-lel volt megnevezve; a panelben mind a négy ki
+              //! van írva. */}
+            {moreControls.length > 0 && (
+              <ToolbarMore badge={rows.length}>{moreControls}</ToolbarMore>
+            )}
             {/*//! TODO: visszakapcsolni, ha a szakmai portál élesedik. Addig nem
               //! mutatunk linket egy nem létező oldalra. Az `ExternalLink`
               //! import is ki van kommentezve a fájl tetején. */}
@@ -1446,14 +1492,6 @@ export function TimetableCalendar({
             <ExternalLink className="size-3 shrink-0" aria-hidden />
           </a>
           */}
-            {hasClass && (
-              <PreferencesMenu
-                rows={rows}
-                onUndo={undo}
-                onReset={reset}
-                className="touch-target"
-              />
-            )}
             {/*//! NATÍV `<select>`, nem buborékos lista. Az osztályválasztó az
               //! egyetlen vezérlő, amit MINDEN eszközön, sokszor, gyorsan
               //! használnak: mobilon a rendszer saját kerekét kapja, billentyűvel
@@ -1562,10 +1600,16 @@ export function TimetableCalendar({
                   type="button"
                   disabled={pending}
                   aria-label="Hét kiválasztása naptárból"
-                  className="group/date -mx-1 flex min-w-0 touch-target items-center gap-1.5 rounded-full px-2.5 py-1 text-[15px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60"
+                  className="group/date -mx-1 flex min-w-0 touch-target items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60 sm:text-[15px]"
                 >
+                  {/*//! A NAPTÁRIKON A LEGOLCSÓBB, AMIT EL LEHET HAGYNI. Ebben a
+                      //! sorban a lapozó (136 px) és a hét címkéje osztozik 351
+                      //! px-en, és a végére még az A/B jelvény is kell. Az ikon
+                      //! 22 px-et kér azért, hogy megismételje, amit a mellette
+                      //! álló dátum és a lenyíló nyíl együtt már elmond. `sm`-től,
+                      //! ahol a hely megvan, visszajön. */}
                   <CalendarDays
-                    className="size-4 shrink-0 text-muted-foreground"
+                    className="hidden size-4 shrink-0 text-muted-foreground sm:block"
                     aria-hidden
                   />
                   <span className="truncate">
@@ -1592,56 +1636,54 @@ export function TimetableCalendar({
                 />
               </PopoverContent>
             </Popover>
-                      {/*//! A MAI NAP JELVÉNYE A RÁCSÉ, NEM A LAPÉ. A lap fejléce a
+            {/*//! A MAI NAP JELVÉNYE A RÁCSÉ, NEM A LAPÉ. A lap fejléce a
             //! betöltéskor egyszer épül fel — a rácsban viszont osztályt és
             //! hetet is lehet váltani, és egy ott ragadt „Ma: Duális" a másik
             //! osztály órarendje fölött már hazugság. Ezért ITT áll, ahol az
             //! ÉPPEN nézett hét A/B-jelölése és az ÉPPEN nézett osztály is
             //! ismert. Ha a mai nap nincs a nézett hétben, nincs is mit
             //! állítani: a jelvény ilyenkor eltűnik. */}
-          {todayDual && (
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold max-sm:sr-only",
-                todayDual === "dual"
-                  ? "bg-primary/15 text-primary"
-                  : "bg-muted text-muted-strong",
-              )}
-            >
-              Ma: {DUAL_LABEL[todayDual]}
-            </span>
-          )}
-            {abWeek && (
-              <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                {abWeek} hét
+            {todayDual && (
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold max-sm:sr-only",
+                  todayDual === "dual"
+                    ? "bg-primary/15 text-primary"
+                    : "bg-muted text-muted-strong",
+                )}
+              >
+                Ma: {DUAL_LABEL[todayDual]}
               </span>
             )}
-            {/*//! A DUÁLIS BEÁLLÍTÓ A HÉT MELLÉ KERÜL, NEM A JOBB OLDALI CSOPORTBA.
-              //! Két oka van, és mindkettő ugyanoda mutat. (1) JELENTÉS: a
-              //! beosztás az A/B jelöléshez van kötve — az meg itt, a jelvényen
-              //! áll; a jobb oldali csoport a NÉZETÉ (szűrés, osztály, lapváltó).
-              //! (2) HELY: az a csoport egy 375 px-es telefonon már tele van, és
-              //! NEM tördel — egy negyedik gomb ott a lapváltót vágná le a
-              //! képernyő széléről. Itt viszont a sáv maga tördel: mobilon a
-              //! jelvény mellé, üres helyre esik, plusz sor nélkül. */}
-            {fullscreen &&
-              hasClass &&
-              dualSetup?.({ classShort, weekLetter: abWeek ?? "" })}
-            {/*//! A HARANG A DUÁLIS BEÁLLÍTÓ MELLÉ KERÜL, UGYANAZÉRT. A jobb
-              //! oldali csoport (szűrés, osztály, lapváltó) 375 px-en már tele
-              //! van és NEM tördel — egy negyedik gomb ott a lapváltót vágná le
-              //! a képernyő széléről. Ez a sor viszont tördel: mobilon a
-              //! jelvény mellé, üres helyre esik. Jelentés szerint is ide
-              //! tartozik: az értesítés a NÉZETT osztályról szól, az pedig itt,
-              //! a hét sávjában dől el. */}
-            {fullscreen && hasClass && notifySetup?.({ classShort })}
+            {abWeek && (
+              //! A JELVÉNY A HÉT CÍMKÉJE MELLETT MARAD, DE NEM VISZ EL EGY SORT.
+              //! Keskeny sávon a „hét" szó ismétlés — a jelvény pontosan a
+              //! mellette álló dátumtartományról állítja, hogy A vagy B. A
+              //! puszta betű 26 px, a teljes alak 47: ennyin múlik, hogy a
+              //! lapozó, a dátum és a jelvény EGY sorban elfér-e 375 px-en. Az
+              //! olvasónév mindkét alakban teljes.
+              <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                <span className="sr-only">{abWeek} hét</span>
+                <span aria-hidden className="sm:hidden">
+                  {abWeek}
+                </span>
+                <span aria-hidden className="hidden sm:inline">
+                  {abWeek} hét
+                </span>
+              </span>
+            )}
+            {/*//! A DUÁLIS BEÁLLÍTÓ ÉS A HARANG INNEN A BEÁLLÍTÁS-CSOPORTBA
+              //! KÖLTÖZÖTT. Azért álltak itt, mert a jobb oldali csoport
+              //! telefonon tele volt és nem tördelt — vagyis a helyük nem
+              //! jelentésből, hanem szorultságból következett, és cserébe
+              //! ennek a sornak egy HARMADIK sort nyitottak a fejlécben. A
+              //! szorultságot a `ToolbarMore` oldja meg; ez a hasáb így
+              //! tisztán a HÉT vezérlőié marad: lapozó, dátum, A/B. */}
             {pending && (
               <Spinner className="size-4 shrink-0 text-muted-foreground" />
             )}
           </div>
-          
         </div>
-        
       </div>
 
       {/* Rács / állapotok */}
@@ -2331,11 +2373,16 @@ function LegendMenu() {
         <Button
           variant="ghost"
           size="icon"
-          className="size-9 rounded-full touch-target text-muted-foreground hover:text-foreground"
+          //* Telefonon ez a gomb a beállítás-panel egyik sora — lásd
+          //* `toolbar-more.tsx` és a `.tt-more-item` szabályt.
+          className="size-9 tt-more-item rounded-full touch-target text-muted-foreground hover:text-foreground"
           aria-label="Jelmagyarázat és billentyűk"
           title="Jelmagyarázat és billentyűk"
         >
-          <Info className="size-4" />
+          <Info className="size-4 shrink-0" />
+          <span className="hidden tt-more-label text-sm font-medium">
+            Jelmagyarázat
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[17rem] p-3">
@@ -2343,10 +2390,14 @@ function LegendMenu() {
         <div className="mt-2 flex flex-col gap-1.5 text-xs text-muted-strong">
           <LegendItems stacked />
         </div>
-        <p className="mt-3 border-t border-border pt-3 text-sm font-semibold text-foreground">
+        {/*//! BILLENTYŰ NINCS TELEFONON. A buborék tartalmának több mint fele
+            //! négy gyorsbillentyű — érintőképernyőn egyikre sincs mód, viszont
+            //! ~110 px-nyi görgetnivalót tesz egy amúgy rövid súgóba. A
+            //! jelmagyarázat marad, a billentyűk `sm`-től jönnek elő. */}
+        <p className="mt-3 hidden border-t border-border pt-3 text-sm font-semibold text-foreground sm:block">
           Billentyűk
         </p>
-        <dl className="mt-2 grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-1.5 text-xs text-muted-strong">
+        <dl className="mt-2 hidden grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-1.5 text-xs text-muted-strong sm:grid">
           <dt className="flex gap-1">
             <Kbd>←</Kbd>
             <Kbd>→</Kbd>

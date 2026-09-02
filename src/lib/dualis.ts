@@ -42,10 +42,10 @@ export function dualStatusOf(
 //! heti rács kártyaként, a `/ma` egyetlen téglalapként); ha a két szám két
 //! helyen állna, előbb-utóbb elcsúsznának egymástól.
 export const DUAL_DAY_START_MIN = 8 * 60;
-export const DUAL_DAY_END_MIN = 16 * 60;
+export const DUAL_DAY_END_MIN = 15 * 60;
 
 //! A DUÁLIS NAP EGYETLEN BLOKK. Azon a napon nincs órarend — a munkahelyen
-//! vagy —, tehát a rács sem tesz úgy, mintha lenne: egy 8:00–16:00 kártya áll
+//! vagy —, tehát a rács sem tesz úgy, mintha lenne: egy 8:00–15:00 kártya áll
 //! a nap helyén, óra-bontás nélkül.
 export function dualBlockLesson(day: {
   dayOfWeek: number;

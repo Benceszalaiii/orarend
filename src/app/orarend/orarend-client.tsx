@@ -39,7 +39,7 @@ export function OrarendPage() {
   //! BEOSZTÁSÁT (lásd `/ma`, `DualPanel`). Enélkül nem tudjuk, mely napok
   //! esnek a munkahelyre — és nem is TALÁLGATUNK: az `/orarend` pontosan úgy
   //! néz ki, mint eddig. Beállítás után viszont ugyanazt kapja, mint a
-  //! `/dualis`: jelvényt a nap fejlécében és egy 8:00–16:00 blokkot a nap
+  //! `/dualis`: jelvényt a nap fejlécében és egy 8:00–15:00 blokkot a nap
   //! helyén.
   //!
   //! A RÁCS MINDEN NAPRA KÉRDEZ, ÉS AZ OSZTÁLYT IS Ő TUDJA — az osztályváltó

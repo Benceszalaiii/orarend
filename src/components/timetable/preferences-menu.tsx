@@ -99,13 +99,19 @@ export function PreferencesMenu({
         <Button
           variant="outline"
           size="sm"
-          className={cn("h-9 gap-1.5 rounded-full px-3", className)}
+          className={cn(
+            "h-9 gap-1.5 rounded-full px-3",
+            //* Telefonon ez a gomb a beállítás-panel egyik sora — lásd
+            //* `toolbar-more.tsx` és a `.tt-more-item` szabályt.
+            "tt-more-item",
+            className,
+          )}
           aria-label={`Szűrések (${rows.length})`}
         >
-          <Merge className="size-4" aria-hidden />
-          <span className="hidden sm:inline">Szűrések</span>
+          <Merge className="size-4 shrink-0" aria-hidden />
+          <span className="hidden tt-more-label sm:inline">Szűrések</span>
           {rows.length > 0 && (
-            <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold tabular-nums text-primary-foreground">
+            <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold tabular-nums text-primary-foreground max-sm:ml-auto">
               {rows.length}
             </span>
           )}

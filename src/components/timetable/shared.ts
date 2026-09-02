@@ -61,9 +61,18 @@ const fullFmt = new Intl.DateTimeFormat("hu-HU", {
 //! a telefonos eszköztár HARMADIK sorba törik, és a harmadik sor egy 100dvh-s
 //! lapon nem a fejlécből megy el, hanem a rácsból. Szűk eszköztáron ezért az
 //! évszám nélküli alak megy ki; a teljes alak marad ott, ahol elfér.
+//*
+//! A HÓNAP SEM KELL KÉTSZER. A tanítási hetek nagy része egyetlen hónapon
+//! belül van („szept. 8. – szept. 12."), és ott a második hónapnév ~40 px-nyi
+//! ismétlés. A rövid alak ezért csak a napot mondja el másodszor — ennyin
+//! múlik, hogy a hónapfordulós heteken se törjön sorba a sáv. A hosszabb,
+//! hónapfordulós alak marad ott, ahol tényleg két hónapról van szó.
 export function weekLabel(weekStart: string, compact = false): string {
   const start = dateFromKey(weekStart);
   const end = dateFromKey(addDaysKey(weekStart, 4));
+  if (compact && start.getMonth() === end.getMonth()) {
+    return `${rangeFmt.format(start)} – ${end.getDate()}.`;
+  }
   const from = compact ? rangeFmt.format(start) : fullFmt.format(start);
   return `${from} – ${rangeFmt.format(end)}`;
 }

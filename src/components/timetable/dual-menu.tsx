@@ -70,6 +70,9 @@ export function DualSetupButton({
         onClick={() => setOpen(true)}
         className={cn(
           "size-9 rounded-full touch-target",
+          //* Telefonon ez a gomb a beállítás-panel egyik sora — lásd
+          //* `toolbar-more.tsx` és a `.tt-more-item` szabályt.
+          "tt-more-item",
           active
             ? "text-primary hover:text-primary"
             : "text-muted-foreground hover:text-foreground",
@@ -80,7 +83,12 @@ export function DualSetupButton({
         }
         title="Duális képzés"
       >
-        <Briefcase className="size-4" />
+        <Briefcase className="size-4 shrink-0" />
+        {/*//* A felirat CSAK a panelben látszik: ikonsorban a `title` és az
+            //* `aria-label` viszi a nevet, ott nincs hely kiírni. */}
+        <span className="hidden tt-more-label text-sm font-medium">
+          Duális beosztás
+        </span>
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

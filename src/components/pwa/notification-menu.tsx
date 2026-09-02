@@ -176,6 +176,11 @@ export function NotificationMenu({
         onClick={openDialog}
         className={cn(
           "size-9 rounded-full touch-target",
+          //* Az `/orarend` telefonos sávjában ez a gomb a beállítás-panel egyik
+          //* sora — lásd `toolbar-more.tsx` és a `.tt-more-item` szabályt. A
+          //* `/ma` sávjában NINCS `.tt-more` szülő, ott a szabály nem fog: ott
+          //* a harang marad puszta ikon.
+          "tt-more-item",
           enabled
             ? "text-primary hover:text-primary"
             : "text-muted-foreground hover:text-foreground",
@@ -187,10 +192,13 @@ export function NotificationMenu({
         title="Értesítések"
       >
         {enabled ? (
-          <BellRing className="size-4" />
+          <BellRing className="size-4 shrink-0" />
         ) : (
-          <Bell className="size-4" />
+          <Bell className="size-4 shrink-0" />
         )}
+        <span className="hidden tt-more-label text-sm font-medium">
+          Értesítések
+        </span>
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

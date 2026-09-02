@@ -271,7 +271,7 @@ export function MaPage() {
   const isToday = shownKey !== null && today !== null && shownKey === today;
   //! A DUÁLIS NAP NEM AZ OSZTÁLY NAPJA. Ha a diák saját beosztása szerint a
   //! munkahelyen van, a lap NEM az osztály óráit mutatja neki: azok azon a
-  //! napon nem róla szólnak. A nap helyén egyetlen 8:00–16:00 téglalap áll —
+  //! napon nem róla szólnak. A nap helyén egyetlen 8:00–15:00 téglalap áll —
   //! az osztály órarendje pedig egy koppintással előhívható marad („Teljes
   //! órarend"), mert elrejteni és letagadni nem ugyanaz.
   const dualDay = day?.dual === "dual";
