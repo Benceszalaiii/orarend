@@ -147,17 +147,21 @@ párbeszéd ilyenkor nem hibát mutat, hanem a két telepítési lépést.
 | `api/ertesites/tick/` | Az ütemezett feladat — az egyetlen hely, ahonnan értesítés kimegy |
 | `public/sw.js` | A `push`, `notificationclick` és `pushsubscriptionchange` kezelése |
 
-A háttérfeladat percenként fut (`vercel.json`), de a Jedlikinfót **10
+A háttérfeladatot percenként érdemes futtatni, de a Jedlikinfót **10
 percenként** kérdezi meg osztályonként: az emlékeztető perc-pontos, a
 változásfigyelés viszont nem éri meg, hogy a suli szerverét terheljük vele. A
 kétszeres kiküldést nem az ütemezés pontossága zárja ki, hanem egy Redisben
 **lefoglalt** kulcs (`SET NX`) — ugyanaz a minta, mint a jedlik-szakkor
 levélküldésénél.
 
-> **Vercel-terv:** a percenkénti cron **Pro**-tól érhető el; Hobby-n a
-> feladat naponta egyszer fut, ami az óra előtti emlékeztetőhöz kevés. Saját
-> ütemezővel is hívható: `GET /api/ertesites/tick` az
-> `Authorization: Bearer $CRON_SECRET` fejléccel.
+> **Az ütemezés kívülről jön.** A repóban nincs `vercel.json`: a Vercel
+> Hobby-terve naponta csak egyszer futtat cront, ami az óra előtti
+> emlékeztetőhöz kevés. A végpont ettől függetlenül működik — bármilyen
+> ütemező hívhatja percenként: `GET /api/ertesites/tick` az
+> `Authorization: Bearer $CRON_SECRET` fejléccel. Percenkénti cront támogató
+> platformon (vagy Vercel Prón) elég egy `vercel.json`-t hozzáadni a
+> `{ "crons": [{ "path": "/api/ertesites/tick", "schedule": "* * * * *" }] }`
+> tartalommal.
 
 | Env-változó | Mire kell |
 | --- | --- |

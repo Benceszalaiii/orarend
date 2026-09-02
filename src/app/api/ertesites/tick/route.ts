@@ -185,7 +185,8 @@ export async function GET(request: Request) {
   //! AZ ÜTEMEZŐ TITKA NÉLKÜL EZ A VÉGPONT NEM LÉTEZIK. 404, nem 401 — ugyanaz
   //! a döntés, mint a statisztika kiolvasásánál: aki nem tudja a kulcsot, az
   //! azt se tudja meg, hogy van itt valami, amit érdemes próbálgatni. A
-  //! `CRON_SECRET`-et a Vercel `Authorization: Bearer …` fejlécben küldi.
+  //! `CRON_SECRET`-et a külső ütemezőnek `Authorization: Bearer …`
+  //! fejlécben kell küldenie.
   const expected = process.env.CRON_SECRET;
   const provided = request.headers.get("authorization");
   if (!expected || provided !== `Bearer ${expected}`) {
