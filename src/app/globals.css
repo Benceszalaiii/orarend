@@ -2,9 +2,7 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
-.test{
-  display: block;
-}
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.1884 0.0128 248.5103);
