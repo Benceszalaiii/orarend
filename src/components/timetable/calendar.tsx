@@ -23,6 +23,12 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
+import {
+  SITE_BAR_CLUSTER,
+  SITE_BAR_MAX,
+  SITE_BAR_METRICS,
+  SiteNav,
+} from "@/components/site-nav";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Kbd } from "@/components/ui/kbd";
@@ -116,7 +122,10 @@ const PEEK = 28;
 const ONE_DAY_MAX = 560;
 //* Ennél szélesebb ablakon a rács már nem nő tovább, hanem középre áll: öt
 //* oszlop 400 px fölött nem lesz olvashatóbb, csak üresebb.
-const MAX_SHELL = "max-w-[120rem]";
+//* A rács keretének és a fejlécsávnak UGYANAZ a legnagyobb szélessége — a `/ma`
+//* sávja is ebből él (lásd `site-nav.tsx`), különben a váltó a két lapon más
+//* x-en állna.
+const MAX_SHELL = SITE_BAR_MAX;
 
 //! A layout-effekt a szerveren nem futtatható (és figyelmeztet is): ott az
 //! effekt-változat áll be, ami sosem fut le renderelés közben.
@@ -149,8 +158,20 @@ type LayoutItem = {
 //! ugyanott van, és a szemközti üres fél mindig ugyanazt jelenti.
 type SideItem = { startMin: number; endMin: number };
 
-function itemHalf(it: LayoutItem): 0 | 1 | null {
-  if (it.run) return groupHalf(it.run.lesson);
+//! AZ ÖSSZEVONT ÓRA VISSZAKAPJA A TELJES OSZLOPOT. A fél oszlop azt mondja ki,
+//! hogy a szemközti fél MÁSÉ — ott a másik csoport órája áll, vagy állhatna. Ha
+//! viszont a diák már összevonta az ütközést (`run.hidden` nem üres), a másik
+//! csoport órája ELDÖNTÖTTEN nincs a rácson: a fél kártya mellett üres fél
+//! marad, ami semmit nem jelent, csak elveszi a felét a helynek, amiben a terem
+//! és a tanár is elférne. Az összevont óra ezért teljes szélességű.
+const FULL = "full" as const;
+
+type ItemSide = 0 | 1 | typeof FULL | null;
+
+function itemSide(it: LayoutItem): ItemSide {
+  if (it.run) {
+    return it.run.hidden.length > 0 ? FULL : groupHalf(it.run.lesson);
+  }
   //* A rejtett sáv szellemkártyája ugyanannyi helyet kap, mint az óra, amit
   //* eltakar — de csak akkor, ha minden benne rejlő óra ugyanazé a csoporté.
   if (it.ghost) {
@@ -167,20 +188,24 @@ function overlapping(a: SideItem, b: SideItem): boolean {
 
 //* Sikerül-e a klasztert a csoport-oldalak szerint kiosztani. Csak akkor, ha
 //* MINDEN elemnek van oldala, és egy oldalon belül semmi nem fedi egymást —
-//* különben a fél oszlop kártyákat takarna el, ami rosszabb a teljesnél.
-function assignByHalf(cluster: LayoutItem[]): boolean {
-  const halves = cluster.map(itemHalf);
-  if (halves.some((half) => half === null)) return false;
+//* különben a fél oszlop kártyákat takarna el, ami rosszabb a teljesnél. A
+//* teljes oszlopot kérő (összevont) kártya senkivel nem fedhet át: ha mégis
+//* van mellette óra, marad a sávozás, mert az mindkettőt megmutatja.
+function assignBySide(cluster: LayoutItem[]): boolean {
+  const sides = cluster.map(itemSide);
+  if (sides.some((side) => side === null)) return false;
   for (let i = 0; i < cluster.length; i++) {
     for (let j = i + 1; j < cluster.length; j++) {
-      if (halves[i] === halves[j] && overlapping(cluster[i], cluster[j])) {
+      if (!overlapping(cluster[i], cluster[j])) continue;
+      if (sides[i] === sides[j] || sides[i] === FULL || sides[j] === FULL) {
         return false;
       }
     }
   }
   cluster.forEach((it, i) => {
-    it.lane = halves[i] as number;
-    it.lanes = 2;
+    const side = sides[i];
+    it.lane = side === FULL ? 0 : (side as number);
+    it.lanes = side === FULL ? 1 : 2;
   });
   return true;
 }
@@ -226,7 +251,7 @@ function layoutDay(
     //! óra is így kap fél oszlopot (egyelemű klaszter), a két egymásra eső
     //! csoport pedig mindig ugyanabban a sorrendben áll — nem aszerint, melyik
     //! kezdődött előbb.
-    if (assignByHalf(cluster)) {
+    if (assignBySide(cluster)) {
       cluster = [];
       return;
     }
@@ -356,6 +381,8 @@ export function TimetableCalendar({
   heading,
   trailing,
   dualStatusForDay,
+  dualSetup,
+  notifySetup,
   loadView,
   reloadToken,
 }: {
@@ -386,6 +413,22 @@ export function TimetableCalendar({
     weekLetter: string;
     classShort: string;
   }) => DualStatus | undefined;
+  //! A BEÁLLÍTÓ IS A SÁVBAN LAKIK, DE NEM A RÁCS TALÁLJA KI. Ugyanaz a határ,
+  //! mint a `dualStatusForDay`-nél: a rács csak azt tudja, MELYIK osztály
+  //! MELYIK hetét nézik éppen — a beosztás tárolása és a párbeszéd a lapé.
+  //! Ezért nem komponenst kap, hanem egy hívást, amit a nézett osztállyal és
+  //! héttel kérdez meg; ami nem ad vissza semmit (a `/dualis`, az `/event`),
+  //! annál a sáv változatlan.
+  dualSetup?: (ctx: {
+    classShort: string;
+    weekLetter: string;
+  }) => React.ReactNode;
+  //! AZ ÉRTESÍTÉS-HARANG UGYANEZEN A HATÁRON ÁLL. A rács azt tudja, MELYIK
+  //! osztály órarendjét nézik éppen — a feliratkozás, az engedélykérés és a
+  //! párbeszéd viszont a lapé (`components/pwa/notification-menu.tsx`). Ezért
+  //! itt is hívás, nem komponens; ami nem ad vissza semmit (a `/dualis`, az
+  //! `/event`), annál a sáv változatlan.
+  notifySetup?: (ctx: { classShort: string }) => React.ReactNode;
   //! SAJÁT BETÖLTŐ. A `/dualis` nem egy osztály órarendjét lapozza, hanem egy
   //! TERVET, ami két osztály óráiból áll össze — a hét-lapozás viszont
   //! ugyanaz a mozdulat. Ha meg van adva, a rács ezen keresztül kér új hetet
@@ -1206,138 +1249,66 @@ export function TimetableCalendar({
       )}
 
       {/* Eszköztár — teljes nézetben ez a lap fejléce is */}
+      {/*//! A SÁV NEM EGY TÖRDELŐ LISTA, HANEM KÉT HASÁB. Amíg egyetlen
+          //! `flex-wrap` sor volt, a lapváltó a lista VÉGÉN ült, és hogy
+          //! hányadik sorba esik, azt a mellette álló tartalom döntötte el: a
+          //! hét-címke hossza, az A/B jelvény megléte, a duális gomb, a
+          //! `/dualis` tervválasztója. Mérve: 375 px-en a harmadik sorban
+          //! (126 px), 1024 px-en a másodikban (58 px), 1120 px-en az elsőben
+          //! (13 px) — ugyanaz a gomb, három magasságban, tartalomtól függően.
+          //! Egy törésponttal ezt nem lehet megfogni, mert a törés helye maga is
+          //! tartalomfüggő.
+          //*
+          //* Ezért a NÉZET vezérlői (jelmagyarázat, szűrések, osztály, lapváltó)
+          //* saját, `auto` szélességű hasábot kapnak a rács szélén, a HÉT
+          //* vezérlői pedig a mellette lévő, szabadon tördelő hasábot. Az
+          //* `items-start` miatt a jobb hasáb teteje mindig a sáv teteje —
+          //* akárhány sorba tördel a bal oldal.
+          //*
+          //! A KÉT HASÁB CSAK `lg`-TŐL ÁLL EGYMÁS MELLETT, és ez mérés, nem
+          //! ízlés: 768 px-en egymás mellé rakva a bal hasáb egy plusz sort
+          //! tördelt, és a sáv 99-ről 131 px-re hízott — 32 px, amit egy
+          //! 100dvh-s lapon a RÁCS fizet meg. `lg` alatt tehát egy hasáb van, és
+          //! a nézet-vezérlők állnak elöl: ott a lapváltó és az osztály
+          //! fontosabb, mint a hetelő. Így a sáv magassága egyetlen méretben sem
+          //! nőtt — csak a sorok sorrendje változott.
+          //*
+          //! A FORRÁS SORRENDJE A TELEFONÉ. A nézet-vezérlők a DOM-ban is elöl
+          //! állnak, nem `order`-rel felhozva — így billentyűvel és
+          //! képernyőolvasóval ugyanabban a sorrendben jönnek, ahogy látszanak.
+          //! `lg`-től a hét hasábja csúszik vizuálisan előre (`lg:order-1`); ott
+          //! a két hasáb egy sávban ül egymás mellett, és a fókusz sorrendje
+          //! „melyik nézet, melyik osztály → melyik hét" marad — a lapszintű
+          //! vezérlő előbb, a nézeten belüli utána. */}
       <div
         className={cn(
-          "flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2.5 sm:px-4",
-          fullscreen && "gap-x-2 py-2 sm:gap-x-3",
+          "grid shrink-0 grid-cols-1 items-start gap-y-2 border-b border-border px-3 py-2.5 sm:px-4 lg:grid-cols-[minmax(0,1fr)_auto]",
+          //* Teljes nézetben ez a sáv a lap fejléce is — a mértana ezért a
+          //* közös szerződésből jön, nem innen (lásd `site-nav.tsx`).
+          fullscreen && cn(SITE_BAR_METRICS, "gap-y-2"),
           //* A papíron a hét maga a tartalom; a vezérlők nem nyomtathatók.
           "print:hidden",
         )}
       >
-        {heading}
-        {/*//! A MAI NAP JELVÉNYE A RÁCSÉ, NEM A LAPÉ. A lap fejléce a
-            //! betöltéskor egyszer épül fel — a rácsban viszont osztályt és
-            //! hetet is lehet váltani, és egy ott ragadt „Ma: Duális" a másik
-            //! osztály órarendje fölött már hazugság. Ezért ITT áll, ahol az
-            //! ÉPPEN nézett hét A/B-jelölése és az ÉPPEN nézett osztály is
-            //! ismert. Ha a mai nap nincs a nézett hétben, nincs is mit
-            //! állítani: a jelvény ilyenkor eltűnik. */}
-        {todayDual && (
-          <span
-            className={cn(
-              "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold max-sm:sr-only",
-              todayDual === "dual"
-                ? "bg-primary/15 text-primary"
-                : "bg-muted text-muted-strong",
-            )}
-          >
-            Ma: {DUAL_LABEL[todayDual]}
-          </span>
-        )}
-        <div className="inline-flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 rounded-full touch-target"
-            aria-label="Előző hét"
-            title={fullscreen ? "Előző hét (←)" : "Előző hét"}
-            disabled={pending}
-            onClick={() => step(-1)}
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-pressed={fullscreen ? isCurrentWeek : undefined}
-            title={fullscreen ? "Mai hét (T)" : undefined}
-            className={cn(
-              "h-8 touch-target rounded-full px-3 font-medium",
-              //* A mai hét megjelölése: a gomb megmondja, hogy MÁR ott vagy.
-              fullscreen && isCurrentWeek && "bg-primary/12 text-primary",
-            )}
-            disabled={pending}
-            onClick={() => load(mondayKey(todayKey()))}
-          >
-            Ma
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 rounded-full touch-target"
-            aria-label="Következő hét"
-            title={fullscreen ? "Következő hét (→)" : "Következő hét"}
-            disabled={pending}
-            onClick={() => step(1)}
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </div>
-
-        {/*//! SZŰK ESZKÖZTÁRON EZ A CSOPORT FELBOMLIK. Egyben a hét-címke, az
-            //! A/B jelvény és a töltésjelző ~240 px — a lapozó gombokkal együtt
-            //! nem fér ki 390 px-en, tehát az egész csoport a HARMADIK sorba
-            //! esik. Egy 100dvh-s lapon a harmadik sor nem a fejlécből megy el,
-            //! hanem a rácsból: ~44 px, és onnantól a rács függőlegesen is
-            //! görög. `display: contents`-szel a három elem külön-külön tördel,
-            //! így a sáv két sor marad. Ahol elfér, ott marad az egyben tartott,
-            //! szorosan tördelő csoport. */}
-        <div className="contents sm:flex sm:min-w-0 sm:items-center sm:gap-2">
-          <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                disabled={pending}
-                aria-label="Hét kiválasztása naptárból"
-                className="group/date -mx-1 flex min-w-0 touch-target items-center gap-1.5 rounded-full px-2.5 py-1 text-[15px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60"
-              >
-                <CalendarDays
-                  className="size-4 shrink-0 text-muted-foreground"
-                  aria-hidden
-                />
-                <span className="truncate">
-                  {weekLabel(weekStart, narrowBar)}
-                </span>
-                <ChevronDown
-                  className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]/date:rotate-180 motion-reduce:transition-none"
-                  aria-hidden
-                />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-auto p-0">
-              <Calendar
-                mode="single"
-                locale={hu}
-                selected={dateFromKey(weekStart)}
-                defaultMonth={dateFromKey(weekStart)}
-                showOutsideDays
-                onSelect={(picked) => {
-                  if (!picked) return;
-                  setDatePickerOpen(false);
-                  load(mondayKey(dateToKey(picked)));
-                }}
-              />
-            </PopoverContent>
-          </Popover>
-          {abWeek && (
-            <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-              {abWeek} hét
-            </span>
-          )}
-          {pending && (
-            <Spinner className="size-4 shrink-0 text-muted-foreground" />
-          )}
-        </div>
-
-        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-          {/*//* Teljes nézetben a jelmagyarázat buborékba költözik: állandó sorként
+        {/*//! A NÉZET hasábja. Ugyanaz a mértan, mint a `/ma` sávjának jobb
+            //! oldalán (lásd `SITE_BAR_CLUSTER`): a lapváltó a két lapon
+            //! ugyanabban a magasságban és ugyanannál az x-nél áll. */}
+        <div className={cn(SITE_BAR_CLUSTER, "lg:order-2")}>
+          {/*//! A LAPVÁLTÓ MELLETTI VEZÉRLŐK TÖRDELHETNEK, A VÁLTÓ NEM. A
+              //! `/dualis` egy 132 px-es tervválasztót és egy súgógombot is
+              //! betesz ide: 375 px-en ez a csoport 424 px-re hízott, és eddig
+              //! VÍZSZINTESEN tolta szét a lapot — a dokumentum 436 px széles
+              //! lett egy 375 px-es kijelzőn. Ez a belső csoport ezért tördel;
+              //! a váltó kívüle, a saját dobozában marad az első sorban. */}
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+            {/*//* Teljes nézetben a jelmagyarázat buborékba költözik: állandó sorként
               //* egy 100dvh-s lapon ~40 px-et venne el a rácstól, pedig egyszer
               //* olvassa el az ember. A billentyűk is itt vannak kiírva. */}
-          {fullscreen && <LegendMenu />}
-          {/*//! TODO: visszakapcsolni, ha a szakmai portál élesedik. Addig nem
+            {fullscreen && <LegendMenu />}
+            {/*//! TODO: visszakapcsolni, ha a szakmai portál élesedik. Addig nem
               //! mutatunk linket egy nem létező oldalra. Az `ExternalLink`
               //! import is ki van kommentezve a fájl tetején. */}
-          {/*
+            {/*
           <a
             href="https://szakkor.jedlik.eu"
             target="_blank"
@@ -1348,54 +1319,198 @@ export function TimetableCalendar({
             <ExternalLink className="size-3 shrink-0" aria-hidden />
           </a>
           */}
-          {hasClass && (
-            <PreferencesMenu
-              rows={rows}
-              onUndo={undo}
-              onReset={reset}
-              className="touch-target"
-            />
-          )}
-          {/*//! NATÍV `<select>`, nem buborékos lista. Az osztályválasztó az
+            {hasClass && (
+              <PreferencesMenu
+                rows={rows}
+                onUndo={undo}
+                onReset={reset}
+                className="touch-target"
+              />
+            )}
+            {/*//! NATÍV `<select>`, nem buborékos lista. Az osztályválasztó az
               //! egyetlen vezérlő, amit MINDEN eszközön, sokszor, gyorsan
               //! használnak: mobilon a rendszer saját kerekét kapja, billentyűvel
               //! a betűre ugrást és a natív keresést — ezt egy egyedi lista sem
               //! adja vissza. A megjelenést a `appearance-none` + saját nyíl
               //! tartja a többi eszköztár-gombbal egy sorban. */}
-          {classes.length > 0 && (
-            <div className="relative shrink-0">
-              <select
-                aria-label="Osztály"
-                value={selectedClass || ""}
-                disabled={pending}
-                onChange={(event) => load(weekStart, event.target.value)}
-                className={cn(
-                  "h-9 w-[104px] touch-target appearance-none rounded-full border border-input bg-transparent py-1 pr-7 pl-3 text-sm transition-colors outline-none",
-                  "hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                  "disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
-                  //* Placeholder-állapot: a „Osztály" felirat halványabb, mint egy
-                  //* valódi választás — különben kiválasztottnak látszana.
-                  !selectedClass && "text-muted-foreground",
-                )}
-              >
-                {!selectedClass && (
-                  <option value="" disabled>
-                    Osztály
-                  </option>
-                )}
-                {classes.map((c) => (
-                  <option key={c.short} value={c.short}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-            </div>
+            {classes.length > 0 && (
+              <div className="relative shrink-0">
+                <select
+                  aria-label="Osztály"
+                  value={selectedClass || ""}
+                  disabled={pending}
+                  onChange={(event) => load(weekStart, event.target.value)}
+                  className={cn(
+                    "h-9 w-[104px] touch-target appearance-none rounded-full border border-input bg-transparent py-1 pr-7 pl-3 text-sm transition-colors outline-none",
+                    "hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                    "disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
+                    //* Placeholder-állapot: a „Osztály" felirat halványabb, mint egy
+                    //* valódi választás — különben kiválasztottnak látszana.
+                    !selectedClass && "text-muted-foreground",
+                  )}
+                >
+                  {!selectedClass && (
+                    <option value="" disabled>
+                      Osztály
+                    </option>
+                  )}
+                  {classes.map((c) => (
+                    <option key={c.short} value={c.short}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+              </div>
+            )}
+            {trailing}
+          </div>
+          {/*//! A VÁLTÓ A SÁVÉ, NEM A HÍVÓÉ. Amíg a lapok a `trailing`-ben adták
+              //! be, a helye a mellé csomagolt tartalomtól függött — a `/dualis`
+              //! tervválasztója például elé került, és vele együtt tördelt. Egy
+              //! lapszintű vezérlő helye nem lehet a hívó fél döntése: teljes
+              //! nézetben ez a sáv A LAP FEJLÉCE, tehát a váltó ide tartozik. */}
+          {fullscreen && <SiteNav />}
+        </div>
+
+        {/* A HÉT hasábja — ez tördel, ha kell */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 sm:gap-x-3 lg:order-1">
+          {heading}
+          {/*//! A MAI NAP JELVÉNYE A RÁCSÉ, NEM A LAPÉ. A lap fejléce a
+            //! betöltéskor egyszer épül fel — a rácsban viszont osztályt és
+            //! hetet is lehet váltani, és egy ott ragadt „Ma: Duális" a másik
+            //! osztály órarendje fölött már hazugság. Ezért ITT áll, ahol az
+            //! ÉPPEN nézett hét A/B-jelölése és az ÉPPEN nézett osztály is
+            //! ismert. Ha a mai nap nincs a nézett hétben, nincs is mit
+            //! állítani: a jelvény ilyenkor eltűnik. */}
+          {todayDual && (
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold max-sm:sr-only",
+                todayDual === "dual"
+                  ? "bg-primary/15 text-primary"
+                  : "bg-muted text-muted-strong",
+              )}
+            >
+              Ma: {DUAL_LABEL[todayDual]}
+            </span>
           )}
-          {trailing}
+          <div className="inline-flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-full touch-target"
+              aria-label="Előző hét"
+              title={fullscreen ? "Előző hét (←)" : "Előző hét"}
+              disabled={pending}
+              onClick={() => step(-1)}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-pressed={fullscreen ? isCurrentWeek : undefined}
+              title={fullscreen ? "Mai hét (T)" : undefined}
+              className={cn(
+                "h-8 touch-target rounded-full px-3 font-medium",
+                //* A mai hét megjelölése: a gomb megmondja, hogy MÁR ott vagy.
+                fullscreen && isCurrentWeek && "bg-primary/12 text-primary",
+              )}
+              disabled={pending}
+              onClick={() => load(mondayKey(todayKey()))}
+            >
+              Ma
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-full touch-target"
+              aria-label="Következő hét"
+              title={fullscreen ? "Következő hét (→)" : "Következő hét"}
+              disabled={pending}
+              onClick={() => step(1)}
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+
+          {/*//! SZŰK ESZKÖZTÁRON EZ A CSOPORT FELBOMLIK. Egyben a hét-címke, az
+            //! A/B jelvény és a töltésjelző ~240 px — a lapozó gombokkal együtt
+            //! nem fér ki 390 px-en, tehát az egész csoport a HARMADIK sorba
+            //! esik. Egy 100dvh-s lapon a harmadik sor nem a fejlécből megy el,
+            //! hanem a rácsból: ~44 px, és onnantól a rács függőlegesen is
+            //! görög. `display: contents`-szel a három elem külön-külön tördel,
+            //! így a sáv két sor marad. Ahol elfér, ott marad az egyben tartott,
+            //! szorosan tördelő csoport. */}
+          <div className="contents sm:flex sm:min-w-0 sm:items-center sm:gap-2">
+            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={pending}
+                  aria-label="Hét kiválasztása naptárból"
+                  className="group/date -mx-1 flex min-w-0 touch-target items-center gap-1.5 rounded-full px-2.5 py-1 text-[15px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60"
+                >
+                  <CalendarDays
+                    className="size-4 shrink-0 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <span className="truncate">
+                    {weekLabel(weekStart, narrowBar)}
+                  </span>
+                  <ChevronDown
+                    className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]/date:rotate-180 motion-reduce:transition-none"
+                    aria-hidden
+                  />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  locale={hu}
+                  selected={dateFromKey(weekStart)}
+                  defaultMonth={dateFromKey(weekStart)}
+                  showOutsideDays
+                  onSelect={(picked) => {
+                    if (!picked) return;
+                    setDatePickerOpen(false);
+                    load(mondayKey(dateToKey(picked)));
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+            {abWeek && (
+              <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                {abWeek} hét
+              </span>
+            )}
+            {/*//! A DUÁLIS BEÁLLÍTÓ A HÉT MELLÉ KERÜL, NEM A JOBB OLDALI CSOPORTBA.
+              //! Két oka van, és mindkettő ugyanoda mutat. (1) JELENTÉS: a
+              //! beosztás az A/B jelöléshez van kötve — az meg itt, a jelvényen
+              //! áll; a jobb oldali csoport a NÉZETÉ (szűrés, osztály, lapváltó).
+              //! (2) HELY: az a csoport egy 375 px-es telefonon már tele van, és
+              //! NEM tördel — egy negyedik gomb ott a lapváltót vágná le a
+              //! képernyő széléről. Itt viszont a sáv maga tördel: mobilon a
+              //! jelvény mellé, üres helyre esik, plusz sor nélkül. */}
+            {fullscreen &&
+              hasClass &&
+              dualSetup?.({ classShort, weekLetter: abWeek ?? "" })}
+            {/*//! A HARANG A DUÁLIS BEÁLLÍTÓ MELLÉ KERÜL, UGYANAZÉRT. A jobb
+              //! oldali csoport (szűrés, osztály, lapváltó) 375 px-en már tele
+              //! van és NEM tördel — egy negyedik gomb ott a lapváltót vágná le
+              //! a képernyő széléről. Ez a sor viszont tördel: mobilon a
+              //! jelvény mellé, üres helyre esik. Jelentés szerint is ide
+              //! tartozik: az értesítés a NÉZETT osztályról szól, az pedig itt,
+              //! a hét sávjában dől el. */}
+            {fullscreen && hasClass && notifySetup?.({ classShort })}
+            {pending && (
+              <Spinner className="size-4 shrink-0 text-muted-foreground" />
+            )}
+          </div>
         </div>
       </div>
 

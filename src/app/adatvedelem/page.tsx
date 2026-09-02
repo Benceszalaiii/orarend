@@ -45,7 +45,11 @@ export default function AdatvedelemPage() {
           <p>
             Az oldal nem kér és nem tárol személyes adatot: nincs regisztráció,
             bejelentkezés vagy felhasználói fiók, és az órarend megtekintéséhez
-            nincs szükség semmilyen adat megadására.
+            nincs szükség semmilyen adat megadására. Egyetlen kivétel van, és az
+            is csak akkor, ha te magad kéred: az órarend-értesítésekhez a
+            böngésződ push-címét tárolnunk kell — lásd az{" "}
+            <span className="font-medium text-foreground">Értesítések</span>{" "}
+            szakaszt lentebb.
           </p>
         </section>
 
@@ -98,6 +102,43 @@ export default function AdatvedelemPage() {
             jelölő kizárólag a te eszközödön marad, elküldésre soha nem kerül.
             Az összesített számokat az üzemeltető legfeljebb két tanévig őrzi
             meg.
+          </p>
+        </section>
+
+        {/*//! EZ AZ EGYETLEN ADAT, AMI EGY KÉSZÜLÉKHEZ KÖTHETŐ — ÉS EZT KI KELL
+            //! MONDANI. A lap többi szakasza azzal kezdődik, hogy semmilyen
+            //! azonosítót nem tárolunk; a push-végpont ezt megtöri, mert az MAGA
+            //! a cím, ahová a jelzés megy. Elhallgatva a fenti mondatok
+            //! valótlanná válnának, ezért itt nevesítve áll: mi kerül a
+            //! tárolóba, mi nem, meddig, és hogyan lehet visszavonni. */}
+        <section className="flex flex-col gap-2">
+          <h2 className="text-base font-semibold text-foreground">
+            Értesítések (opcionális)
+          </h2>
+          <p>
+            Az órarend-értesítés bekapcsolása kizárólag a te döntésed: a
+            böngésző engedélykérése csak akkor jelenik meg, ha a harang ikonra
+            koppintasz, és a megjelenő ablakban külön megerősíted. Enélkül az
+            oldal soha nem kérdez rá, és nem tárol semmit.
+          </p>
+          <p>
+            Ha bekapcsolod, a böngésződ létrehoz egy úgynevezett push-végpontot
+            — ez egy cím a böngésződ gyártójának szolgáltatásánál (Google,
+            Apple, Mozilla), amelyre az értesítés érkezhet. Ezt a címet, a
+            hozzá tartozó titkosítási kulcsokat és az általad kiválasztott
+            osztályok nevét tároljuk. Ez az oldal egyetlen olyan adata, amely
+            egy adott készülékhez köthető; enélkül az értesítés nem tudna
+            megérkezni. Nevet, e-mail-címet, IP-címet, eszközleírót vagy
+            csoportbontás-beállítást nem tárolunk mellé, és az értesítésekből
+            gyűjtött adatot semmilyen más célra — statisztikára sem —
+            használjuk fel.
+          </p>
+          <p>
+            A tárolt sor legfeljebb 400 napig él, és minden alkalommal
+            újraindul, amikor megnyitod az oldalt. Ha kikapcsolod az
+            értesítéseket a harangnál, a sor azonnal törlődik; ugyanez történik
+            akkor is, ha a böngészőben vonod vissza az engedélyt, vagy törlöd az
+            oldal adatait.
           </p>
         </section>
 

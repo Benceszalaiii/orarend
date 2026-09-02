@@ -338,7 +338,7 @@ function DualSetupDialog({
         />
 
         <DialogFooter className="sm:justify-start">
-          {/*//! A KLASSZIKUS BLOKK EGY KOPPINTÁS, DE NEM AZ ALAPÉRTELMEZÉS. A
+          {/*//! A SZOKÁSOS BEOSZTÁS EGY KOPPINTÁS, DE NEM AZ ALAPÉRTELMEZÉS. A
               //! Jedlik duális osztályainak többsége így jár; aki nem, annak a
               //! rács ott van mellette. */}
           <Button
@@ -347,7 +347,7 @@ function DualSetupDialog({
             className="touch-target"
             onClick={() => onChange(CLASSIC_DUAL_SCHEDULE)}
           >
-            Szokásos blokk (Sze–P, H–K)
+            Szokásos blokk (teljes B hét)
           </Button>
           <Button
             variant="ghost"

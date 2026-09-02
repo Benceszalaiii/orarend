@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/ertesites/tick",
+      "schedule": "* * * * *"
+    }
+  ]
+}

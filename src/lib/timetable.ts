@@ -1,4 +1,14 @@
-const API_BASE = "/api/jedlik";
+//! A FORRÁS UGYANAZ, AZ ÚT ODÁIG NEM. A böngészőből a `/api/jedlik` átirányítón
+//! megyünk (lásd `next.config.ts`) — enélkül a kérés más eredetre menne, és a
+//! CORS elbukna. A SZERVEREN viszont nincs se `location`, se átirányító: ott a
+//! relatív útvonalból nem lesz érvényes URL, ezért közvetlenül a Jedlikinfót
+//! hívjuk. Ez a modul így mindkét oldalon fut — az órarend-értesítéseket
+//! kiszámoló háttérfeladat (`/api/ertesites/tick`) UGYANAZT az elemzőt
+//! használja, mint a lap; egy második, önálló másolat előbb-utóbb más órarendet
+//! mutatna, mint amit a diák a képernyőn lát.
+export const JEDLIK_API_ORIGIN = "https://jedlikinfo.jedlik.eu/api/api";
+const API_BASE =
+  typeof window === "undefined" ? JEDLIK_API_ORIGIN : "/api/jedlik";
 export const TIME_ZONE = "Europe/Budapest";
 export const PUBLIC_DEFAULT_CLASS = "13C";
 

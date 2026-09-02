@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { SiteNav } from "@/components/site-nav";
+import { useCallback, useEffect, useState } from "react";
+import { NotificationMenu } from "@/components/pwa/notification-menu";
 import { TimetableCalendar } from "@/components/timetable/calendar";
+import { DualSetupButton } from "@/components/timetable/dual-menu";
 import { MorphingInfinity } from "@/components/ui/morphing-infinity";
 import {
   type DualSchedule,
   dualStatusFor,
   hasAnyDualDay,
   loadDualSchedule,
+  saveDualSchedule,
 } from "@/lib/dual-schedule";
 import {
   buildTimetableView,
@@ -50,7 +52,43 @@ export function OrarendPage() {
   //* A `localStorage` olvasása napi kérdésenként fölösleges munka lenne; a
   //* beosztás osztályonként egyszer kerül elő, és a lap élete végéig áll (a
   //* beállítás a `/ma`-n történik, onnan visszatérve ez a lap újraépül).
-  const scheduleCache = useRef(new Map<string, DualSchedule | null>());
+  //! A GYORSÍTÓTÁR ÁLLAPOT, MERT A BEOSZTÁS MÁR NEMCSAK ÍRÓDIK, HANEM VÁLTOZIK
+  //! IS. Amíg a beállítás csak a `/ma`-n történt, egy `ref` elég volt: a lap
+  //! visszatéréskor úgyis újraépült. A sávból viszont MENET KÖZBEN íródik át —
+  //! egy `ref`-ről pedig a React nem tud, és a rács a régi napokat rajzolná
+  //! tovább. A térkép cseréje az egyetlen jel: tőle kap új azonosságot a
+  //! `readSchedule`, azon át a `dualStatusForDay`, és ezért számol újra a
+  //! naptár minden duális memója.
+  const [schedules, setSchedules] = useState(
+    () => new Map<string, DualSchedule | null>(),
+  );
+
+  //* A lusta betöltés NEM változás: ugyanazt a választ írja be, amit a hívó
+  //* amúgy is megkapott, ezért a térképet helyben tölti fel — újrarajzolni
+  //* nem kell tőle.
+  const readSchedule = useCallback(
+    (classShort: string) => {
+      let schedule = schedules.get(classShort);
+      if (schedule === undefined) {
+        schedule = loadDualSchedule(classShort);
+        schedules.set(classShort, schedule);
+      }
+      return schedule;
+    },
+    [schedules],
+  );
+
+  //* A beállítás azonnal él és azonnal íródik — nincs „Mentés" gomb, ahogy a
+  //* `/ma` paneljén sincs: a párbeszéd mögött a rács már át is áll rá.
+  const changeSchedule = useCallback(
+    (classShort: string, next: DualSchedule) => {
+      if (!classShort) return;
+      saveDualSchedule(classShort, next);
+      setSchedules((prev) => new Map(prev).set(classShort, next));
+    },
+    [],
+  );
+
   const dualStatusForDay = useCallback(
     ({
       dayOfWeek,
@@ -62,18 +100,47 @@ export function OrarendPage() {
       classShort: string;
     }) => {
       if (!classShort) return undefined;
-      let schedule = scheduleCache.current.get(classShort);
-      if (schedule === undefined) {
-        schedule = loadDualSchedule(classShort);
-        scheduleCache.current.set(classShort, schedule);
-      }
+      const schedule = readSchedule(classShort);
       //! CSAK AKKOR JELÖLÜNK, HA VAN MIT. Beállítás nélkül — és annál is, aki
       //! kimondta, hogy nem jár duálisra — a rács nem állít semmit: egy minden
       //! napra kiírt „Iskola" nem információ, csak zaj.
       if (!schedule || !hasAnyDualDay(schedule)) return undefined;
       return dualStatusFor(schedule, dayOfWeek, weekLetter);
     },
-    [],
+    [readSchedule],
+  );
+
+  //! A BEÁLLÍTÓ A SÁVBAN, DE A VÁLASZ ITT SZÜLETIK. A naptár csak azt tudja,
+  //! melyik osztály melyik hetét nézik — a beosztás betöltése, mentése és a
+  //! párbeszéd ezé a lapé (ugyanaz a rács, mint a `/ma` panelén).
+  const dualSetup = useCallback(
+    ({
+      classShort,
+      weekLetter,
+    }: {
+      classShort: string;
+      weekLetter: string;
+    }) => (
+      <DualSetupButton
+        //* Az osztályváltás új beosztást jelent: a párbeszéd ne az előző
+        //* osztályéval nyíljon ki tovább.
+        key={classShort}
+        schedule={readSchedule(classShort)}
+        weekLetter={weekLetter}
+        classShort={classShort}
+        onChange={(next) => changeSchedule(classShort, next)}
+      />
+    ),
+    [readSchedule, changeSchedule],
+  );
+
+  //! UGYANAZ A HATÁR, MINT A DUÁLIS BEÁLLÍTÓNÁL: a rács csak azt tudja, melyik
+  //! osztályt nézik — hogy szóljunk-e róla és mikor, az a harangé.
+  const notifySetup = useCallback(
+    ({ classShort }: { classShort: string }) => (
+      <NotificationMenu classes={classes} currentClass={classShort} />
+    ),
+    [classes],
   );
 
   useEffect(() => {
@@ -114,9 +181,8 @@ export function OrarendPage() {
           classesError={classesError}
           variant="fullscreen"
           dualStatusForDay={dualStatusForDay}
-          //* A három nézet közti váltó az eszköztár jobb szélén ül — ez az
-          //* egyetlen hely, ahonnan a másik két lap egyáltalán elérhető.
-          trailing={<SiteNav />}
+          dualSetup={dualSetup}
+          notifySetup={notifySetup}
           //* A „Ma: Duális/Iskola" jelvényt a rács rajzolja a cím mellé — ott
           //* ismert az ÉPPEN nézett hét és osztály (lásd `TimetableCalendar`).
           heading={

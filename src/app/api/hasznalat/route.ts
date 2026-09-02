@@ -1,3 +1,4 @@
+import { CLASS_MAX_LENGTH, isKnownClass } from "@/lib/known-class";
 import { readUsage, recordClassUse, usageStoreReady } from "@/lib/usage-store";
 
 //! MI KERÜL A TÁROLÓBA, ÉS MI NEM
@@ -8,33 +9,6 @@ import { readUsage, recordClassUse, usageStoreReady } from "@/lib/usage-store";
 //! csoport; a szám róluk együtt szól, nem bárki külön. Ez a megkötés nem
 //! optimalizálás kérdése: ha bármi továbbit felvennénk ide, a mérés megszűnne
 //! anonim lenni.
-const JEDLIK_CLASSES = "https://jedlikinfo.jedlik.eu/api/api/timetable/classes";
-
-//* A tényleges osztálynevek (`09A`, `09KNY`, `13C`) alakja. Ez a tartalék, ha a
-//* Jedlikinfo listája épp nem érhető el — így egy külső kimaradás nem nyeli el
-//* egy egész nap adatát.
-const CLASS_SHAPE = /^\d{2}[A-ZÁÉÍÓÖŐÚÜŰ]{1,4}$/;
-
-//! AZ OSZTÁLYLISTA A KULCSTÉR HATÁRA. Szabad szöveget sosem írunk a tárolóba:
-//! amit elfogadunk, az vagy szerepel a suli saját listájában, vagy legalább úgy
-//! néz ki, mint egy osztálynév. Enélkül bárki tetszőleges kulcsot hozhatna létre.
-async function isKnownClass(short: string): Promise<boolean> {
-  try {
-    const res = await fetch(JEDLIK_CLASSES, {
-      signal: AbortSignal.timeout(5_000),
-      //* Óránként egyszer kérdezzük meg; az osztálylista tanév közben állandó.
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) return CLASS_SHAPE.test(short);
-    const list = (await res.json()) as { short?: unknown }[];
-    if (!Array.isArray(list) || list.length === 0)
-      return CLASS_SHAPE.test(short);
-    return list.some((c) => c?.short === short);
-  } catch {
-    return CLASS_SHAPE.test(short);
-  }
-}
-
 export async function POST(request: Request) {
   let payload: unknown;
   try {
@@ -46,7 +20,7 @@ export async function POST(request: Request) {
   const short = (payload as { class?: unknown } | null)?.class;
   //! A hosszkorlát a JSON-parse utáni ELSŐ szűrő: egy megabájtos „osztálynévvel"
   //! se a regexet, se a listát ne kelljen megfuttatni.
-  if (typeof short !== "string" || short.length > 8) {
+  if (typeof short !== "string" || short.length > CLASS_MAX_LENGTH) {
     return new Response(null, { status: 400 });
   }
   if (!(await isKnownClass(short))) {

@@ -132,6 +132,15 @@
     caret-color: var(--brand);
     scrollbar-color: var(--border) transparent;
     scrollbar-width: thin;
+    /*//! A GÖRGETŐSÁV HELYE MINDIG LE VAN FOGLALVA. A `/ma` görgethető lap, az
+        //! `/orarend` egy 100dvh-s rács, ami széles kijelzőn nem görget — ahol a
+        //! rendszer valódi, helyet foglaló görgetősávot rajzol (Windows, a
+        //! legtöbb Linux), ott az egyik lapnak van sávja, a másiknak nincs, és a
+        //! nézetváltó 11 px-et ugrik oldalra a két lap között. A hely
+        //! fenntartása ezt nullázza. Telefonon és macOS-en a görgetősáv
+        //! ráúszó, ott ennek a sornak nincs hatása — vagyis a fő jelenetben
+        //! nem kerül semmibe. */
+    scrollbar-gutter: stable;
   }
 }
 

@@ -17,6 +17,9 @@ fekvő lapra is kinyomtatható.
   órarendje, nem az osztályé.
 - **Most sáv.** Aktuális óra, szünet vagy *Mára vége*, visszaszámlálóval a
   következő váltásig.
+- **Értesítések.** 10 perccel az óra kezdése előtt, és ha megváltozik az órarend.
+  Osztályonként kapcsolható, és a böngésző engedélyét CSAK a harang ikon utáni
+  saját párbeszédből kérjük — soha oldalbetöltéskor.
 - **Nyomtatás.** `@page { size: A4 landscape }`, saját világos palettával, ami
   megtartja a tantárgyak színeit: a szín itt információ, nem dekoráció.
 - **Megnevezett hibák.** Az órarend adatai nem a mieink, ezért minden hibafajtának
@@ -31,7 +34,8 @@ fekvő lapra is kinyomtatható.
 - TypeScript, [Biome](https://biomejs.dev) linthez és formázáshoz
 - [Bun](https://bun.sh) csomagkezelőnek
 - Nincs belépés és felhasználói fiók — az órarend kliensoldalon áll össze, Vercelen
-- Egyetlen szerveroldali végpont: az osztályszintű használati számláló (Upstash Redis)
+- Két szerveroldali funkció: az osztályszintű használati számláló és a
+  push-értesítések (Upstash Redis + VAPID)
 
 ## Indítás
 
@@ -113,6 +117,60 @@ titok véd mindent, és rossz jelszóra csak egy fix késleltetés jár, nem kiz
 Redis nélkül az app változatlanul működik, csak nem számol — egy elfelejtett
 env-változó nem viheti el az órarendet.
 
+## Értesítések (web push)
+
+Két dologról szól, semmi másról: **10 perccel az óra kezdése előtt**, és ha
+**megváltozik az órarend** (elmarad egy óra, teremcsere, tanárcsere,
+áthelyezés).
+
+**Az engedélyt csak kattintás után kérjük.** A böngésző kérdését egyszer lehet
+feltenni, és a reflexből elutasított engedélyt JS-ből soha többé nem lehet
+újrakérni — egy oldalbetöltéskor felugró kérdés tehát nem „korai", hanem
+végleges. Ezért a sorrend kötött: harang ikon → **saját** párbeszéd (mit
+ajánlunk, melyik osztályra) → és csak az igenlő gombból a böngésző kérdése.
+A feliratkozás **osztályonkénti**, legfeljebb ötre; alapértelmezésben a nézett
+osztály van kijelölve.
+
+iOS-en a web push csak a **kezdőképernyőre kitett** appnál működik — a
+párbeszéd ilyenkor nem hibát mutat, hanem a két telepítési lépést.
+
+### Hogyan áll össze
+
+| Rész | Mit csinál |
+| --- | --- |
+| `components/pwa/notification-menu.tsx` | A harang és a párbeszéd — az engedélykérés egyetlen kiindulópontja |
+| `lib/push.ts` | Feliratkozás, módosítás, leiratkozás, képességfelismerés (kliens) |
+| `lib/push-plan.ts` | Tiszta számítás: kinek, mikor, miről — hálózat és tároló nélkül |
+| `lib/push-store.ts` | Feliratkozások, foglalások, heti lenyomatok (Redis, csak szerver) |
+| `lib/push-send.ts` | VAPID-aláírás és kiküldés; a lejárt végpontok takarítása |
+| `api/ertesites/` | Feliratkozás (`POST`) és leiratkozás (`DELETE`) |
+| `api/ertesites/tick/` | Az ütemezett feladat — az egyetlen hely, ahonnan értesítés kimegy |
+| `public/sw.js` | A `push`, `notificationclick` és `pushsubscriptionchange` kezelése |
+
+A háttérfeladat percenként fut (`vercel.json`), de a Jedlikinfót **10
+percenként** kérdezi meg osztályonként: az emlékeztető perc-pontos, a
+változásfigyelés viszont nem éri meg, hogy a suli szerverét terheljük vele. A
+kétszeres kiküldést nem az ütemezés pontossága zárja ki, hanem egy Redisben
+**lefoglalt** kulcs (`SET NX`) — ugyanaz a minta, mint a jedlik-szakkor
+levélküldésénél.
+
+> **Vercel-terv:** a percenkénti cron **Pro**-tól érhető el; Hobby-n a
+> feladat naponta egyszer fut, ami az óra előtti emlékeztetőhöz kevés. Saját
+> ütemezővel is hívható: `GET /api/ertesites/tick` az
+> `Authorization: Bearer $CRON_SECRET` fejléccel.
+
+| Env-változó | Mire kell |
+| --- | --- |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | A feliratkozás nyilvános kulcsa (a kliensbe is bekerül — nem titok) |
+| `VAPID_PRIVATE_KEY` | **A küldés joga.** Aki megszerzi, a te nevedben ír a diákok telefonjára |
+| `VAPID_SUBJECT` | Elérhetőség a push-szolgáltatóknak (`mailto:` vagy `https://`) |
+| `CRON_SECRET` | Az ütemezett feladat kulcsa. Nélküle a végpont `404` |
+
+Kulcspár generálása: `bunx web-push generate-vapid-keys`.
+
+VAPID-kulcs vagy Redis nélkül az app változatlanul működik, csak a harang nem
+kapcsol be semmit — egy elfelejtett env-változó itt sem viheti el az órarendet.
+
 ## Felépítés
 
 ```
@@ -122,7 +180,8 @@ src/
     dualis/        ugyanaz a rács duális napjelöléssel (noindex)
     adatvedelem/   adatvédelmi tájékoztató
     statisztika/   jelszóval védett használati kimutatás (noindex)
-    api/hasznalat/ osztályszintű használati számláló (az egyetlen saját végpont)
+    api/hasznalat/ osztályszintű használati számláló
+    api/ertesites/ push-feliratkozás + az ütemezett kiküldő (`tick`)
   components/
     timetable/     rács, óra-blokkok, most sáv, összevonás-vezérlők
     ui/            Radix-alapú primitívek
@@ -135,6 +194,12 @@ src/
     usage-day.ts        a közös, budapesti naphatár (kliens és szerver)
     usage-store.ts      a Redis-számláló (csak szerveren)
     stats-auth.ts       a statisztika-oldal beléptetése (csak szerveren)
+    known-class.ts      az elfogadható osztálynevek határa (a kulcstér védelme)
+    push.ts             feliratkozás és képességfelismerés (kliens)
+    push-shared.ts      a kliens, a szerver és a service worker közös szerződése
+    push-plan.ts        mikor és miről szóljunk — tiszta számítás
+    push-store.ts       feliratkozások, foglalások, heti lenyomatok (csak szerveren)
+    push-send.ts        VAPID-aláírás és kiküldés (csak szerveren)
 ```
 
 ## Ha hozzányúlsz

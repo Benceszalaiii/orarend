@@ -32,11 +32,14 @@ export type DualWeekLetter = "A" | "B";
 export const DUAL_WEEK_LETTERS: DualWeekLetter[] = ["A", "B"];
 export const DUAL_WEEKDAYS = [1, 2, 3, 4, 5];
 
-//! A KLASSZIKUS BLOKK CSAK AJÁNLAT, NEM ALAPÉRTELMEZÉS. Ugyanaz, amit a
-//! `dualStatusOf` kódol: a duális blokk szerdán kezdődik és a következő kedden
-//! ér véget. Egy koppintással kitölthető — de csak akkor lép életbe, ha a diák
-//! rákoppintott.
-export const CLASSIC_DUAL_SCHEDULE: DualSchedule = { A: [1, 2], B: [3, 4, 5] };
+//! A SZOKÁSOS BEOSZTÁS CSAK AJÁNLAT, NEM ALAPÉRTELMEZÉS. Egy teljes B hét a
+//! munkahelyen, az A hét végig iskolában — a Jedlik duális osztályainak
+//! többsége így jár. Egy koppintással kitölthető, de csak akkor lép életbe, ha
+//! a diák rákoppintott; akinek másképp esik, annak ott a rács.
+export const CLASSIC_DUAL_SCHEDULE: DualSchedule = {
+  A: [],
+  B: [1, 2, 3, 4, 5],
+};
 
 export const EMPTY_DUAL_SCHEDULE: DualSchedule = { A: [], B: [] };
 

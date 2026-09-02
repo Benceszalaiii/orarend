@@ -19,7 +19,13 @@ import {
   SubjectLoads,
   WeekPulse,
 } from "@/components/ma/week-panels";
-import { SiteNav } from "@/components/site-nav";
+import { NotificationMenu } from "@/components/pwa/notification-menu";
+import {
+  SITE_BAR_CLUSTER,
+  SITE_BAR_MAX,
+  SITE_BAR_METRICS,
+  SiteNav,
+} from "@/components/site-nav";
 import { nowState } from "@/components/timetable/now";
 import { dateFromKey, minLabel, todayKey } from "@/components/timetable/shared";
 import { useClock, useVisibilityEpoch } from "@/components/timetable/use-clock";
@@ -300,7 +306,11 @@ export function MaPage() {
     //! sáv. A DOM-ban a fő hasáb áll elöl, így a mobil olvasási sorrend
     //! egyben prioritás-sorrend is.
     <main className="min-h-[100dvh] bg-background tt-safe">
-      <section className="relative w-full overflow-hidden pt-[env(safe-area-inset-top)] text-hero-foreground">
+      {/*//* Az `/orarend` keretét egy 1 px-es felső vonal indítja; enélkül a
+          //* váltó ezen a lapon pontosan ennyivel magasabban ülne. Vonalat nem
+          //* húzunk ide — a fénymező tetejét elvágná —, csak a hiányzó pixelt
+          //* pótoljuk, hogy a két sáv egy magasságban legyen. */}
+      <section className="relative w-full overflow-hidden pt-[calc(env(safe-area-inset-top)+1px)] text-hero-foreground">
         {/* A negyedelt címer-mező visszfénye: piros fent balra, kék lent jobbra */}
         <div
           aria-hidden
@@ -316,59 +326,85 @@ export function MaPage() {
           className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-linear-to-b from-transparent to-background"
         />
 
-        <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pt-5 pb-8 sm:px-6 sm:pt-6">
-          {/*//! TELEFONON A VEZÉRLŐK ÁLLNAK ELÖL, A CÍM ALATTUK TELJES
-              //! SZÉLESSÉGBEN. Egy sorba zsúfolva a dátum két sorba tört, és a
-              //! „14:20-ig" a kötőjelnél szakadt szét — a cím kapja a
-              //! szélességet, a vezérlők pedig a saját sorukat. */}
-          <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
-            <div className="order-2 min-w-0 sm:order-1 sm:flex-1">
-              <h1 className="text-2xl font-bold tracking-tight first-letter:uppercase sm:text-3xl">
-                {dayFmt.format(dateFromKey(shownKey))}
-              </h1>
-              <p className="mt-1 text-sm text-hero-foreground/60">
-                {!isToday &&
-                  !pickedKey &&
-                  "Hétvége — a következő tanítási nap · "}
-                {day ? daySummary(day, isToday) : "Nincs adat erre a napra"}
-                {day && day.lessonCount > 0 && day.dual !== "dual" && (
-                  <>
-                    {" · "}
-                    <span className="whitespace-nowrap tabular-nums">
-                      {minLabel(day.lastMin)}-ig
-                    </span>
-                  </>
-                )}
-              </p>
-            </div>
+        {/*//! A FEJLÉCSÁV AZ ABLAKÉ, NEM A HASÁBÉ. A lap tartalma `max-w-5xl`
+            //! középre zárt hasáb — de a sávot ez eddig magával vitte, és
+            //! 1280 px-en a váltó 1122 px-nél állt, míg az `/orarend` teljes
+            //! szélességű eszköztárában 1264-nél: 141 px ugrás egyetlen
+            //! koppintásra. A sáv ezért kilép a hasábból, és ugyanazt a
+            //! legnagyobb szélességet, margót és térközt kapja, mint a másik
+            //! lap eszköztára (`SITE_BAR_*`, lásd `site-nav.tsx`). A sáv két
+            //! vége az ablak két széléhez tapad; a hasáb alatta kezdődik. */}
+        <div
+          className={cn(
+            "relative z-10 mx-auto flex w-full items-center",
+            SITE_BAR_MAX,
+            SITE_BAR_METRICS,
+          )}
+        >
+          {/*//* A terméknév ugyanaz a bal horgony, mint az `/orarend` sávjában —
+              //* és ugyanúgy elrejtőzik telefonon, ahol a hely a vezérlőké. A
+              //* lap CÍME a dátum, az alatta lévő hasáb tetején. */}
+          <span className="shrink-0 text-base font-bold tracking-tight max-sm:sr-only">
+            Órarend
+          </span>
+          <div className={cn("ml-auto", SITE_BAR_CLUSTER)}>
+            {/*//* Ha nem a mai napot nézzük, az út vissza mindig egy koppintás. */}
+            {pickedKey && pickedKey !== today && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPickedKey(null)}
+                className="h-8 shrink-0 touch-target rounded-full border-hero-foreground/25 bg-transparent px-3 text-xs"
+              >
+                Ma
+              </Button>
+            )}
+            {/*//! A HARANG ITT VAN A LEGINKÁBB A HELYÉN. Ez a lap arra felel,
+                //! hogy „mi megy most, mi jön utána" — az óra előtti
+                //! emlékeztető pontosan ugyanez a kérdés, csak akkor, amikor a
+                //! lap nincs nyitva. A vezérlő az OSZTÁLYVÁLASZTÓ mellé kerül,
+                //! mert az értesítés a kiválasztott osztályról szól: a kettő
+                //! ugyanazt az alanyt osztja. */}
+            <NotificationMenu classes={classes} currentClass={selectedClass} />
+            <ClassPicker
+              classes={classes}
+              value={selectedClass}
+              disabled={pending}
+              onChange={(next) => {
+                setSelectedClass(next);
+                saveCachedClass(next);
+                setPreviewKey(null);
+                setPickedKey(null);
+                setView(null);
+                void load(next, shownKey, { showPending: true });
+              }}
+            />
+            <SiteNav />
+          </div>
+        </div>
 
-            <div className="order-1 flex w-full items-center justify-end gap-2 sm:order-2 sm:w-auto">
-              {/*//* Ha nem a mai napot nézzük, az út vissza mindig egy koppintás. */}
-              {pickedKey && pickedKey !== today && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPickedKey(null)}
-                  className="h-8 shrink-0 touch-target rounded-full border-hero-foreground/25 bg-transparent px-3 text-xs"
-                >
-                  Ma
-                </Button>
+        <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pt-3 pb-8 sm:px-6 sm:pt-4">
+          {/*//* A cím kapja a teljes szélességet: a vezérlők fölötte, a saját
+              //* sávjukban ülnek, így a dátum nem tör két sorba, és a
+              //* „14:20-ig" sem szakad szét a kötőjelnél. */}
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight first-letter:uppercase sm:text-3xl">
+              {dayFmt.format(dateFromKey(shownKey))}
+            </h1>
+            <p className="mt-1 text-sm text-hero-foreground/60">
+              {!isToday &&
+                !pickedKey &&
+                "Hétvége — a következő tanítási nap · "}
+              {day ? daySummary(day, isToday) : "Nincs adat erre a napra"}
+              {day && day.lessonCount > 0 && day.dual !== "dual" && (
+                <>
+                  {" · "}
+                  <span className="whitespace-nowrap tabular-nums">
+                    {minLabel(day.lastMin)}-ig
+                  </span>
+                </>
               )}
-              <ClassPicker
-                classes={classes}
-                value={selectedClass}
-                disabled={pending}
-                onChange={(next) => {
-                  setSelectedClass(next);
-                  saveCachedClass(next);
-                  setPreviewKey(null);
-                  setPickedKey(null);
-                  setView(null);
-                  void load(next, shownKey, { showPending: true });
-                }}
-              />
-              <SiteNav />
-            </div>
+            </p>
           </div>
 
           {/*//! AZ IDŐ A FŐSZEREPLŐ. A blokk nem nyúlik a teljes szélességig: a
@@ -651,7 +687,7 @@ function ClassPicker({
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         className={cn(
-          "h-8 w-[84px] touch-target appearance-none rounded-full border border-hero-foreground/20 bg-transparent py-1 pr-6 pl-2.5 text-xs transition-colors outline-none",
+          "h-9 w-[84px] touch-target appearance-none rounded-full border border-hero-foreground/20 bg-transparent py-1 pr-6 pl-2.5 text-xs transition-colors outline-none",
           "hover:bg-hero-foreground/10 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
           "disabled:cursor-not-allowed disabled:opacity-50",
         )}
