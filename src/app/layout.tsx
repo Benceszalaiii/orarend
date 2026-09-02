@@ -7,7 +7,7 @@ import { RegisterSW } from "@/components/register-sw";
 export const metadata: Metadata = {
   title: "Órarend",
   description:
-    "A Jedlik heti órarendje teljes képernyőn, bejelentkezés nélkül is: válaszd ki az osztályt, vond össze az ütköző csoportbontásokat.",
+    "A Jedlik heti órarendje teljes képernyőn: válaszd ki az osztályt, vond össze az ütköző csoportbontásokat.",
   applicationName: "Órarend",
   //* Telepítve iOS-en teljes képernyős alkalmazásként fut; a fekete áttetsző
   //* státuszsáv a `viewport-fit=cover`-rel együtt ér valamit.
