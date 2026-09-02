@@ -13,7 +13,7 @@ import { DayList, DayRibbon } from "@/components/ma/day-list";
 import {
   ChangeRow,
   DayPlanRow,
-  DualBlock,
+  DualHero,
   StaleNote,
 } from "@/components/ma/day-status";
 import { DualPanel } from "@/components/ma/dual-setup";
@@ -414,36 +414,34 @@ export function MaPage() {
 
           {/*//! AZ IDŐ A FŐSZEREPLŐ. A blokk nem nyúlik a teljes szélességig: a
               //! nagy óra olvasható blokk-méretben a legerősebb, nem elnyújtva. */}
-          {/*//! DUÁLIS NAPON NINCS HERO BLOKK. A nagy óra arra felel, hogy „mi
-              //! megy MOST" — a munkahelyen töltött napra viszont a lapnak
-              //! nincs órarendje, amiből ezt kiszámolhatná, és egy fél
-              //! képernyős kártya, ami csak annyit mond, hogy „a munkahelyen
-              //! vagy", nem ér annyit, amennyi helyet elvesz. A fejléc mondata
-              //! ezt már kimondta; a nap alakja a téglalap lentebb. */}
-          {!dualDay && (
-            <div className="mt-6 lg:max-w-2xl">
-              {error && !day ? (
-                <ErrorPanel
-                  error={error}
-                  pending={pending}
-                  onRetry={() =>
-                    void load(selectedClass, shownKey, { showPending: true })
-                  }
-                />
-              ) : (
-                <NowBlock
-                  state={state}
-                  clock={clock}
-                  epoch={epoch}
-                  preview={preview}
-                  onClearPreview={
-                    isToday ? () => setPreviewKey(null) : () => {}
-                  }
-                  previewDismissable={isToday && previewKey !== null}
-                />
-              )}
-            </div>
-          )}
+          {/*//! DUÁLIS NAPON IS ÁLL A HERO — csak más műszerrel. A nagy óra
+              //! kérdése („mennyi van még hátra") a munkahelyen töltött napon
+              //! szó szerint ugyanaz; ami hiányzik, az a futó ÓRA, nem a
+              //! kérdés. A `DualHero` ugyanerre a helyre, ugyanekkora számmal
+              //! a munkanapot válaszolja — a nap listája helyén lentebb ezért
+              //! már nem áll második sáv ugyanerről. */}
+          <div className="mt-6 lg:max-w-2xl">
+            {dualDay ? (
+              <DualHero nowSec={clock && isToday ? clock.sec : null} />
+            ) : error && !day ? (
+              <ErrorPanel
+                error={error}
+                pending={pending}
+                onRetry={() =>
+                  void load(selectedClass, shownKey, { showPending: true })
+                }
+              />
+            ) : (
+              <NowBlock
+                state={state}
+                clock={clock}
+                epoch={epoch}
+                preview={preview}
+                onClearPreview={isToday ? () => setPreviewKey(null) : () => {}}
+                previewDismissable={isToday && previewKey !== null}
+              />
+            )}
+          </div>
         </div>
       </section>
 
@@ -551,21 +549,17 @@ export function MaPage() {
             )}
 
             {dualDay && !allGroups ? (
-              //! A NAP HELYÉN A MUNKANAP ÁLL. Nem lista, nem kártya-torony:
-              //! egyetlen sáv a két végpontjával — pontosan annyi, amennyit a
-              //! duális napról tudni lehet.
-              <>
-                <DualBlock nowMin={clock && isToday ? clock.min : null} />
-                <p className="mt-2 text-xs text-pretty text-muted-foreground">
-                  {isToday
-                    ? "Ma a munkahelyen vagy"
-                    : "Ezt a napot a munkahelyen töltöd"}{" "}
-                  — az osztály órarendje nem rád vonatkozik.
-                  {dayAll &&
-                    dayAll.lessonCount > 0 &&
-                    " A „Teljes órarend” megmutatja, mi megy ilyenkor az osztálynak."}
-                </p>
-              </>
+              //! A MUNKANAPOT A HERO MONDTA KI, ITT MÁR CSAK A KÖVETKEZMÉNYE
+              //! ÁLL. A nap listájának a helyén nem ismételjük meg a sávot:
+              //! egy lapon egy műszer mutassa ugyanazt az időt. Ami itt hozzá
+              //! jön, az a MIÉRT üres a lista — és hogy az osztályé egy
+              //! kapcsolóval előhívható.
+              <p className="text-sm text-pretty text-muted-foreground">
+                Az osztály órarendje nem rád vonatkozik.
+                {dayAll &&
+                  dayAll.lessonCount > 0 &&
+                  " A „Teljes órarend” megmutatja, mi megy ilyenkor az osztálynak."}
+              </p>
             ) : shownDay && day && shownDay.lessonCount > 0 ? (
               <>
                 <DayRibbon

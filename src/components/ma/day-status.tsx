@@ -4,11 +4,17 @@ import {
   AlertTriangle,
   BellRing,
   Briefcase,
+  CalendarClock,
   CalendarDays,
   Check,
   CloudOff,
 } from "lucide-react";
-import { minLabel } from "@/components/timetable/shared";
+import { countdownLabel } from "@/components/timetable/now";
+import {
+  durationLabel,
+  minLabel,
+  rangeLabel,
+} from "@/components/timetable/shared";
 import { DUAL_DAY_END_MIN, DUAL_DAY_START_MIN } from "@/lib/dualis";
 import { TIMETABLE_SOURCE } from "@/lib/timetable";
 import { ageLabel } from "@/lib/timetable-cache";
@@ -143,99 +149,241 @@ export function DayPlanRow({
 }
 
 //* ---------------------------------------------------------------------------
-//* A DUÁLIS NAP — egy téglalap, nem egy nap órarendje
+//* A DUÁLIS NAP — a nap műszerfala
 //* ---------------------------------------------------------------------------
-//! AMI EZEN A NAPON IGAZ: 8-TÓL 4-IG A MUNKAHELYEN VAGY. Ennyi. Az osztály
-//! órarendje nem a te napod, tehát nem is az áll a nap helyén — de a helyére
-//! sem kerülhet egy fél képernyős kártya, ami nyolc órányi „Duális képzés"-t
-//! mond ugyanazzal a hanggal, ahogy a rács egy 45 perces matekot. A munkanap
-//! egyetlen tömb, egyetlen adattal: mikor kezdődik és mikor ér véget.
+//! AMI EZEN A NAPON IGAZ: 8-TÓL 3-IG A MUNKAHELYEN VAGY. Az osztály órarendje
+//! nem a te napod, tehát a lap nem tesz úgy, mintha órákra járnál — de a
+//! kérdés, amivel a lapot megnyitod, SZÓ SZERINT UGYANAZ, mint iskolai napon:
+//! mennyi van még hátra.
 //!
-//! A SZALAG NYELVÉN. Ugyanaz a forma, mint a nap szalagja (`DayRibbon`): sáv,
-//! alatta a két végpont. Így a duális nap és az iskolai nap ugyanabban a
-//! sorban, ugyanabban a magasságban áll — a kettő közti különbség a TARTALOM,
-//! nem a lap szerkezete.
+//! EZÉRT EZ A NAP HERO BLOKKJA. Iskolai napon a `NowBlock` felel erre, nagy
+//! `tabular-nums` órával, karnyújtásnyiról olvashatóan. Duális napon nincs futó
+//! óra, amire az kiülhetne — a lap eddig ezért maradt hero NÉLKÜL, a munkanap
+//! meg egy 48 képpontos téglalapba szorult a nap listája helyén. Egy hétből két
+//! nap kapott így fele akkora választ ugyanarra a kérdésre. Mostantól a duális
+//! nap ugyanabban a sávban, ugyanazzal a nagy számmal válaszol; a téglalap
+//! helye a lap közepén felszabadul.
 //!
-//! HOL TARTOK A NAPBAN. A vonalzó megmutatja a HELYET, de nem mondja meg a
-//! MENNYIT: egy szalag közepén álló vonalból senki nem olvas le három óra húsz
-//! percet. Az iskolai napon ezt a `NowBlock` mondja ki („… van hátra"), a
-//! duális napon viszont nincs futó óra, amire az kiülhetne — a szalag alatti
-//! sor mondja el helyette, ugyanazzal a két adattal: mennyi telt el, mennyi
-//! van hátra — a címke alatt, A BLOKKON BELÜL: a munkanapról szóló adat nem
-//! kerülhet a szalag alá, a nap végpontjai közé, mert ott az órarend
-//! időtengelye beszél. Csak MA és csak a munkaidőn belül: máskor nincs mit
-//! visszaszámolni.
+//! A SÁV MŰSZER, NEM DÍSZ. Óránként bevésett osztás fut rajta 9-től 14-ig: a
+//! kitöltésről így LEOLVASHATÓ, hogy dél elmúlt-e — nem csak annyit mond, hogy
+//! „valamennyi". A vezető élét a márkapiros vonalzó zárja: a lapon a piros
+//! egyedül az élő „most" szerepe, és a munkanapban ez az.
 
-//* Rövid alak, mert hármasban áll a két végponttal egy sorban: a `durationLabel`
-//* teljes szavai („3 óra 20 perc") két példányban kitolnák a telefon sorát.
+const DUAL_START_SEC = DUAL_DAY_START_MIN * 60;
+const DUAL_END_SEC = DUAL_DAY_END_MIN * 60;
+//! AZ UTOLSÓ NEGYED ÓRA. Nem új doboz jelzi, hanem a nagy szám HANGJA vált
+//! pirosra — ugyanaz a szerep, amit a lapon a „Most" jelvény visel.
+const DUAL_FINAL_STRETCH_SEC = 15 * 60;
+
+//* Az osztás a két végpont KÖZÖTT áll: a 8:00-t és a 15:00-t a feliratok
+//* tartják, egy vonal ott csak ismételné őket.
+const DUAL_TICK_MINS = Array.from(
+  { length: Math.ceil((DUAL_DAY_END_MIN - DUAL_DAY_START_MIN) / 60) - 1 },
+  (_, i) => DUAL_DAY_START_MIN + (i + 1) * 60,
+).filter((m) => m > DUAL_DAY_START_MIN && m < DUAL_DAY_END_MIN);
+
+//* Rövid alak: a sáv alatt egy sorban áll a két végponttal, ahol a
+//* `durationLabel` teljes szavai („3 óra 20 perc") kitolnák a telefon sorát.
 function gapLabel(minutes: number): string {
   const m = Math.max(0, Math.round(minutes));
   const h = Math.floor(m / 60);
   return h === 0 ? `${m} p` : `${h} ó ${m % 60} p`;
 }
 
-export function DualBlock({
-  //* A „most" vonalzója csak MA igaz — más napra `null` jön.
-  nowMin,
+export function DualHero({
+  //* Éjfél óta eltelt MÁSODPERC — csak ma; más napra `null`, mert ott nincs
+  //* mit visszaszámolni. Másodperc, nem perc: az utolsó tíz percben a
+  //* `countdownLabel` m:ss-re vált, ahogy az iskolai nap hero blokkjában is.
+  nowSec,
   className,
 }: {
-  nowMin: number | null;
+  nowSec: number | null;
   className?: string;
 }) {
-  const span = DUAL_DAY_END_MIN - DUAL_DAY_START_MIN;
-  //* A munkanapon belül tartunk-e: csak akkor van mit jelölni.
-  const nowVisible =
-    nowMin !== null &&
-    nowMin >= DUAL_DAY_START_MIN &&
-    nowMin <= DUAL_DAY_END_MIN;
-  const elapsed = nowVisible ? nowMin - DUAL_DAY_START_MIN : 0;
-  const fraction = elapsed / span;
+  const span = DUAL_END_SEC - DUAL_START_SEC;
+  const phase =
+    nowSec === null
+      ? "other"
+      : nowSec < DUAL_START_SEC
+        ? "before"
+        : nowSec >= DUAL_END_SEC
+          ? "after"
+          : "live";
+  const elapsedSec =
+    nowSec === null ? 0 : Math.min(Math.max(nowSec - DUAL_START_SEC, 0), span);
+  const remainingSec = nowSec === null ? span : DUAL_END_SEC - nowSec;
+  //* A vonalzó és a kitöltés ugyanarra a hányadra ül: egy szám, két elem.
+  const fraction = phase === "other" ? 0 : elapsedSec / span;
+  const counting = phase === "live" || phase === "before";
+  const countdown = countdownLabel(
+    phase === "before" ? DUAL_START_SEC - (nowSec ?? 0) : remainingSec,
+  );
+  const finalStretch =
+    phase === "live" && remainingSec <= DUAL_FINAL_STRETCH_SEC;
+  //! „7:20" EGY ÓRAREND-ALKALMAZÁSBAN IDŐPONTNAK OLVASÓDIK. A `countdownLabel`
+  //! az utolsó tíz percben m:ss-re vált — a `NowBlock`-ban ez egyértelmű, mert
+  //! ott a futó óra ADATAI mellett áll —, itt viszont 36 képpontos számként a
+  //! reggeli 7:20-cal téveszthető össze. A másodperc ezért kisebb súlyt kap a
+  //! percnél, és a szám mögé kiül a „perc": az alak marad élő, az olvasat nem
+  //! csúszik el.
+  const [bigValue, bigTail] = countdown.value.includes(":")
+    ? [
+        countdown.value.slice(0, countdown.value.indexOf(":")),
+        countdown.value.slice(countdown.value.indexOf(":")),
+      ]
+    : [countdown.value, null];
+  const bigUnit = bigTail ? "perc" : countdown.unit;
+  //* A lezárt nap NEM számol vissza: ott a nagy elem a munkanap két végpontja,
+  //* a `countdownLabel` maradéka („0:00") nem lóghat a szám végére.
+
+  //! A FEJLÉC MÁR KIMONDTA, HOGY HOL VAGY („Ma duális nap — a munkahelyen
+  //! vagy"), a hero címkéje ezért nem ismételheti meg ugyanazt két sorral
+  //! lejjebb. Amit ez a blokk hozzátesz, az a MUNKANAP mint mennyiség: a
+  //! címke és a nagy szám együtt egyetlen mondat.
+  const lead =
+    phase === "live"
+      ? "A munkanapodból"
+      : phase === "after"
+        ? "A munkanapod véget ért"
+        : "A munkanapod";
 
   return (
-    <div className={cn("select-none", className)}>
-      <div className="relative flex h-12 w-full items-center justify-center overflow-hidden rounded-lg border border-primary/35 bg-primary/12 px-3">
-        {nowVisible && (
-          //* AZ ELTELT RÉSZ, HALKAN. A vonalzó a pont, ez a mennyiség — épp
-          //* csak annyival sötétebb a sáv alapjánál, hogy a szem lássa a
-          //* határt, de ne váljon második, hangos felületté.
-          <span
-            className="absolute inset-y-0 left-0 bg-primary/15"
-            style={{ width: `${fraction * 100}%` }}
-            aria-hidden
-          />
-        )}
-        <span className="relative flex min-w-0 flex-col items-center leading-tight">
-          <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-primary">
-            <Briefcase className="size-4 shrink-0" aria-hidden />
-            <span className="truncate">Duális képzés</span>
-          </span>
-          {nowVisible && (
-            //* A KÉT SZÁM A BLOKKON BELÜL, a címke alatt: a munkanap egyetlen
-            //* eleme, tehát az róla szóló adat is benne áll, nem mellette.
-            <span className="mt-0.5 max-w-full truncate text-[11px] font-bold tabular-nums text-primary/85">
-              {gapLabel(elapsed)} telt el ·{" "}
-              {gapLabel(DUAL_DAY_END_MIN - nowMin)} van hátra
+    <section
+      className={cn(
+        "relative overflow-hidden rounded-2xl border border-hero-foreground/15 bg-hero-foreground/[0.06] p-5 select-none sm:p-6",
+        className,
+      )}
+      aria-label="Duális nap"
+    >
+      {/*//! EGY MONDAT A KÉPERNYŐOLVASÓNAK. A nagy szám és a sáv ugyanazt a két
+          //! adatot vágja szét látvánnyá; felolvasva ez egy mondat. */}
+      <p className="sr-only">
+        Duális nap: a munkanapod{" "}
+        {rangeLabel(DUAL_DAY_START_MIN, DUAL_DAY_END_MIN)} között tart.
+        {phase === "live" &&
+          ` Eddig ${durationLabel(Math.round(elapsedSec / 60))} telt el, ${durationLabel(Math.round(remainingSec / 60))} van hátra.`}
+        {phase === "before" &&
+          ` ${durationLabel(Math.round((DUAL_START_SEC - (nowSec ?? 0)) / 60))} múlva kezdődik.`}
+        {phase === "after" && " A munkanapod véget ért."}
+      </p>
+
+      <p className="text-sm font-medium text-hero-foreground/70">{lead}</p>
+
+      {/*//! A LEGNAGYOBB ELEM AZ IDŐ — ugyanaz a döntés, mint a `NowBlock`-ban:
+          //! aki ide néz, tudja, hol van; azt akarja tudni, MEDDIG. */}
+      <p className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span
+          className={cn(
+            "text-4xl font-bold tracking-tight tabular-nums sm:text-5xl",
+            finalStretch && "text-brand",
+          )}
+        >
+          {counting
+            ? bigValue
+            : rangeLabel(DUAL_DAY_START_MIN, DUAL_DAY_END_MIN)}
+          {counting && bigTail && (
+            <span className="text-2xl font-semibold opacity-70 sm:text-3xl">
+              {bigTail}
             </span>
           )}
         </span>
-        {nowVisible && (
-          //* A nap egyetlen márkaszínű eleme: hol tartunk most.
-          <span
-            className="absolute inset-y-[-3px] z-10 w-0.5 -translate-x-1/2 rounded-full bg-brand"
-            style={{ left: `${fraction * 100}%` }}
+        {counting && bigUnit && (
+          <span className="text-xl font-semibold text-hero-foreground/75 sm:text-2xl">
+            {bigUnit}
+          </span>
+        )}
+        <span className="text-sm text-hero-foreground/60">
+          {phase === "live"
+            ? "van hátra"
+            : phase === "before"
+              ? "múlva kezdődik"
+              : phase === "after"
+                ? ""
+                : "tart"}
+        </span>
+      </p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-hero-foreground/70">
+        <span className="flex items-center gap-1.5">
+          <Briefcase
+            className="size-4 shrink-0 text-hero-foreground/45"
             aria-hidden
           />
+          Duális képzés
+        </span>
+        {counting && (
+          <span className="flex items-center gap-1.5 tabular-nums">
+            <CalendarClock
+              className="size-4 shrink-0 text-hero-foreground/45"
+              aria-hidden
+            />
+            {rangeLabel(DUAL_DAY_START_MIN, DUAL_DAY_END_MIN)}
+          </span>
         )}
       </div>
-      <div className="mt-1 flex justify-between text-[11px] font-medium tabular-nums text-muted-foreground">
-        <time dateTime={minLabel(DUAL_DAY_START_MIN)}>
-          {minLabel(DUAL_DAY_START_MIN)}
-        </time>
-        <time dateTime={minLabel(DUAL_DAY_END_MIN)}>
-          {minLabel(DUAL_DAY_END_MIN)}
-        </time>
+
+      {/*//! A MŰSZER. Nem a hero dísze: ez mondja meg, hogy a hátralévő idő a
+          //! nap MELYIK pontján áll — délelőtt van-e még, vagy a délutánban. */}
+      <div className="mt-5" aria-hidden>
+        <div className="relative">
+          <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-hero-foreground/10">
+            {phase !== "other" && (
+              <span
+                className="tt-rail-fill absolute inset-0 rounded-full bg-primary/55"
+                style={{ "--tt-f": fraction } as React.CSSProperties}
+              />
+            )}
+            {/*//! A VEZETŐ ÉL MELEGEDIK — DE CSAK ÉLŐ NAPON. Az eltelt idő kékben
+                //! áll; a legutolsó perce viszont már a „most"-hoz tartozik,
+                //! ezért fut át a kitöltés vége a márkapirosba, és ott
+                //! találkozik a vonalzóval. Egy lezárt munkanapon nincs mit
+                //! melegíteni: ott a sáv végig hűvös marad. */}
+            {phase === "live" && (
+              <span
+                className="tt-rail-head absolute inset-y-0 left-0 w-full"
+                style={
+                  { "--tt-p": `${fraction * 100}%` } as React.CSSProperties
+                }
+              >
+                <span className="absolute inset-y-0 right-full w-8 bg-gradient-to-r from-transparent to-brand/60" />
+              </span>
+            )}
+            {/*//! AZ OSZTÁS A KITÖLTÉS FÖLÖTT ÁLL. Alatta a betelt órákat elnyelné
+                //! a kék — pont ott, ahol a leolvasás számít: a sáv
+                //! MÉRHETŐSÉGE azon múlik, hogy a bevésés a betelt szakaszon is
+                //! látszik. */}
+            {DUAL_TICK_MINS.map((m) => (
+              <span
+                key={m}
+                className="absolute inset-y-0 w-px bg-background/45"
+                style={{
+                  left: `${((m - DUAL_DAY_START_MIN) / (DUAL_DAY_END_MIN - DUAL_DAY_START_MIN)) * 100}%`,
+                }}
+              />
+            ))}
+          </div>
+          {phase === "live" && (
+            //* A blokk egyetlen piros eleme: hol tartunk most. A sávon KÍVÜL
+            //* ül, mert túllóg rajta — a levágás csak a melegedő élre igaz.
+            <span
+              className="tt-rail-head absolute inset-y-0 left-0 w-full"
+              style={{ "--tt-p": `${fraction * 100}%` } as React.CSSProperties}
+            >
+              <span className="absolute inset-y-[-4px] left-0 w-0.5 -translate-x-1/2 rounded-full bg-brand" />
+            </span>
+          )}
+        </div>
+        <div className="mt-1.5 flex justify-between gap-2 text-[11px] font-medium tabular-nums text-hero-foreground/50">
+          <span>{minLabel(DUAL_DAY_START_MIN)}</span>
+          {phase === "live" && (
+            <span className="min-w-0 truncate font-bold text-hero-foreground/80">
+              {gapLabel(elapsedSec / 60)} telt el
+            </span>
+          )}
+          <span>{minLabel(DUAL_DAY_END_MIN)}</span>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 

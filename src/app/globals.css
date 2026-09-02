@@ -305,6 +305,34 @@
     animation: tt-drain var(--tt-dur, 45s) linear var(--tt-elapsed, 0s) both;
   }
 
+  /*//! A DUÁLIS MŰSZER SÁVJA. A százalék CSS-VÁLTOZÓBAN érkezik, nem `width`-ként:
+      //! egy inline `transform` erősebb minden osztálynál, és akkor a kiinduló
+      //! állapotot (`@starting-style`) semmi nem tudná felülírni. Így viszont a
+      //! blokk megjelenésekor a sáv EGYSZER végigfut 0-tól a mai állásig — a
+      //! munkanap eddig eltelt része megrajzolódik —, és utána ugyanez az
+      //! átmenet csúsztatja tovább percenként. Se szélesség, se `left`: a
+      //! mozgás végig a kompozitoron marad. */
+  .tt-rail-fill {
+    transform: scaleX(var(--tt-f, 0));
+    transform-origin: left center;
+    transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  /*//* A vezető él (a vonalzó és az előtte melegedő sáv) EGY elemen ül, és a
+      //* saját szélességének százalékával tolódik: így a sáv és a jelölő
+      //* ugyanabból a hányadból számol, de egyik sem méretez újra semmit. */
+  .tt-rail-head {
+    transform: translateX(var(--tt-p, 0%));
+    transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @starting-style {
+    .tt-rail-fill {
+      transform: scaleX(0);
+    }
+    .tt-rail-head {
+      transform: translateX(0%);
+    }
+  }
+
   ::view-transition-old(tt-grid),
   ::view-transition-new(tt-grid) {
     animation-duration: 320ms;
@@ -414,6 +442,10 @@
   @media (prefers-reduced-motion: reduce) {
     .animate-tt-drain {
       animation: none;
+    }
+    .tt-rail-fill,
+    .tt-rail-head {
+      transition: none;
     }
     ::view-transition-group(*),
     ::view-transition-old(*),
