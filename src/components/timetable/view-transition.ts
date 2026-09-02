@@ -22,16 +22,33 @@ function start(callback: () => void): ViewTransition | null {
 
 export function weekTransition(
   commit: () => void,
-  options: { enabled: boolean; dir: "next" | "prev" | null },
+  options: {
+    enabled: boolean;
+    dir: "next" | "prev" | null;
+    //! IGAZÍTÁS A PILLANATKÉP ELŐTT. A view transition az „új" képet a
+    //! visszahívás UTÁNI állapotról készíti — ami tehát a friss DOM-on állít
+    //! (görgetés-pozíció), annak MÉG ITT kell lefutnia. Egy képkockával
+    //! később állítva a nézet előbb a régi helyén jelenne meg, majd
+    //! odébb rándulna: pont az az ugrás, amit az átmenet el akar tüntetni.
+    after?: () => void;
+  },
 ): void {
   if (!options.enabled || !supportsViewTransition()) {
-    commit();
+    //* Átmenet nélkül is szinkronban kell a commit, ha van mit igazítani
+    //* utána — különben az igazítás még a RÉGI DOM-ot mérné.
+    if (options.after) {
+      flushSync(commit);
+      options.after();
+    } else {
+      commit();
+    }
     return;
   }
   const root = document.documentElement;
   if (options.dir) root.dataset.ttDir = options.dir;
   const transition = start(() => {
     flushSync(commit);
+    options.after?.();
   });
   if (!transition) {
     delete root.dataset.ttDir;

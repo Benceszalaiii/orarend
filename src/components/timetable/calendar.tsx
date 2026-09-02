@@ -132,6 +132,34 @@ const ONE_DAY_MAX = 560;
 //* x-en állna.
 const MAX_SHELL = SITE_BAR_MAX;
 
+//! ─── A HÉT VÉGE NEM FAL ──────────────────────────────────────────────────
+//! Telefonon a napok egyetlen szalagon állnak, és a hüvelykujj végiglapozza
+//! őket — péntekig, ahol eddig megállt a világ. Pedig péntek után hétfő jön:
+//! aki a hetet olvassa, annak a héthatár ugyanolyan lépés, mint a napé, csak
+//! az eszköztár nyilaival lehetett megtenni. A szalag SZÉLSŐ napján túlhúzva
+//! ezért a rács rugalmasan enged, a keletkező résbe pedig belóg a szomszéd
+//! hét szélső napja; elengedve az a nap jön be. Visszafelé ugyanez: a hétfőn
+//! túlhúzva az előző hét péntekje.
+//* A gumiszalag legnagyobb kitérése (px) — efölött a húzás már nem mozdít.
+const EDGE_PULL_MAX = 92;
+//* Ennyi kitérés fölött enged a hét: itt a mozdulat már szándék, nem rezzenés.
+const EDGE_PULL_TRIGGER = 54;
+//! AKTIVÁLÁSI KÜSZÖB. Ennyi elmozdulásig nem döntünk irányt: a függőleges
+//! görgetés első képpontjai is hoznak pár képpont vízszintes elcsúszást, és
+//! abból nem lehet hetet lapozni. A kitérés is innen indul, nem a koppintástól
+//! — különben a rács azonnal megugrana az ujj alatt.
+const EDGE_PULL_ACTIVATE = 10;
+//! ENNYI FÜGGŐLEGES ELMOZDULÁS UTÁN MÁR NEM A MIÉNK a mozdulat. Az ujj menet
+//! közben is elkanyarodhat: ilyenkor a hét visszaenged, és a lap görget tovább.
+const EDGE_PULL_ABORT = 44;
+//* A résbe belógó szomszéd nap sávjának szélessége (px).
+const EDGE_HINT_WIDTH = 60;
+//! MEDDIG ÉL AZ ELŐRE LEKÉRT HÉT. A szomszéd hetet a szélső napra érve
+//! előre lekérjük, hogy a mozdulat ne hálózatot várjon — de az órarend menet
+//! közben is változhat (helyettesítés, elmaradt óra), ezért a példány nem él
+//! tovább pár percnél.
+const WEEK_PREFETCH_TTL = 5 * 60_000;
+
 //! A layout-effekt a szerveren nem futtatható (és figyelmeztet is): ott az
 //! effekt-változat áll be, ami sosem fut le renderelés közben.
 const useIsoLayoutEffect =
@@ -367,6 +395,67 @@ function DayNotesButton({ day }: { day: Day }) {
       </PopoverContent>
     </Popover>
   );
+}
+
+//* ---------------------------------------------------------------------------
+//* A szomszéd hét szélső napja a héthatáron
+//* ---------------------------------------------------------------------------
+//! NEM JELZÉS ÉS NEM BUBORÉK: EZ A NAP, AHOVA A MOZDULAT VISZ. Ott áll, ahol a
+//! szalag folytatódna, és pontosan annyit mozdul, amennyit a rács enged — így
+//! nem „megjelenik", hanem BEJÖN, mint a következő oszlop. Ki is van írva,
+//! melyik nap és mikor: a diák a mozdulat közben dönti el, hogy tényleg oda
+//! akar-e menni, és a félbehagyott húzással vissza is megy vele.
+//*
+//* A helyzetét és az átlátszóságát a mozdulat írja (lásd „A HÉTHATÁR
+//* ÁTHÚZÁSA"), ezért a nyugalmi állapot itt is stílusban van: a kereten kívül,
+//* láthatatlanul.
+function WeekEdgeHint({
+  ref,
+  side,
+  dayShort,
+  dateLabel,
+}: {
+  ref: React.Ref<HTMLDivElement>;
+  side: "prev" | "next";
+  dayShort: string;
+  dateLabel: string;
+}) {
+  const Chevron = side === "next" ? ChevronRight : ChevronLeft;
+  return (
+    <div
+      ref={ref}
+      aria-hidden
+      //* `group`: a „már elenged" állapotot a mozdulat a külső elemre írja
+      //* (`data-armed`), a színek pedig belül követik.
+      //! A VISSZAFELÉ ÁLLÓ SÁV AZ IDŐSÁV MÖGÜL BÚJIK ELŐ (`z-10`, a `z-20`-as
+      //! idősáv alatt), és nem a keret szélétől, hanem az idősáv MELLŐL indul:
+      //! a napok is ott kezdődnek, tehát a szomszéd nap is onnan jöhet. Előre
+      //! haladva nincs mi mögé bújni — az a sáv a keret jobb széléről érkezik.
+      className={cn(
+        "group pointer-events-none absolute inset-y-0 flex flex-col items-center gap-1 border-border bg-card pt-3 print:hidden",
+        side === "next" ? "right-0 z-30 border-l" : "z-10 border-r",
+      )}
+      style={{
+        width: EDGE_HINT_WIDTH,
+        left: side === "prev" ? GUTTER : undefined,
+        transform: `translateX(${side === "next" ? EDGE_HINT_WIDTH : -EDGE_HINT_WIDTH}px)`,
+        opacity: 0,
+      }}
+    >
+      <span className="text-[13px] font-semibold leading-tight text-muted-strong transition-colors group-data-[armed=true]:text-foreground">
+        {dayShort}
+      </span>
+      <span className="text-[10px] leading-tight tabular-nums text-muted-foreground">
+        {dateLabel}
+      </span>
+      <Chevron className="mt-1 size-4 text-muted-foreground/70 transition-colors group-data-[armed=true]:text-primary" />
+    </div>
+  );
+}
+
+//* A szomszéd nap dátuma a nap-sávban megszokott alakban („09.15.").
+function edgeDateLabel(dateKey: string): string {
+  return `${dateKey.slice(5).replace("-", ".")}.`;
 }
 
 //* ---------------------------------------------------------------------------
@@ -611,6 +700,56 @@ export function TimetableCalendar({
     return () => clearInterval(id);
   }, []);
 
+  //! ─── EGY HÉT LEKÉRÉSE — ELŐRE IS ────────────────────────────────────────
+  //! A héthatáron áthúzott mozdulat akkor EGY SZALAG, ha a következő hét már
+  //! ott van, mire az ujj elengedi. A szomszéd hetet ezért a szélső napra érve
+  //! előre lekérjük (lásd lentebb), és a lapozás ugyanezt az ígéretet találja
+  //! itt: nem hálózatot vár, csak kirajzol.
+  //!
+  //! CSAK SAJÁT BETÖLTŐ NÉLKÜL. A `/dualis` `loadView`-ja nem hálózatból
+  //! dolgozik (a már letöltött hét nyers adatából állít tervet), tehát nincs
+  //! mit előre kérni — ráadásul a terv menet közben változik, egy korábban
+  //! eltett példány elavulna. Ott ez a függvény átereszt.
+  const weekCache = useRef(
+    new Map<string, { at: number; view: Promise<TimetableView> }>(),
+  );
+  const requestWeek = useCallback(
+    (cls: string, week: string): Promise<TimetableView> => {
+      if (loadView) return loadView(week);
+      const key = `${cls}|${week}`;
+      const cached = weekCache.current.get(key);
+      if (cached && Date.now() - cached.at < WEEK_PREFETCH_TTL) {
+        return cached.view;
+      }
+      const view = buildTimetableView({
+        userClass: cls || null,
+        weekStart: week,
+        classOverride: cls || undefined,
+      }).then((res) => {
+        //! A HIBÁS VÁLASZT NEM TESSZÜK EL. A `buildTimetableView` a hálózati
+        //! hibát is nevesített nézetként adja vissza — eltéve az „Újra" gomb
+        //! ugyanazt a hibát kapná meg, hálózat nélkül, örökre.
+        if (!res.ok) weekCache.current.delete(key);
+        return res;
+      });
+      //* A kivétel a hívónál csapódik le (`load`); itt csak azért kezeljük le,
+      //* hogy az előre kérésből ne legyen gazdátlan elutasítás.
+      view.catch(() => weekCache.current.delete(key));
+      weekCache.current.set(key, { at: Date.now(), view });
+      //* A szomszédoknál többet nincs értelme tartani.
+      if (weekCache.current.size > 4) {
+        const oldest = weekCache.current.keys().next().value;
+        if (oldest !== undefined) weekCache.current.delete(oldest);
+      }
+      return view;
+    },
+    [loadView],
+  );
+
+  //* A héthatáron átérkező hét igazítása (lásd `landRef.current` lentebb, a
+  //* görgetődoboz mellett) — a `load` már itt hivatkozik rá.
+  const landRef = useRef<(edge: "start" | "end") => void>(() => {});
+
   //! A LAPOZÁS IRÁNYA vizuális információ: a rács arra csúszik ki, amerre mész.
   //! Osztályváltásnál nincs irány (`null`) — ott a rács tartalma cserélődik, nem
   //! a helye, tehát áttűnés a helyes mozdulat.
@@ -618,25 +757,29 @@ export function TimetableCalendar({
     nextWeek: string,
     classOverride?: string,
     dir: "next" | "prev" | null = null,
+    //! HOVA ÉRKEZZEN a hét vízszintesen. A nyilak és a naptár a hét TARTALMÁT
+    //! cserélik — ott a görgetés ott marad, ahol volt (`null`), különben a
+    //! csütörtököt néző diák minden lapozásnál a hétfőn kötne ki. A héthatáron
+    //! áthúzott mozdulat viszont EGY NAPOT lép: péntek után a következő hét
+    //! HÉTFŐJE jön, nem az öt nappal odébb eső péntekje.
+    land: "start" | "end" | null = null,
   ) => {
     const cls = classOverride ?? selectedClass;
     setAnimateGrid(true);
     setPending(true);
     try {
-      const res = loadView
-        ? await loadView(nextWeek)
-        : await buildTimetableView({
-            userClass: cls || null,
-            weekStart: nextWeek,
-            classOverride: cls || undefined,
-          });
+      const res = await requestWeek(cls, nextWeek);
       const next = res.resolvedClass?.short ?? cls;
       weekTransition(
         () => {
           setView(res);
           setSelectedClass(next);
         },
-        { enabled: canMorph, dir },
+        {
+          enabled: canMorph,
+          dir,
+          after: land ? () => landRef.current(land) : undefined,
+        },
       );
       //* A választást csak SIKERES betöltés után jegyezzük meg, hogy a
       //* következő megnyitás ne a `PUBLIC_DEFAULT_CLASS`-ra essen vissza.
@@ -685,6 +828,27 @@ export function TimetableCalendar({
       undefined,
       delta > 0 ? "next" : "prev",
     );
+
+  //! A HÉTHATÁR ÁTLÉPÉSE UGYANEZ A LÉPÉS, MÁS ÉRKEZÉSSEL. A nyíl a hetet
+  //! cseréli, a mozdulat viszont a szalagon megy tovább: előre a hét elejére,
+  //! visszafelé a végére érkezik.
+  //* A figyelő EGYSZER kerül fel a görgetődobozra, a hét viszont minden
+  //* renderben friss — a ref-en át hívjuk (ugyanaz a minta, mint a
+  //* gyorsbillentyűknél).
+  const edgeStepRef = useRef<(dir: 1 | -1) => void>(() => {});
+  edgeStepRef.current = (dir: 1 | -1) => {
+    if (pending) return;
+    load(
+      addDaysKey(view.weekStart, dir * 7),
+      undefined,
+      dir > 0 ? "next" : "prev",
+      dir > 0 ? "start" : "end",
+    );
+  };
+  //* A mozdulat kezelője a `pending`-et is a ref-ből olvassa: a figyelő nem
+  //* iratkozhat fel újra minden betöltésnél.
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
 
   const { days, periods, events, weekStart } = view;
 
@@ -1001,6 +1165,12 @@ export function TimetableCalendar({
   const dayRefs = useRef<(HTMLDivElement | null)[]>([]);
   //* A rácson KÍVÜLI nap-fejléc sínje — a rács vízszintes görgetését tükrözi.
   const headerTrackRef = useRef<HTMLDivElement>(null);
+  //* A héthatáron belógó szomszéd nap sávjai (lásd `WeekEdgeHint`).
+  const edgePrevRef = useRef<HTMLDivElement>(null);
+  const edgeNextRef = useRef<HTMLDivElement>(null);
+  //* A gumiszalag pillanatnyi kitérése — a fejléc sínje ugyanennyivel mozdul,
+  //* hogy a nap-fejléc ne váljon el a saját oszlopától húzás közben.
+  const edgeOffsetRef = useRef(0);
   const [activeDay, setActiveDay] = useState(0);
 
   //! MELYIK NAP LÁTSZIK — két úton, szándékosan.
@@ -1050,7 +1220,7 @@ export function TimetableCalendar({
     const container = scrollRef.current;
     const track = headerTrackRef.current;
     if (!container || !track) return;
-    track.style.transform = `translateX(${-container.scrollLeft}px)`;
+    track.style.transform = `translateX(${edgeOffsetRef.current - container.scrollLeft}px)`;
   }, []);
   const handleScroll = useCallback(() => {
     if (scrollFrame.current !== null) return;
@@ -1117,6 +1287,193 @@ export function TimetableCalendar({
     };
   }, [variant, vScroll]);
 
+  //! ─── A HÉTHATÁR ÁTHÚZÁSA ─────────────────────────────────────────────────
+  //! A szalag SZÉLÉN a görgetés nem visz tovább — de a hét igen. Ez a mozdulat
+  //! ezért csak ott indul, ahol a natív lapozásnak már úgyis vége van: a
+  //! doboz a saját határán áll, és az ujj kifelé húz. Aki a hét közepéről
+  //! indul, az napokat lapoz, ahogy eddig — a két gesztus sosem verseng.
+  //!
+  //! A FIGYELŐ PASSZÍV, ÉS EZ SZÁNDÉKOS. Egy `preventDefault`-ot igénylő
+  //! (nem passzív) `touchmove` figyelővel a böngésző MINDEN görgetéskor
+  //! megvárná a fő szálat, mielőtt egyáltalán elmozdítaná a rácsot — vagyis a
+  //! napi lapozás simasága fizetne a héthatárért. Cserébe egy ferde húzás a
+  //! lapot is görgetheti kicsit; ez a rosszabb esetben is csak pár képpont,
+  //! és az irány-döntés (`EDGE_PULL_ABORT`) úgyis elengedi a mozdulatot,
+  //! amint tényleg függőlegessé válik.
+  //!
+  //! A HELYI VISSZAPATTANÁST KIKAPCSOLJUK (`overscroll-x-none` a dobozon):
+  //! különben a böngésző SAJÁT gumiszalagja is mozdítaná a rácsot, a miénk
+  //! tetejébe. Mellékhaszon: a bal szélről induló „vissza" navigációt sem
+  //! indítja el a lapozás.
+  useEffect(() => {
+    if (variant !== "fullscreen" || !paging) return;
+    const el = scrollRef.current;
+    if (!el) return;
+
+    let tracking = false;
+    let engaged = false;
+    let dir: 1 | -1 = 1;
+    let pull = 0;
+    let startX = 0;
+    let startY = 0;
+    let settling: number | undefined;
+    const EASE_CSS = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+    const hintOf = (d: 1 | -1) =>
+      d === 1 ? edgeNextRef.current : edgePrevRef.current;
+
+    const pinGutter = () => {
+      const gutter = el.querySelector<HTMLElement>("[data-tt-gutter]");
+      if (!gutter) return;
+      gutter.style.transform = edgeOffsetRef.current
+        ? `translateX(${-edgeOffsetRef.current}px)`
+        : "";
+    };
+
+    const paint = () => {
+      //! GUMISZALAG, NEM CSÚSZKA: a kitérés telítődik a húzással. Enélkül a hét
+      //! korlátlanul elcsúszna az ujj alatt, majd a mozdulat végén nagyot
+      //! rándulna vissza — a lapozás pont ettől érződik olcsónak.
+      const off = EDGE_PULL_MAX * (1 - Math.exp(-pull / EDGE_PULL_MAX));
+      edgeOffsetRef.current = -dir * off;
+      el.style.transform = `translate3d(${edgeOffsetRef.current}px, 0, 0)`;
+      //! AZ IDŐSÁV NEM MOZDUL A HÚZÁSSAL. A dobozt eltolva a `sticky left-0`
+      //! idősáv is vele menne — előre húzva kicsúszna a keretből, vagyis a
+      //! mozdulat közben pont az az adat tűnne el, amihez a napot olvassuk. A
+      //! sáv ezért ugyanannyival vissza is kap: a NAPOK csúsznak alatta, ő áll.
+      //! (Visszafelé húzva ez tartja meg a rést is a sáv MELLETT — a szomszéd
+      //! nap oda jön be, ahol a napok amúgy is kezdődnek.)
+      pinGutter();
+      pinLeft();
+      const node = hintOf(dir);
+      if (!node) return;
+      //* A szomszéd nap a keletkező RÉSBE csúszik be: a rács kitérése és a nap
+      //* belógása ugyanaz a szám, ezért mozdul a kettő együtt.
+      node.style.transform = `translateX(${dir * (EDGE_HINT_WIDTH - off)}px)`;
+      node.style.opacity = "1";
+      node.dataset.armed = pull >= EDGE_PULL_TRIGGER ? "true" : "false";
+    };
+
+    const settle = (d: 1 | -1) => {
+      window.clearTimeout(settling);
+      const ms = reduce ? 0 : 260;
+      const ease = ms ? `transform ${ms}ms ${EASE_CSS}` : "";
+      const node = hintOf(d);
+      el.style.transition = ease;
+      el.style.transform = "";
+      edgeOffsetRef.current = 0;
+      const gutter = el.querySelector<HTMLElement>("[data-tt-gutter]");
+      if (gutter) gutter.style.transition = ease;
+      pinGutter();
+      const track = headerTrackRef.current;
+      if (track) track.style.transition = ease;
+      pinLeft();
+      if (node) {
+        node.style.transition = ms
+          ? `${ease}, opacity 140ms linear ${ms - 140}ms`
+          : "";
+        node.style.transform = `translateX(${d * EDGE_HINT_WIDTH}px)`;
+        node.style.opacity = "0";
+        node.dataset.armed = "false";
+      }
+      settling = window.setTimeout(() => {
+        el.style.transition = "";
+        if (gutter) gutter.style.transition = "";
+        if (track) track.style.transition = "";
+        if (node) node.style.transition = "";
+      }, ms + 60);
+    };
+
+    const onStart = (event: TouchEvent) => {
+      tracking = false;
+      engaged = false;
+      pull = 0;
+      if (event.touches.length !== 1 || pendingRef.current) return;
+      //* Nincs mit lapozni: a hét kifér, tehát nincs héthatár sem.
+      if (el.scrollWidth - el.clientWidth <= 0) return;
+      startX = event.touches[0].clientX;
+      startY = event.touches[0].clientY;
+      tracking = true;
+    };
+
+    const onMove = (event: TouchEvent) => {
+      if (!tracking) return;
+      const touch = event.touches[0];
+      if (!touch) return;
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      if (!engaged) {
+        //* A függőleges mozdulat a lapé, nem a hété.
+        if (Math.abs(dy) > Math.abs(dx)) {
+          tracking = false;
+          return;
+        }
+        if (Math.abs(dx) < EDGE_PULL_ACTIVATE) return;
+        const max = el.scrollWidth - el.clientWidth;
+        //! CSAK A SZALAG VÉGÉRŐL, ÉS CSAK KIFELÉ. A határt a mozdulat
+        //! MEGINDULÁSAKOR nézzük: aki a hét közepéről húzta idáig, annak ez
+        //! még a napi lapozása — a héthatár a következő mozdulattól nyílik.
+        const outward = dx < 0 ? el.scrollLeft >= max - 1 : el.scrollLeft <= 1;
+        if (!outward) {
+          tracking = false;
+          return;
+        }
+        dir = dx < 0 ? 1 : -1;
+        engaged = true;
+        window.clearTimeout(settling);
+        el.style.transition = "";
+        const gutter = el.querySelector<HTMLElement>("[data-tt-gutter]");
+        if (gutter) gutter.style.transition = "";
+        const track = headerTrackRef.current;
+        if (track) track.style.transition = "";
+        const node = hintOf(dir);
+        if (node) node.style.transition = "";
+      }
+      //* Menet közben elkanyarodó ujj: a hét visszaenged, a lap görget tovább.
+      if (Math.abs(dy) > EDGE_PULL_ABORT) {
+        const d = dir;
+        tracking = false;
+        engaged = false;
+        pull = 0;
+        settle(d);
+        return;
+      }
+      pull = Math.max(0, (dir === 1 ? -dx : dx) - EDGE_PULL_ACTIVATE);
+      paint();
+    };
+
+    const onEnd = () => {
+      if (!engaged) {
+        tracking = false;
+        return;
+      }
+      const commit = pull >= EDGE_PULL_TRIGGER && !pendingRef.current;
+      const d = dir;
+      tracking = false;
+      engaged = false;
+      pull = 0;
+      //* A gumiszalag azonnal elenged: innentől a hét-átmenet viszi a mozdulatot.
+      settle(d);
+      if (commit) edgeStepRef.current(d);
+    };
+
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: true });
+    el.addEventListener("touchend", onEnd, { passive: true });
+    el.addEventListener("touchcancel", onEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+      window.clearTimeout(settling);
+      el.style.transition = "";
+      el.style.transform = "";
+      edgeOffsetRef.current = 0;
+      pinGutter();
+    };
+  }, [variant, paging, reduce, pinLeft]);
+
   const goToDay = (index: number) => {
     const container = scrollRef.current;
     const el = dayRefs.current[index];
@@ -1135,6 +1492,30 @@ export function TimetableCalendar({
     if (!container || !el) return;
     if (container.scrollWidth <= container.clientWidth) return;
     container.scrollTo({ left: el.offsetLeft - GUTTER, behavior: "auto" });
+  };
+
+  //! ─── HOVA ÉRKEZIK A HÉTHATÁRON ÁTLÉPETT MOZDULAT ─────────────────────────
+  //! Előre lépve a hét ELEJÉRE (hétfő), visszafelé a VÉGÉRE (péntek): a szalag
+  //! ott megy tovább, ahol az ujj elhagyta. Ez görgetés-pozíciót ÁLLÍT, nem
+  //! animál — a mozdulatot a hét-átmenet viszi, és ez a függvény még annak a
+  //! pillanatképe ELŐTT fut le (lásd `weekTransition` `after`).
+  landRef.current = (edge: "start" | "end") => {
+    const container = scrollRef.current;
+    if (!container) return;
+    //* A FRISS DOM napjai közül a szélső; üres hétre nincs hova érkezni.
+    const index =
+      edge === "start"
+        ? dayRefs.current.findIndex((el) => el !== null)
+        : dayRefs.current.reduce((acc, el, i) => (el ? i : acc), -1);
+    const el = index < 0 ? null : dayRefs.current[index];
+    if (!el || container.scrollWidth <= container.clientWidth) return;
+    container.scrollLeft = el.offsetLeft - GUTTER;
+    //! A „ma"-ugrás EGYSZERI, de a hatása az új hét napjaira újra lefutna — és
+    //! a mai napra rántaná a lapot arról, ahova a mozdulat vitte. Aki a
+    //! héthatárt átlépte, az megmondta, melyik napot akarja látni.
+    jumpedRef.current = true;
+    activeDayRef.current = index;
+    setActiveDay(index);
   };
 
   //! Mobilon a mai napra ugrunk induláskor — a diák a MAI órarendjéért nyitja
@@ -1164,6 +1545,39 @@ export function TimetableCalendar({
     activeDayRef.current = index;
     setActiveDay(index);
   }, [variant, gridDays, colWidth]);
+
+  //! ─── A SZOMSZÉD HÉT AKKOR KELL, AMIKOR A SZÉLÉRE ÉRSZ ────────────────────
+  //! Nem minden hét megnyitásakor kérünk elő kettőt: az HÁROMSZOROSÁRA hizlalná
+  //! a forgalmat azon a forráson, amit egy iskola tart fenn. A héthatár akkor
+  //! válik elérhetővé, amikor a szalag SZÉLSŐ napján állsz — pontosan ekkor, és
+  //! csak abba az egy irányba kérjük le a szomszédot. Jellemzően még azelőtt
+  //! megérkezik, hogy a mozdulat elindulna.
+  useEffect(() => {
+    //* Saját betöltővel nincs mit előre kérni (lásd `requestWeek`).
+    if (variant !== "fullscreen" || !paging || pending || loadView) return;
+    const last = gridDays.length - 1;
+    if (last < 1) return;
+    const dir = activeDay <= 0 ? -1 : activeDay >= last ? 1 : 0;
+    if (dir === 0) return;
+    //* Lapozás közben a szélső nap átmenetileg is „aktív" lehet — a késleltetés
+    //* miatt csak az kér elő, aki tényleg ott állt meg.
+    const id = window.setTimeout(() => {
+      requestWeek(selectedClass, addDaysKey(weekStart, dir * 7)).catch(
+        () => undefined,
+      );
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [
+    variant,
+    paging,
+    pending,
+    loadView,
+    activeDay,
+    gridDays.length,
+    selectedClass,
+    weekStart,
+    requestWeek,
+  ]);
 
   //* Új hét/osztály betöltése után a keret újra renderelődhet görgetett állapotban:
   //* ilyenkor azonnal vissza kell tűzni a nap-fejléc sínjét, nehogy a lefordított
@@ -1916,10 +2330,34 @@ export function TimetableCalendar({
             style={canMorph ? { viewTransitionName: "tt-grid" } : undefined}
             className={cn(
               "flex flex-col transition-opacity duration-200",
+              //! A GUMISZALAG KÍVÜLRE LÓG, ÉS ANNAK NEM SZABAD LÁTSZANIA. A
+              //! héthatáron a rács eltolódik, a szomszéd nap sávja pedig a
+              //! kereten KÍVÜLRŐL csúszik be — vágás nélkül mindkettő a lapra
+              //! folyna, és vízszintes görgetést nyitna az egész oldalon. A
+              //! `clip` (nem `hidden`) azért kell, mert az csak az EGYIK
+              //! tengelyt zárja le: a rács függőlegesen görgethető marad.
+              paging && "relative overflow-x-clip",
               pending && "opacity-55",
             )}
             aria-busy={pending}
           >
+            {/*//* A szomszéd hét szélső napja — a húzás nyitotta résben. */}
+            {paging && (
+              <>
+                <WeekEdgeHint
+                  ref={edgePrevRef}
+                  side="prev"
+                  dayShort={DAY_SHORT[4]}
+                  dateLabel={edgeDateLabel(addDaysKey(weekStart, -3))}
+                />
+                <WeekEdgeHint
+                  ref={edgeNextRef}
+                  side="next"
+                  dayShort={DAY_SHORT[0]}
+                  dateLabel={edgeDateLabel(addDaysKey(weekStart, 7))}
+                />
+              </>
+            )}
             <div
               ref={scrollRef}
               data-tt-scroll
@@ -1938,7 +2376,12 @@ export function TimetableCalendar({
                 fullscreen
                   ? paging &&
                       cn(
-                        "snap-x scroll-pl-12 overflow-x-auto overscroll-x-contain",
+                        //! `overscroll-x-none`, nem `contain`: a `contain`
+                        //! csak a LAPRA nem enged tovább, a doboz saját
+                        //! visszapattanását meghagyja — az pedig a mi
+                        //! gumiszalagunk tetejébe mozdítaná a rácsot (lásd „A
+                        //! HÉTHATÁR ÁTHÚZÁSA").
+                        "snap-x scroll-pl-12 overflow-x-auto overscroll-x-none",
                         //* Mindig kötelező tapadás — a részletes indoklás
                         //* fentebb, „A TAPADÁS" szakaszban.
                         "snap-mandatory",
