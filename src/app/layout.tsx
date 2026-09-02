@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
+import { AddToHomeScreen } from "@/components/pwa/add-to-home-screen";
 import { RegisterSW } from "@/components/register-sw";
 
 export const metadata: Metadata = {
@@ -55,6 +56,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {children}
             
         <RegisterSW />
+        {/*//* A telepítés tippje csak iOS-en, csak egyszer — a döntést maga a
+            //* komponens hozza meg (lásd `lib/a2hs.ts`). */}
+        <AddToHomeScreen />
         <Analytics />
       </body>
     </html>

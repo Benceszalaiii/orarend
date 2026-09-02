@@ -53,6 +53,7 @@ import {
   preferencesHiding,
   resolveDay,
 } from "@/lib/timetable-merge";
+import { reportClassUse } from "@/lib/usage";
 import { cn } from "@/lib/utils";
 import { EventCard, LessonBlock } from "./lesson-block";
 import { type FocusTarget, LessonSheet } from "./lesson-sheet";
@@ -425,6 +426,16 @@ export function TimetableCalendar({
   }, []);
 
   const classShort = view.resolvedClass?.short ?? "";
+
+  //! MELYIK OSZTÁLYT NÉZIK — ÉS SEMMI MÁST. Osztályonként és naponta egyszer
+  //! eszközönként (a deduplikáció a `reportClassUse`-ban van). A `loadView`
+  //! ugyanaz a határ, mint a `saveCachedClass`-nál: a `/dualis` „osztálya" egy
+  //! TERV azonosítója (`A`, `B`…), nem létező osztály — azt nincs mit mérni.
+  useEffect(() => {
+    if (loadView) return;
+    reportClassUse(classShort);
+  }, [classShort, loadView]);
+
   const prefsApi = useMergePreferences({
     classShort,
   });

@@ -30,7 +30,8 @@ fekvő lapra is kinyomtatható.
 - Tailwind CSS 4, Radix UI primitívek, `motion`, `sonner`
 - TypeScript, [Biome](https://biomejs.dev) linthez és formázáshoz
 - [Bun](https://bun.sh) csomagkezelőnek
-- Nincs backend, adatbázis és belépés — kliensoldali app, Vercelen
+- Nincs belépés és felhasználói fiók — az órarend kliensoldalon áll össze, Vercelen
+- Egyetlen szerveroldali végpont: az osztályszintű használati számláló (Upstash Redis)
 
 ## Indítás
 
@@ -57,9 +58,9 @@ Nyisd meg: [http://localhost:3000](http://localhost:3000). A `/` átirányít az
 
 ## Honnan jönnek az adatok
 
-Saját szerver nincs. A `next.config.ts` az `/api/jedlik/:path*` kéréseket
-átírja a `https://jedlikinfo.jedlik.eu/api/api/:path*` címre, és a kliens ezt a
-proxyt hívja:
+Az órarendnek nincs saját szervere. A `next.config.ts` az `/api/jedlik/:path*`
+kéréseket átírja a `https://jedlikinfo.jedlik.eu/api/api/:path*` címre, és a
+kliens ezt a proxyt hívja:
 
 | Végpont | Mire kell |
 | --- | --- |
@@ -75,6 +76,42 @@ Minden állapot a `localStorage`-ban van:
 | --- | --- |
 | `orarend:class:v1` | Az utoljára választott osztály |
 | `orarend:merge-prefs:v1` | A csoportbontás-választások, osztályonként |
+| `orarend:usage:v1` | Mely osztályokat jelezte ma ez az eszköz (helyi, sosem küldjük el) |
+
+## Használati statisztika
+
+Egyetlen kérdésre válaszol: **melyik osztály órarendjét nézik a legtöbben.**
+
+A kliens osztályonként naponta egyszer küld egy jelzést a `/api/hasznalat`
+végpontra, amiben egyetlen adat van — az osztály neve. Eszközazonosító, IP,
+pontos időpont nem megy vele, és a szerver sem tárol ilyet: a tárolóban napi
+bontású, osztályonkénti darabszám áll. A napi deduplikáció jelölője a
+`localStorage`-ban marad, elküldve soha nincs.
+
+A számokat a **`/statisztika`** oldal mutatja meg: jelszóval védett, `noindex`,
+osztályonkénti rangsor sávokkal, napi görbe és 7 / 30 / 90 / 365 napos időszak.
+A jelszó ugyanaz a `STATS_KEY`. A belépés után egy aláírt (HMAC-SHA256), `httpOnly`
+süti tartja a munkamenetet egy hétig — a jelszó magába a sütibe SOSEM kerül bele.
+
+Gépi kiolvasásra ugyanez elérhető végponton is:
+
+| Végpont | Mire kell |
+| --- | --- |
+| `POST /api/hasznalat` | Egy osztály jelzése (`{"class":"13C"}`) → `204` |
+| `GET /api/hasznalat?days=30` | Az összesítés kiolvasása — `x-stats-key` fejléc kell hozzá |
+
+A kiolvasás kulcs nélkül `404`-et ad, tehát a végpont létezése sem derül ki.
+
+| Env-változó | Mire kell |
+| --- | --- |
+| `REDIS_KV_REST_API_URL`, `REDIS_KV_REST_API_TOKEN` | A számláló tárolója (Vercel marketplace → Upstash Redis) |
+| `STATS_KEY` | A `/statisztika` jelszava és a `GET` kulcsa. Beállítatlanul egyik sem működik |
+
+A `STATS_KEY` legyen hosszú és véletlenszerű (`openssl rand -hex 24`): egyetlen
+titok véd mindent, és rossz jelszóra csak egy fix késleltetés jár, nem kizárás.
+
+Redis nélkül az app változatlanul működik, csak nem számol — egy elfelejtett
+env-változó nem viheti el az órarendet.
 
 ## Felépítés
 
@@ -84,6 +121,8 @@ src/
     orarend/       heti rács (alapértelmezett útvonal)
     dualis/        ugyanaz a rács duális napjelöléssel (noindex)
     adatvedelem/   adatvédelmi tájékoztató
+    statisztika/   jelszóval védett használati kimutatás (noindex)
+    api/hasznalat/ osztályszintű használati számláló (az egyetlen saját végpont)
   components/
     timetable/     rács, óra-blokkok, most sáv, összevonás-vezérlők
     ui/            Radix-alapú primitívek
@@ -92,6 +131,10 @@ src/
     timetable-merge.ts  ütközések klaszterezése, csoportbontás feloldása
     dualis.ts           A/B hét-jelölés → munkahelyi vagy iskolai nap
     accent.ts           tantárgy neve → a 12 kiemelőszín egyike
+    usage.ts            a kliens jelzése + napi deduplikáció
+    usage-day.ts        a közös, budapesti naphatár (kliens és szerver)
+    usage-store.ts      a Redis-számláló (csak szerveren)
+    stats-auth.ts       a statisztika-oldal beléptetése (csak szerveren)
 ```
 
 ## Ha hozzányúlsz

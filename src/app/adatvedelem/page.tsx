@@ -22,7 +22,7 @@ export default function AdatvedelemPage() {
         Adatvédelmi tájékoztató
       </h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Utolsó frissítés: 2026. szeptember 1.
+        Utolsó frissítés: 2026. szeptember 2.
       </p>
 
       <div className="mt-8 flex flex-col gap-8 text-sm leading-relaxed text-muted-strong">
@@ -80,13 +80,39 @@ export default function AdatvedelemPage() {
 
         <section className="flex flex-col gap-2">
           <h2 className="text-base font-semibold text-foreground">
+            Osztályszintű használati statisztika
+          </h2>
+          <p>
+            Az oldal összesített statisztikát vezet arról, hogy melyik osztály
+            órarendjét nézik a legtöbben. Ehhez az eszközöd naponta és
+            osztályonként egyetlen jelzést küld, amely kizárólag az osztály
+            nevét tartalmazza (pl. „13C”) — se nevet, se eszköz- vagy
+            felhasználóazonosítót, se IP-címet, se pontos időpontot nem tárolunk
+            mellé. A jelzések napi bontásban, osztályonkénti darabszámként
+            összegződnek, így az adatból sem visszamenőleg, sem összevetéssel
+            nem állapítható meg, hogy ki nyitotta meg az oldalt.
+          </p>
+          <p>
+            Hogy ugyanaz az eszköz naponta csak egyszer számítson bele, a
+            böngésződ helyben megjegyzi, mely osztályokat jelezte aznap. Ez a
+            jelölő kizárólag a te eszközödön marad, elküldésre soha nem kerül.
+            Az összesített számokat az üzemeltető legfeljebb két tanévig őrzi
+            meg.
+          </p>
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <h2 className="text-base font-semibold text-foreground">
             Helyi tárolás a böngészőben
           </h2>
           <p>
-            A kiválasztott osztály és a beállítások (pl. összevont
-            csoportbontások) a böngésző saját, helyi tárolójában (localStorage)
-            mentődnek, kizárólag a te eszközödön. Ezek az adatok nem kerülnek
-            elküldésre semmilyen szerverre, és bármikor törölhetők a böngésző
+            A kiválasztott osztály, a beállítások (pl. összevont
+            csoportbontások) és az utoljára megnyitott nézet a böngésző saját,
+            helyi tárolójában (localStorage) mentődnek, kizárólag a te
+            eszközödön. Ezek a beállítások nem kerülnek elküldésre semmilyen
+            szerverre — az egyetlen kivétel a fentebb leírt osztályszintű
+            statisztika, amely magát az osztály nevét (és semmi mást)
+            továbbítja. Minden helyben tárolt adat bármikor törölhető a böngésző
             adatainak törlésével.
           </p>
         </section>

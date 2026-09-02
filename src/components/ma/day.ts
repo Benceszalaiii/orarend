@@ -1,7 +1,8 @@
 import type { AgendaItem } from "@/components/timetable/now";
 import { sortAgenda } from "@/components/timetable/now";
 import { addDaysKey } from "@/components/timetable/shared";
-import { type DualStatus, dualStatusOf } from "@/lib/dualis";
+import { type DualSchedule, dualStatusFor } from "@/lib/dual-schedule";
+import type { DualStatus } from "@/lib/dualis";
 import type { TimetableView } from "@/lib/timetable";
 import {
   type LessonRun,
@@ -43,7 +44,7 @@ export type DayModel = {
   /** „Hétfő", „Kedd" … a forrás saját elnevezésével. */
   dayName: string;
   dayOfWeek: number;
-  /** A nap A/B jelölése alapján: munkahely, iskola, vagy nem eldönthető. */
+  /** A diák saját duális beosztása szerint: munkahely, iskola, vagy nem eldönthető. */
   dual: DualStatus;
   /** Órák és lyukasórák időrendben, az első óra kezdetétől az utolsó végéig. */
   segments: DaySegment[];
@@ -72,6 +73,10 @@ export function buildDayModel(
   view: TimetableView,
   prefs: MergePreference[],
   dateKey: string,
+  //! A DUÁLIS BEOSZTÁS KÍVÜLRŐL JÖN, NEM SZABÁLYBÓL. `null` = ez az osztály még
+  //! nincs beállítva; olyankor a modell nem állít duális napot (lásd
+  //! `dual-schedule.ts`).
+  dualSchedule: DualSchedule | null,
 ): DayModel | null {
   const day = view.days.find((d) => d.dateKey === dateKey);
   if (!day) return null;
@@ -124,7 +129,7 @@ export function buildDayModel(
     dateKey: day.dateKey,
     dayName: day.name,
     dayOfWeek: day.dayOfWeek,
-    dual: dualStatusOf(day.dayOfWeek, weekLetterOf(view)),
+    dual: dualStatusFor(dualSchedule, day.dayOfWeek, weekLetterOf(view)),
     segments,
     items,
     moved: ordered.filter((r) => r.lesson.moved),
@@ -202,7 +207,10 @@ export function agendaItem(
     endMin: run.endMin,
     title: run.lesson.subjectShort || run.lesson.subject,
     fullTitle: run.lesson.subject || run.lesson.subjectShort,
-    meta: [run.rooms.join(" · "), run.lesson.teacherShort].filter(Boolean),
+    meta: [
+      run.rooms.join(" · "),
+      run.lesson.teacher || run.lesson.teacherShort,
+    ].filter(Boolean),
     accentSeed: run.lesson.subjectShort || run.lesson.subject,
   };
 }

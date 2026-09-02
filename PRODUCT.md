@@ -57,9 +57,16 @@ Two mechanisms a generic timetable viewer could not truthfully copy:
 
 ## Capabilities and Constraints
 
-- **No backend, no auth, no database.** Client-only, deployed on Vercel. All
-  state is localStorage: selected class (`orarend:class:v1`) and merge
-  preferences (`orarend:merge-prefs:v1`).
+- **No auth, no accounts.** Deployed on Vercel. All user-facing state is
+  localStorage: selected class (`orarend:class:v1`), merge preferences
+  (`orarend:merge-prefs:v1`), and the local-only daily marker that keeps the
+  usage counter from double-counting one device (`orarend:usage:v1`).
+- **One server-side endpoint, and only one.** `/api/hasznalat` counts how many
+  devices opened each class's timetable per day (Upstash Redis). It stores the
+  class name and nothing else — no device id, no IP, no precise timestamp — so
+  it cannot describe an individual student. Reading the aggregate needs the
+  `STATS_KEY` header; without it the endpoint answers 404. If Redis is absent
+  the app behaves exactly as before, it just does not count.
 - **Language is Hungarian**, throughout UI and source comments. Not localized.
 - **Dark only.** `colorScheme: "dark"` is set inline on `<html>`; the light
   palette exists solely for print.
@@ -78,7 +85,8 @@ Two mechanisms a generic timetable viewer could not truthfully copy:
 
 - Name: **Órarend**.
 - Existing routes: `/orarend` (week grid, default), `/dualis` (same grid, dual
-  labels, noindex), `/adatvedelem` (privacy).
+  labels, noindex), `/adatvedelem` (privacy), `/statisztika` (operator-only
+  usage report, password-gated, noindex).
 - The subject-color system is **data, not decoration**: a hash of the subject
   seeds one of 12 accent hues (`src/lib/accent.ts`), and print explicitly
   re-requests those backgrounds because the color identifies the subject.
@@ -91,7 +99,12 @@ Two mechanisms a generic timetable viewer could not truthfully copy:
 - Real bell schedule and real class list (09A … 13C and more) from the API.
 - **No public/ directory, no icon set, no manifest.** A PWA needs these authored
   from scratch; there is no existing logo asset to reuse.
-- No analytics on actual usage beyond `@vercel/analytics` being installed. No
+- `@vercel/analytics` is installed, but the account is on the Hobby plan, where
+  **custom events are not available** (Vercel's plan table lists them as Pro+).
+  Per-class usage is therefore measured by the app's own `/api/hasznalat`
+  counter, not by Vercel. Hobby also caps Web Analytics at 50,000 events/month
+  with a 1-month reporting window.
+- The usage counter is new; it has collected no meaningful data yet. No
   user-research findings, no testimonials. Do not invent adoption numbers.
 
 ## Product Principles
@@ -103,8 +116,10 @@ Two mechanisms a generic timetable viewer could not truthfully copy:
    print because they are information.
 3. **The phone question is "where now", the desktop question is "what week".**
    The same data, two genuinely different jobs.
-4. **Client-only is a feature.** No login, no account, no server-held data —
-   which also means every capability must be derivable on-device.
+4. **Client-only is a feature.** No login, no account, no per-user server-held
+   data — which also means every capability must be derivable on-device. The
+   one exception is the class-level usage counter, which is aggregate by
+   construction: if a measurement could describe one student, it does not ship.
 5. **Legibility outranks fitting.** The grid refuses to shrink below a scale
    where the subject name survives; it scrolls instead.
 
