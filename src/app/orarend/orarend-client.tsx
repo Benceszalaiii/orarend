@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SiteNav } from "@/components/site-nav";
 import { TimetableCalendar } from "@/components/timetable/calendar";
 import { MorphingInfinity } from "@/components/ui/morphing-infinity";
+import {
+  type DualSchedule,
+  dualStatusFor,
+  hasAnyDualDay,
+  loadDualSchedule,
+} from "@/lib/dual-schedule";
 import {
   buildTimetableView,
   describeTimetableFailure,
@@ -26,6 +32,49 @@ export function OrarendPage() {
     TimetableError | undefined
   >();
   const [fatal, setFatal] = useState<TimetableError | null>(null);
+
+  //! A DUÁLIS JELÖLÉS CSAK AKKOR JELENIK MEG, HA A DIÁK MAGA ÁLLÍTOTTA BE A
+  //! BEOSZTÁSÁT (lásd `/ma`, `DualPanel`). Enélkül nem tudjuk, mely napok
+  //! esnek a munkahelyre — és nem is TALÁLGATUNK: az `/orarend` pontosan úgy
+  //! néz ki, mint eddig. Beállítás után viszont ugyanazt kapja, mint a
+  //! `/dualis`: jelvényt a nap fejlécében és egy 8:00–16:00 blokkot a nap
+  //! helyén.
+  //!
+  //! A RÁCS MINDEN NAPRA KÉRDEZ, ÉS AZ OSZTÁLYT IS Ő TUDJA — az osztályváltó
+  //! ugyanis benne ül, nem itt. A beosztás viszont OSZTÁLYONKÉNT külön van
+  //! (lásd `dual-schedule.ts`): egy másik osztály órarendjét átnézve a saját
+  //! duális napjaink ráhúzása értelmetlen lenne. Ezért osztályra válaszolunk —
+  //! és amelyikhez nincs beállítás, arra `undefined`-dal, vagyis a rács
+  //! pontosan úgy néz ki, mint eddig.
+  //*
+  //* A `localStorage` olvasása napi kérdésenként fölösleges munka lenne; a
+  //* beosztás osztályonként egyszer kerül elő, és a lap élete végéig áll (a
+  //* beállítás a `/ma`-n történik, onnan visszatérve ez a lap újraépül).
+  const scheduleCache = useRef(new Map<string, DualSchedule | null>());
+  const dualStatusForDay = useCallback(
+    ({
+      dayOfWeek,
+      weekLetter,
+      classShort,
+    }: {
+      dayOfWeek: number;
+      weekLetter: string;
+      classShort: string;
+    }) => {
+      if (!classShort) return undefined;
+      let schedule = scheduleCache.current.get(classShort);
+      if (schedule === undefined) {
+        schedule = loadDualSchedule(classShort);
+        scheduleCache.current.set(classShort, schedule);
+      }
+      //! CSAK AKKOR JELÖLÜNK, HA VAN MIT. Beállítás nélkül — és annál is, aki
+      //! kimondta, hogy nem jár duálisra — a rács nem állít semmit: egy minden
+      //! napra kiírt „Iskola" nem információ, csak zaj.
+      if (!schedule || !hasAnyDualDay(schedule)) return undefined;
+      return dualStatusFor(schedule, dayOfWeek, weekLetter);
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -64,9 +113,12 @@ export function OrarendPage() {
           classes={classes}
           classesError={classesError}
           variant="fullscreen"
+          dualStatusForDay={dualStatusForDay}
           //* A három nézet közti váltó az eszköztár jobb szélén ül — ez az
           //* egyetlen hely, ahonnan a másik két lap egyáltalán elérhető.
           trailing={<SiteNav />}
+          //* A „Ma: Duális/Iskola" jelvényt a rács rajzolja a cím mellé — ott
+          //* ismert az ÉPPEN nézett hét és osztály (lásd `TimetableCalendar`).
           heading={
             <h1 className="shrink-0 text-base font-bold tracking-tight text-foreground max-sm:sr-only">
               Órarend

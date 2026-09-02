@@ -8,6 +8,8 @@
 //! úgyis tudja. Mi csak lefordítjuk a már meglévő hét-jelölést arra, hogy az
 //! adott nap munkahelyen vagy iskolában telik-e.
 
+import type { TimetableLesson } from "./timetable";
+
 export type DualStatus =
   | "dual" //* duális képzés — a munkahelyen
   | "school" //* iskolai nap — a rács órái érvényesek
@@ -34,4 +36,41 @@ export function dualStatusOf(
   if (weekLetter !== "A" && weekLetter !== "B") return "unknown";
   if (weekLetter === "B") return dayOfWeek >= 3 ? "dual" : "school";
   return dayOfWeek <= 2 ? "dual" : "school";
+}
+
+//! A MUNKANAP HATÁRAI — EGY HELYEN. A duális napot két lap rajzolja meg (a
+//! heti rács kártyaként, a `/ma` egyetlen téglalapként); ha a két szám két
+//! helyen állna, előbb-utóbb elcsúsznának egymástól.
+export const DUAL_DAY_START_MIN = 8 * 60;
+export const DUAL_DAY_END_MIN = 16 * 60;
+
+//! A DUÁLIS NAP EGYETLEN BLOKK. Azon a napon nincs órarend — a munkahelyen
+//! vagy —, tehát a rács sem tesz úgy, mintha lenne: egy 8:00–16:00 kártya áll
+//! a nap helyén, óra-bontás nélkül.
+export function dualBlockLesson(day: {
+  dayOfWeek: number;
+  dateKey: string;
+}): TimetableLesson {
+  return {
+    key: `dual-${day.dateKey}`,
+    dateKey: day.dateKey,
+    dayOfWeek: day.dayOfWeek,
+    startMin: DUAL_DAY_START_MIN,
+    endMin: DUAL_DAY_END_MIN,
+    subject: "Duális képzés",
+    subjectShort: "Duális",
+    teacher: "",
+    teacherShort: "",
+    room: "",
+    group: "",
+    groupColumn: 0,
+    groupCount: 1,
+    //* A duális blokk az EGÉSZ osztályé — nincs csoportbontása, tehát a rácson
+    //* sem fél oszlop, és nem is rejthető el „nem az én csoportom" címen.
+    wholeClass: true,
+    week: "",
+    //* Nem a Jedlikinfóból jön, tehát áthelyezettként sem lehet megjelölve.
+    moved: false,
+    kind: "dual",
+  };
 }

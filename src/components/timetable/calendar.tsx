@@ -32,7 +32,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
-import { DUAL_LABEL, type DualStatus, dualStatusOf } from "@/lib/dualis";
+import { DUAL_LABEL, type DualStatus, dualBlockLesson } from "@/lib/dualis";
 import type {
   CalendarEvent,
   TimetableClass,
@@ -355,7 +355,7 @@ export function TimetableCalendar({
   variant = "embedded",
   heading,
   trailing,
-  dual = false,
+  dualStatusForDay,
   loadView,
   reloadToken,
 }: {
@@ -374,10 +374,18 @@ export function TimetableCalendar({
   //* Beágyazva egyik sincs átadva, így az /event kártyája változatlan.
   heading?: React.ReactNode;
   trailing?: React.ReactNode;
-  //! DUÁLIS JELÖLÉS. A `/dualis` lapé: ugyanez a rács, ugyanaz a betöltés és
-  //! lapozás, csak minden tanítási nap megkapja, hogy munkahelyen vagy
-  //! iskolában telik. Alapból ki van kapcsolva, így a `/orarend` változatlan.
-  dual?: boolean;
+  //! DUÁLIS JELÖLÉS — DE A SZABÁLYT NEM A RÁCS ISMERI. Ugyanaz a rajz két
+  //! forrásból: a `/dualis` a KÖNYVSZERINTI blokkot mutatja (`dualStatusOf`),
+  //! az `/orarend` viszont a diák SAJÁT, kézzel beállított beosztását
+  //! (`dualStatusFor`). A rács ezért nem dönt, hanem KÉRDEZ — napra, a hét
+  //! A/B-jelölésével és az ÉPPEN nézett osztállyal, mert a beosztás
+  //! osztályonként külön van. `undefined` válasz = ezen a lapon (vagy ennél az
+  //! osztálynál) nincs duális jelölés: a rács pontosan úgy néz ki, mint eddig.
+  dualStatusForDay?: (day: {
+    dayOfWeek: number;
+    weekLetter: string;
+    classShort: string;
+  }) => DualStatus | undefined;
   //! SAJÁT BETÖLTŐ. A `/dualis` nem egy osztály órarendjét lapozza, hanem egy
   //! TERVET, ami két osztály óráiból áll össze — a hét-lapozás viszont
   //! ugyanaz a mozdulat. Ha meg van adva, a rács ezen keresztül kér új hetet
@@ -528,7 +536,43 @@ export function TimetableCalendar({
       delta > 0 ? "next" : "prev",
     );
 
-  const { days, periods, lessons, events, weekStart } = view;
+  const { days, periods, events, weekStart } = view;
+
+  const abWeek = days.find((d) => d.week === "A" || d.week === "B")?.week;
+  //! A NAP SAJÁT JELÖLÉSE HIÁNYOZHAT (a Jedlikinfo üres `week`-et ad pl. egy
+  //! tanítás nélküli hétfőre), a HÉTÉ viszont nem: a duális állapotot ezért a
+  //! hét betűjéből számoljuk, nem a napéból.
+  const dualOf = useCallback(
+    (dayOfWeek: number): DualStatus | undefined =>
+      dualStatusForDay?.({
+        dayOfWeek,
+        weekLetter: abWeek ?? "",
+        classShort,
+      }),
+    [dualStatusForDay, abWeek, classShort],
+  );
+
+  //! ─── A DUÁLIS NAP HELYÉN EGY BLOKK ÁLL ───────────────────────────────────
+  //! Azon a napon a munkahelyen vagy: az osztály órarendje NEM a te napod. A
+  //! rács ezért nem tesz úgy, mintha lenne órád — a nap óráit egyetlen
+  //! 8:00–16:00 kártya váltja fel, óra-bontás nélkül. (Ugyanaz a döntés, ami a
+  //! `/dualis` tervei mögött áll, csak ott a terv eleve enélkül épül fel.)
+  //!
+  //! CSAK OTT, AHOL VAN MIT FELVÁLTANI. Egy adat nélküli hétre (szünet,
+  //! forráshiba) nem találunk ki duális napokat: a hét üressége a hír, nem a
+  //! munkahely.
+  const lessons = useMemo(() => {
+    if (!dualStatusForDay || view.lessons.length === 0) return view.lessons;
+    const dualDays = days.filter((d) => dualOf(d.dayOfWeek) === "dual");
+    if (dualDays.length === 0) return view.lessons;
+    const dualDows = new Set(dualDays.map((d) => d.dayOfWeek));
+    return [
+      ...view.lessons.filter((l) => !dualDows.has(l.dayOfWeek)),
+      //* A `/dualis` terveiben már benne van ugyanez a blokk — a szűrés miatt
+      //* az eredetit itt is a sajátunk váltja fel, azonos tartalommal.
+      ...dualDays.map(dualBlockLesson),
+    ];
+  }, [view.lessons, days, dualOf, dualStatusForDay]);
 
   //! A RÁCS IDŐ-HATÁRAI: a tényleges órák (és beeső szakkör-alkalmak) tartománya.
   //! A csengetési rend (`periods`) a 0. és a 9. órát is tartalmazza, pedig az
@@ -962,14 +1006,17 @@ export function TimetableCalendar({
     pinLeft();
   }, [pinLeft, weekStart, selectedClass]);
 
-  const abWeek = days.find((d) => d.week === "A" || d.week === "B")?.week;
-  //! A NAP SAJÁT JELÖLÉSE HIÁNYOZHAT (a Jedlikinfo üres `week`-et ad pl. egy
-  //! tanítás nélküli hétfőre), a HÉTÉ viszont nem: a duális állapotot ezért a
-  //! hét betűjéből számoljuk, nem a napéból.
-  const dualOf = (dayOfWeek: number): DualStatus | undefined =>
-    dual ? dualStatusOf(dayOfWeek, abWeek ?? "") : undefined;
+  //* A „ma" csak akkor kérdés, ha a mai nap a nézett hétben van; a bizonytalan
+  //* („unknown", jelöletlen hét) állapotról pedig nem írunk ki jelvényt.
+  const todayDow = gridDays.find((d) => d.isToday)?.dayOfWeek;
+  const todayStatus = todayDow !== undefined ? dualOf(todayDow) : undefined;
+  const todayDual =
+    todayStatus === "dual" || todayStatus === "school" ? todayStatus : null;
+
   const hasClass = Boolean(view.resolvedClass);
-  const noData = view.ok && lessons.length === 0 && events.length === 0;
+  //* A NYERS órákból: a duális blokkokat mi tettük a rácsra, azoktól a hét még
+  //* ugyanolyan üres marad — a „nincs adat" jegyzet nem hazudhat róla.
+  const noData = view.ok && view.lessons.length === 0 && events.length === 0;
   const isCurrentWeek = weekStart === mondayKey(todayKey());
 
   //! ─── „MOST" NAPIREND ─────────────────────────────────────────────────────
@@ -1168,6 +1215,25 @@ export function TimetableCalendar({
         )}
       >
         {heading}
+        {/*//! A MAI NAP JELVÉNYE A RÁCSÉ, NEM A LAPÉ. A lap fejléce a
+            //! betöltéskor egyszer épül fel — a rácsban viszont osztályt és
+            //! hetet is lehet váltani, és egy ott ragadt „Ma: Duális" a másik
+            //! osztály órarendje fölött már hazugság. Ezért ITT áll, ahol az
+            //! ÉPPEN nézett hét A/B-jelölése és az ÉPPEN nézett osztály is
+            //! ismert. Ha a mai nap nincs a nézett hétben, nincs is mit
+            //! állítani: a jelvény ilyenkor eltűnik. */}
+        {todayDual && (
+          <span
+            className={cn(
+              "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold max-sm:sr-only",
+              todayDual === "dual"
+                ? "bg-primary/15 text-primary"
+                : "bg-muted text-muted-strong",
+            )}
+          >
+            Ma: {DUAL_LABEL[todayDual]}
+          </span>
+        )}
         <div className="inline-flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5">
           <Button
             variant="ghost"

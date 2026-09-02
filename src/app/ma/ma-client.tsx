@@ -10,7 +10,7 @@ import {
   laterItemsOf,
 } from "@/components/ma/day";
 import { DayList, DayRibbon } from "@/components/ma/day-list";
-import { ChangeRow, DualDay, StaleNote } from "@/components/ma/day-status";
+import { ChangeRow, DualBlock, StaleNote } from "@/components/ma/day-status";
 import { DualPanel } from "@/components/ma/dual-setup";
 import { NowBlock } from "@/components/ma/now-block";
 import { buildWeekModel } from "@/components/ma/week";
@@ -258,6 +258,12 @@ export function MaPage() {
   );
 
   const isToday = shownKey !== null && today !== null && shownKey === today;
+  //! A DUÁLIS NAP NEM AZ OSZTÁLY NAPJA. Ha a diák saját beosztása szerint a
+  //! munkahelyen van, a lap NEM az osztály óráit mutatja neki: azok azon a
+  //! napon nem róla szólnak. A nap helyén egyetlen 8:00–16:00 téglalap áll —
+  //! az osztály órarendje pedig egy koppintással előhívható marad („Teljes
+  //! órarend"), mert elrejteni és letagadni nem ugyanaz.
+  const dualDay = day?.dual === "dual";
 
   //* A beállító rács a MAI napot emeli ki, nem a nézettet: az oszlop-jelölés
   //* tájékozódás („hol tartunk a ciklusban"), nem a kiválasztás visszhangja.
@@ -367,28 +373,36 @@ export function MaPage() {
 
           {/*//! AZ IDŐ A FŐSZEREPLŐ. A blokk nem nyúlik a teljes szélességig: a
               //! nagy óra olvasható blokk-méretben a legerősebb, nem elnyújtva. */}
-          <div className="mt-6 lg:max-w-2xl">
-            {error && !day ? (
-              <ErrorPanel
-                error={error}
-                pending={pending}
-                onRetry={() =>
-                  void load(selectedClass, shownKey, { showPending: true })
-                }
-              />
-            ) : day?.dual === "dual" ? (
-              <DualDay isToday={isToday} />
-            ) : (
-              <NowBlock
-                state={state}
-                clock={clock}
-                epoch={epoch}
-                preview={preview}
-                onClearPreview={isToday ? () => setPreviewKey(null) : () => {}}
-                previewDismissable={isToday && previewKey !== null}
-              />
-            )}
-          </div>
+          {/*//! DUÁLIS NAPON NINCS HERO BLOKK. A nagy óra arra felel, hogy „mi
+              //! megy MOST" — a munkahelyen töltött napra viszont a lapnak
+              //! nincs órarendje, amiből ezt kiszámolhatná, és egy fél
+              //! képernyős kártya, ami csak annyit mond, hogy „a munkahelyen
+              //! vagy", nem ér annyit, amennyi helyet elvesz. A fejléc mondata
+              //! ezt már kimondta; a nap alakja a téglalap lentebb. */}
+          {!dualDay && (
+            <div className="mt-6 lg:max-w-2xl">
+              {error && !day ? (
+                <ErrorPanel
+                  error={error}
+                  pending={pending}
+                  onRetry={() =>
+                    void load(selectedClass, shownKey, { showPending: true })
+                  }
+                />
+              ) : (
+                <NowBlock
+                  state={state}
+                  clock={clock}
+                  epoch={epoch}
+                  preview={preview}
+                  onClearPreview={
+                    isToday ? () => setPreviewKey(null) : () => {}
+                  }
+                  previewDismissable={isToday && previewKey !== null}
+                />
+              )}
+            </div>
+          )}
         </div>
       </section>
 
@@ -401,7 +415,9 @@ export function MaPage() {
                 className="text-base font-semibold text-foreground"
               >
                 {isToday ? "A mai nap" : "A nap"}
-                {day && day.dual === "dual" && (
+                {/*//* Duális napon a lista csak akkor az OSZTÁLYÉ, ha elő is
+                    //* hívták — enélkül a cím a téglalapra mondaná ugyanezt. */}
+                {dualDay && allGroups && (
                   <span className="ml-2 text-sm font-normal text-muted-foreground">
                     az osztály órarendje
                   </span>
@@ -487,7 +503,23 @@ export function MaPage() {
               </a>
             )}
 
-            {shownDay && day && shownDay.lessonCount > 0 ? (
+            {dualDay && !allGroups ? (
+              //! A NAP HELYÉN A MUNKANAP ÁLL. Nem lista, nem kártya-torony:
+              //! egyetlen sáv a két végpontjával — pontosan annyi, amennyit a
+              //! duális napról tudni lehet.
+              <>
+                <DualBlock nowMin={clock && isToday ? clock.min : null} />
+                <p className="mt-2 text-xs text-pretty text-muted-foreground">
+                  {isToday
+                    ? "Ma a munkahelyen vagy"
+                    : "Ezt a napot a munkahelyen töltöd"}{" "}
+                  — az osztály órarendje nem rád vonatkozik.
+                  {dayAll &&
+                    dayAll.lessonCount > 0 &&
+                    " A „Teljes órarend” megmutatja, mi megy ilyenkor az osztálynak."}
+                </p>
+              </>
+            ) : shownDay && day && shownDay.lessonCount > 0 ? (
               <>
                 <DayRibbon
                   day={shownDay}

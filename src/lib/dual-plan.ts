@@ -14,7 +14,7 @@
 //!   • RÉSZLEGES terv: minden tantárgy benne van egy-egy csoporttal, de az
 //!     ütköző órákról le kell mondani — a terv megmondja, hányról.
 
-import { dualStatusOf } from "./dualis";
+import { dualBlockLesson, dualStatusOf } from "./dualis";
 import {
   addDays,
   getTimetableWeek,
@@ -97,37 +97,6 @@ function periodsIn(
   ).length;
   //* Ha a csengetési rend nem fedi le (rendhagyó sáv), legalább egy órának vesszük.
   return n > 0 ? n : 1;
-}
-
-//! A DUÁLIS NAP EGYETLEN BLOKK. Azon a napon nincs órarend — a munkahelyen
-//! vagy —, tehát a rács sem tesz úgy, mintha lenne: egy 8:00–16:00 kártya áll
-//! a nap helyén, óra-bontás nélkül.
-export function dualBlockLesson(day: {
-  dayOfWeek: number;
-  dateKey: string;
-}): TimetableLesson {
-  return {
-    key: `dual-${day.dateKey}`,
-    dateKey: day.dateKey,
-    dayOfWeek: day.dayOfWeek,
-    startMin: 8 * 60,
-    endMin: 16 * 60,
-    subject: "Duális képzés",
-    subjectShort: "Duális",
-    teacher: "",
-    teacherShort: "",
-    room: "",
-    group: "",
-    groupColumn: 0,
-    groupCount: 1,
-    //* A duális blokk az EGÉSZ osztályé — nincs csoportbontása, tehát a rácson
-    //* sem fél oszlop, és nem is rejthető el „nem az én csoportom" címen.
-    wholeClass: true,
-    week: "",
-    //* Nem a Jedlikinfóból jön, tehát áthelyezettként sem lehet megjelölve.
-    moved: false,
-    kind: "dual",
-  };
 }
 
 export async function buildDualPlans(weekStart?: string): Promise<DualPlanSet> {

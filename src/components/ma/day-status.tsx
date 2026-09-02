@@ -2,6 +2,7 @@
 
 import { AlertTriangle, Briefcase, Check, CloudOff } from "lucide-react";
 import { minLabel } from "@/components/timetable/shared";
+import { DUAL_DAY_END_MIN, DUAL_DAY_START_MIN } from "@/lib/dualis";
 import { TIMETABLE_SOURCE } from "@/lib/timetable";
 import { ageLabel } from "@/lib/timetable-cache";
 import { cn } from "@/lib/utils";
@@ -68,35 +69,59 @@ export function ChangeRow({
   );
 }
 
-//! DUÁLIS NAP. Nem egy jelvény a fejlécben: ha a munkahelyen vagy, akkor a nap
-//! órarendje NEM a te napod — ez a lap legfontosabb mondata azon a napon.
-export function DualDay({
-  isToday,
+//* ---------------------------------------------------------------------------
+//* A DUÁLIS NAP — egy téglalap, nem egy nap órarendje
+//* ---------------------------------------------------------------------------
+//! AMI EZEN A NAPON IGAZ: 8-TÓL 4-IG A MUNKAHELYEN VAGY. Ennyi. Az osztály
+//! órarendje nem a te napod, tehát nem is az áll a nap helyén — de a helyére
+//! sem kerülhet egy fél képernyős kártya, ami nyolc órányi „Duális képzés"-t
+//! mond ugyanazzal a hanggal, ahogy a rács egy 45 perces matekot. A munkanap
+//! egyetlen tömb, egyetlen adattal: mikor kezdődik és mikor ér véget.
+//!
+//! A SZALAG NYELVÉN. Ugyanaz a forma, mint a nap szalagja (`DayRibbon`): sáv,
+//! alatta a két végpont. Így a duális nap és az iskolai nap ugyanabban a
+//! sorban, ugyanabban a magasságban áll — a kettő közti különbség a TARTALOM,
+//! nem a lap szerkezete.
+export function DualBlock({
+  //* A „most" vonalzója csak MA igaz — más napra `null` jön.
+  nowMin,
   className,
 }: {
-  isToday: boolean;
+  nowMin: number | null;
   className?: string;
 }) {
+  const span = DUAL_DAY_END_MIN - DUAL_DAY_START_MIN;
+  //* A munkanapon belül tartunk-e: csak akkor van mit jelölni.
+  const nowVisible =
+    nowMin !== null &&
+    nowMin >= DUAL_DAY_START_MIN &&
+    nowMin <= DUAL_DAY_END_MIN;
+
   return (
-    <section
-      className={cn(
-        "rounded-2xl border border-hero-foreground/15 bg-hero-foreground/[0.06] p-5 sm:p-6",
-        className,
-      )}
-    >
-      <p className="flex items-center gap-2 text-sm font-medium text-hero-foreground/70">
-        <Briefcase className="size-4" aria-hidden />
-        Duális képzés
-      </p>
-      <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-        {isToday ? "Ma a munkahelyen vagy" : "A munkahelyen vagy"}
-      </h2>
-      <p className="mt-2 max-w-md text-sm text-hero-foreground/70">
-        {isToday
-          ? "A mai órarend nem rád vonatkozik — az az osztály iskolai napja."
-          : "Ezt a napot a munkahelyen töltöd — az órarend nem rád vonatkozik."}
-      </p>
-    </section>
+    <div className={cn("select-none", className)}>
+      <div className="relative flex h-12 w-full items-center justify-center overflow-hidden rounded-lg border border-primary/35 bg-primary/12 px-3">
+        <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-primary">
+          <Briefcase className="size-4 shrink-0" aria-hidden />
+          <span className="truncate">Duális képzés</span>
+        </span>
+        {nowVisible && (
+          //* A nap egyetlen márkaszínű eleme: hol tartunk most.
+          <span
+            className="absolute inset-y-[-3px] z-10 w-0.5 -translate-x-1/2 rounded-full bg-brand"
+            style={{ left: `${((nowMin - DUAL_DAY_START_MIN) / span) * 100}%` }}
+            aria-hidden
+          />
+        )}
+      </div>
+      <div className="mt-1 flex justify-between text-[11px] font-medium tabular-nums text-muted-foreground">
+        <time dateTime={minLabel(DUAL_DAY_START_MIN)}>
+          {minLabel(DUAL_DAY_START_MIN)}
+        </time>
+        <time dateTime={minLabel(DUAL_DAY_END_MIN)}>
+          {minLabel(DUAL_DAY_END_MIN)}
+        </time>
+      </div>
+    </div>
   );
 }
 

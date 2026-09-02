@@ -5,13 +5,12 @@ import { SiteNav } from "@/components/site-nav";
 import { TimetableCalendar } from "@/components/timetable/calendar";
 import { MorphingInfinity } from "@/components/ui/morphing-infinity";
 import { buildDualPlans, type DualPlanSet, MAX_PLANS } from "@/lib/dual-plan";
-import { DUAL_LABEL, dualStatusOf } from "@/lib/dualis";
+import { dualStatusOf } from "@/lib/dualis";
 import {
   mondayOf,
   type TimetableError,
   type TimetableView,
 } from "@/lib/timetable";
-import { cn } from "@/lib/utils";
 import { PlanPicker } from "./plan-picker";
 
 //! ─── A DUÁLIS LAP ──────────────────────────────────────────────────────────
@@ -50,6 +49,16 @@ function planToView(set: DualPlanSet, index: number): TimetableView {
   };
 }
 
+//* A rács napról napra kérdez; a válasz itt nem függ semmi állapottól, ezért a
+//* függvény a komponensen KÍVÜL áll — így a hivatkozása is stabil.
+const bookDualStatus = ({
+  dayOfWeek,
+  weekLetter,
+}: {
+  dayOfWeek: number;
+  weekLetter: string;
+}) => dualStatusOf(dayOfWeek, weekLetter);
+
 export function DualisPage() {
   const [view, setView] = useState<TimetableView | null>(null);
   const [planSet, setPlanSet] = useState<DualPlanSet | null>(null);
@@ -57,10 +66,6 @@ export function DualisPage() {
   //* A tervváltás nem hetet vált — ezzel a jellel kérjük a rácstól, hogy
   //* ugyanarra a hétre kérjen új nézetet (hálózat nélkül, gyorsítótárból).
   const [reloadToken, setReloadToken] = useState(0);
-  const [todayLabel, setTodayLabel] = useState<{
-    status: "dual" | "school";
-    text: string;
-  } | null>(null);
 
   //! A KIVÁLASZTOTT TERV REF-BEN IS. A `loadView`-t a rács hívja, és a
   //! hivatkozásának STABILNAK kell lennie (különben minden renderben új
@@ -93,17 +98,6 @@ export function DualisPage() {
       const first = await loadPlans(mondayOf());
       if (cancelled) return;
       setView(first);
-
-      const today = first.days.find((d) => d.isToday);
-      const weekLetter = first.days.find(
-        (d) => d.week === "A" || d.week === "B",
-      )?.week;
-      if (today && weekLetter) {
-        const status = dualStatusOf(today.dayOfWeek, weekLetter);
-        if (status !== "unknown") {
-          setTodayLabel({ status, text: DUAL_LABEL[status] });
-        }
-      }
     })();
     return () => {
       cancelled = true;
@@ -125,7 +119,9 @@ export function DualisPage() {
           //! helyét a tervválasztó veszi át a `trailing`-ben.
           classes={[]}
           variant="fullscreen"
-          dual
+          //* Ez a lap a KÖNYVSZERINTI blokkot mutatja: itt nincs mit beállítani,
+          //* a hét A/B-jelöléséből minden nap következik.
+          dualStatusForDay={bookDualStatus}
           loadView={loadPlans}
           reloadToken={reloadToken}
           trailing={
@@ -141,6 +137,8 @@ export function DualisPage() {
               <SiteNav />
             </>
           }
+          //* A „Ma: Duális/Iskola" jelvény a rácsé — ott a nézett hét
+          //* A/B-jelölése is ismert (lásd `TimetableCalendar`).
           heading={
             <div className="flex shrink-0 items-center gap-2 max-sm:sr-only">
               <h1
@@ -149,18 +147,6 @@ export function DualisPage() {
               >
                 Duális
               </h1>
-              {todayLabel && (
-                <span
-                  className={cn(
-                    "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold",
-                    todayLabel.status === "dual"
-                      ? "bg-primary/15 text-primary"
-                      : "bg-muted text-muted-strong",
-                  )}
-                >
-                  Ma: {todayLabel.text}
-                </span>
-              )}
               {planSet && planSet.plans.length >= MAX_PLANS && (
                 //* Őszinte jelzés: a lista meg van vágva, nem ennyi terv van.
                 <span
