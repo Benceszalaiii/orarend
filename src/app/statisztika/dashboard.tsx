@@ -12,7 +12,12 @@ import { logout } from "./actions";
 //! és pont az app saját elve sérülne: a szín információ, nem dekoráció. Ezért
 //! minden oszlop ugyanaz a `--primary` — a sötét felületen ellenőrzött
 //! kontraszttal.
+
+//! A „MA" NEM IDŐSZAK, HANEM PILLANATKÉP. Ugyanaz a napi bontású tároló adja,
+//! csak egyetlen napra — így a mai nap önmagában is megnézhető anélkül, hogy egy
+//! hetes átlagba olvadna bele. A szövegek külön nyelvtant kapnak rá lentebb.
 const PERIODS = [
+  { days: 1, label: "Ma" },
   { days: 7, label: "7 nap" },
   { days: 30, label: "30 nap" },
   { days: 90, label: "90 nap" },
@@ -30,6 +35,10 @@ export function StatsDashboard({
   ranked: Ranked[];
   daily: UsageDay[];
 }) {
+  //* Egynapos nézetben az „elmúlt 1 nap" se nem magyaros, se nem igaz: az a mai
+  //* nap. A számok ugyanazok, csak a szöveg igazodik.
+  const today = days === 1;
+
   const total = ranked.reduce((sum, row) => sum + row.count, 0);
   const top = ranked[0];
   const max = top?.count ?? 0;
@@ -120,7 +129,7 @@ export function StatsDashboard({
               Osztályok
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Az elmúlt {days} nap összesítve.
+              {today ? "A mai nap." : `Az elmúlt ${days} nap összesítve.`}
             </p>
 
             {/*//! TÁBLÁZAT ÉS DIAGRAM EGYSZERRE. Huszonhét osztálynál a puszta
@@ -129,8 +138,9 @@ export function StatsDashboard({
                 //! nagyságrendé, a szám a pontosságé. */}
             <table className="mt-4 w-full border-collapse">
               <caption className="sr-only">
-                Osztályok megnyitás szerint csökkenő sorrendben, az elmúlt{" "}
-                {days} napban
+                {today
+                  ? "Osztályok megnyitás szerint csökkenő sorrendben, a mai napon"
+                  : `Osztályok megnyitás szerint csökkenő sorrendben, az elmúlt ${days} napban`}
               </caption>
               <thead>
                 <tr className="border-b border-border">
@@ -278,14 +288,17 @@ function DailyTrend({ dates, totals }: { dates: string[]; totals: number[] }) {
 //! AZ ÜRES ÁLLAPOT IS MONDJON VALAMIT. „Nincs adat" önmagában nem segít: azt
 //! kell megmondania, hogy ez hiba-e, és mikor várható adat.
 function EmptyState({ days }: { days: number }) {
+  const today = days === 1;
   return (
     <div className="mt-8 rounded-lg border border-border bg-card px-5 py-8 text-center">
       <p className="text-sm font-medium text-foreground">
-        Még nincs adat erre az időszakra
+        {today ? "Ma még nincs adat" : "Még nincs adat erre az időszakra"}
       </p>
       <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">
-        Az elmúlt {days} napban egyetlen megnyitást sem rögzítettünk. Ez nem
-        hiba: a számláló csak akkor kap adatot, ha valaki megnyitja az
+        {today
+          ? "Ma még egyetlen megnyitást sem rögzítettünk."
+          : `Az elmúlt ${days} napban egyetlen megnyitást sem rögzítettünk.`}{" "}
+        Ez nem hiba: a számláló csak akkor kap adatot, ha valaki megnyitja az
         órarendet, és eszközönként naponta egyszer számol.
       </p>
     </div>

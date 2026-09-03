@@ -36,7 +36,7 @@ export default async function StatisztikaPage({
   const raw = Array.isArray(params.days) ? params.days[0] : params.days;
   //* Csak a felkínált időszakokat engedjük — a napok száma így nem lehet se
   //* nulla, se ezres nagyságrendű lekérés.
-  const allowed = [7, 30, 90, 365];
+  const allowed = [1, 7, 30, 90, 365];
   const requested = Number(raw);
   const days = allowed.includes(requested) ? requested : 30;
 
