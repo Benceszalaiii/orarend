@@ -98,15 +98,15 @@ const SHAPE: Record<
   { cls: string; slow: boolean; rise: boolean; salt: number }
 > = {
   //* Hó: kerek, hideg, egyenletes — a legnyugodtabb esés.
-  christmas: { cls: "dsg-grain-snow", slow: false, rise: false, salt: 1 },
-  newyear: { cls: "dsg-grain-snow", slow: false, rise: false, salt: 3 },
+  christmas: { cls: "ma-grain-snow", slow: false, rise: false, salt: 1 },
+  newyear: { cls: "ma-grain-snow", slow: false, rise: false, salt: 3 },
   //* Levél: hosszabb, pörgő út, melegebb szín.
-  autumn: { cls: "dsg-grain-leaf", slow: true, rise: false, salt: 5 },
+  autumn: { cls: "ma-grain-leaf", slow: true, rise: false, salt: 5 },
   //* Szirom: a levélnél könnyebb és halványabb.
-  spring: { cls: "dsg-grain-petal", slow: true, rise: false, salt: 7 },
+  spring: { cls: "ma-grain-petal", slow: true, rise: false, salt: 7 },
   //! A NYÁR NEM ESIK, HANEM SZÁLL. Lefelé hulló meleg fény hamis képet adna:
   //! a forró levegő felfelé megy, és a szemnek ez az, ami nyárnak érződik.
-  summer: { cls: "dsg-grain-mote", slow: true, rise: true, salt: 11 },
+  summer: { cls: "ma-grain-mote", slow: true, rise: true, salt: 11 },
 };
 
 export function SeasonalSky({
@@ -124,7 +124,7 @@ export function SeasonalSky({
     <div
       aria-hidden
       className={cn(
-        "dsg-sky dsg-scene pointer-events-none absolute inset-0 overflow-hidden",
+        "ma-sky ma-scene pointer-events-none absolute inset-0 overflow-hidden",
         className,
       )}
     >
@@ -133,7 +133,7 @@ export function SeasonalSky({
           key={g.id}
           className={cn(
             "absolute top-0 block",
-            shape.rise ? "dsg-rise" : "dsg-fall",
+            shape.rise ? "ma-rise" : "ma-fall",
             shape.cls,
           )}
           style={
@@ -142,15 +142,15 @@ export function SeasonalSky({
               width: `${g.size}px`,
               height: `${g.size}px`,
               opacity: g.opacity,
-              "--dsg-dur": `${g.dur}s`,
-              "--dsg-delay": `${g.delay}s`,
-              "--dsg-drift": `${g.drift}px`,
-              "--dsg-spin": `${g.spin}deg`,
+              "--ma-dur": `${g.dur}s`,
+              "--ma-delay": `${g.delay}s`,
+              "--ma-drift": `${g.drift}px`,
+              "--ma-spin": `${g.spin}deg`,
               //! REDUKÁLT MOZGÁSNÁL A MEZŐ ÁLL — DE OTT VAN. Az animáció
               //! kikapcsolása egy üres dobozt hagyna maga után; ehelyett a
               //! szemcse a saját fázisában, mozdulatlanul kimerevedik, és a
               //! szünetnek marad hangulata annak is, aki nem kér a mozgásból.
-              "--dsg-rest": `${g.rest}cqh`,
+              "--ma-rest": `${g.rest}cqh`,
             } as React.CSSProperties
           }
         />

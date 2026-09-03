@@ -1,13 +1,8 @@
 "use client";
 
 import { ChevronDown, Merge, RotateCw } from "lucide-react";
-import { useMotionValue } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DayDeck } from "@/components/design/day-deck";
-import { DayStrip } from "@/components/design/day-strip";
-import { NowBar } from "@/components/design/now-bar";
-import { RestHero, type RestNext } from "@/components/design/rest-hero";
 import {
   buildDayModel,
   daySummary,
@@ -37,12 +32,7 @@ import {
   SiteNav,
 } from "@/components/site-nav";
 import { nowState } from "@/components/timetable/now";
-import {
-  addDaysKey,
-  dateFromKey,
-  minLabel,
-  todayKey,
-} from "@/components/timetable/shared";
+import { dateFromKey, minLabel, todayKey } from "@/components/timetable/shared";
 import { useClock, useVisibilityEpoch } from "@/components/timetable/use-clock";
 import { useMergePreferences } from "@/components/timetable/use-merge-preferences";
 import { Button } from "@/components/ui/button";
@@ -52,8 +42,6 @@ import {
   loadDualSchedule,
   saveDualSchedule,
 } from "@/lib/dual-schedule";
-import { describeRestDay, type RestDay } from "@/lib/rest-day";
-import { loadSchoolPlan, type SchoolDayPlan } from "@/lib/school-calendar";
 import {
   buildTimetableView,
   describeTimetableFailure,
@@ -75,62 +63,44 @@ import { reportClassUse } from "@/lib/usage";
 import { cn } from "@/lib/utils";
 
 //* ---------------------------------------------------------------------------
-//* „Ma" — ÁTRENDEZVE (`/design`)
+//* „Ma" — a napi nézet
 //* ---------------------------------------------------------------------------
-//! UGYANAZ AZ ADAT, UGYANAZOK A KOMPONENSEK, MÁS ELRENDEZÉS. Ez a lap a `/ma`
-//! kísérleti alakja; a modell (`day.ts`, `week.ts`), a kártyák, a panelek és a
-//! szövegek változatlanok. Amit átrendez, az a lap SZERKEZETE — három mérésből
-//! következő okból (375×812-es telefonon, a 13C csütörtöki napjával):
+//! A `/orarend` MINDEN órát megmutat, de semmit nem összesít, és a napi
+//! kérdésekre („mi megy most", „hova megyek utána") KERESNI kell benne a
+//! választ. Ez a lap nem ugyanaz kicsiben: a bal oldalán a mai nap él, a
+//! jobb oldalán pedig olyan panelek, amikre a rácsból csak végigolvasva
+//! lehetne felelni — melyik nap nehéz, hol mozdult valami a héten, mennyi egy
+//! tantárgy heti terhelése.
 //!
-//! 1. A NAP VÁLTÁSA MÁSFÉL KÉPERNYŐVEL A HAJTÁS ALATT VOLT. Az egyetlen
-//!    napválasztó („A hét" panel sora) a lap tetejétől 1250 képpontra kezdődik,
-//!    miközben a lap FŐ TENGELYE maga a nap. Itt a nap tartalma a fogantyú:
-//!    oldalra húzva lapoz, fent pedig egy napsáv mutatja, hol tartunk — a panel
-//!    ettől függetlenül a helyén marad.
+//! A NAP VÁLASZTHATÓ. A hét pulzusa nem dísz, hanem a navigáció: bármelyik
+//! napra rá lehet állni, és a bal oldal átáll rá. A „most" viszont csak MA
+//! igaz — más napon a panel a nap első óráján áll meg, és ezt ki is mondja.
 //!
-//! 2. A „MOST" ELGÖRDÜLT ÉS NEM JÖTT VISSZA. A hero a 153–386. képpont közt áll,
-//!    alatta 2300 képpontnyi lap. Aki a nap listájáig vagy a tantárgyakig
-//!    lejjebb néz, elveszíti azt az egy adatot, amiért a lapot megnyitotta. Itt
-//!    a hero kigördülésekor a válasz ÖSSZECSUKÓDIK egy áttetsző sorba a lap
-//!    tetején, és egy koppintással visszanyílik.
-//!
-//! 3. A FEJLÉC ELTŰNT A GÖRGETÉSSEL. Az osztályválasztó, az értesítés és a
-//!    nézetváltó a lap tetején ragadt; a nézetváltó pedig az a vezérlő, amit
-//!    egymás után kétszer nyomnak meg (lásd `site-nav.tsx`). Itt a fejléc
-//!    marad — áttetsző rétegként, ami alatt a tartalom fut tovább.
-//!
-//! AMI KIMARADT. A „Ma" gomb: a napsávban a mai nap piros pöttyöt kap, és egy
-//! koppintásra elérhető — külön gomb ugyanarra a munkára két vezérlő lenne.
+//! A CSOPORTBONTÁS ITT IS ELDŐL. Sokáig csak olvastuk: az eldöntetlen ütközést
+//! a lap átküldte a heti rácsra. Csakhogy a „Tantárgyak" panel épp abból él,
+//! hogy melyik óra a TIÉD — feloldatlan bontásnál két egyforma sort mutatott
+//! ugyanarról a tantárgyról, és olyan heti terhelést állított, amit senki nem
+//! visel. Ezért a döntés odakerült, ahol a kár keletkezik: a panel sorából
+//! választani lehet. Ugyanaz a tárolás, ugyanaz a modell, mint a rácson — a
+//! visszavonás pedig továbbra is a heti nézet beállításaiban.
 
 //* Két lekérés közti legrövidebb idő, ha a lap újra láthatóvá válik.
 const REFETCH_MIN_MS = 60_000;
-
-//! A LEBEGŐ FEJLÉC MAGASSÁGA — ennyivel korábban számít „elgördültnek" a hero.
-//! Enélkül a „most" sor pont akkor jelenne meg, amikor a hero ALJA elhagyja a
-//! képernyőt, vagyis miután már a fejléc alá csúszott: két rétegben állna
-//! ugyanaz az adat egy fél másodpercig.
-//*
-//* Mért érték: 99 px telefonon (durva mutatóeszközön 44 px-es vezérlőkkel),
-//* 91 px egérrel. Egyetlen szám nem lehet mindkettő, és nem is kell: ez csak a
-//* váltás PILLANATÁT tolja el pár képponttal, nem a réteg helyét.
-const CHROME_H = 92;
-
-//! A NAP KEZDETE, NEM A NAP KÖZEPE. A `dateFromKey` szándékosan DÉLRE horgonyoz
-//! (`12:00`): az órarend napokat hasonlít, és délben egyetlen óraátállítás sem
-//! tolja át a dátumot a szomszéd napra. Aki viszont IDŐTARTAMOT mér — hány óra
-//! van még a hétvégéből —, annak a nap ELSŐ pillanata kell, különben minden
-//! szakasz tizenkét órával elcsúszik.
-function midnightOf(dateKey: string): Date {
-  const d = dateFromKey(dateKey);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
 
 const dayFmt = new Intl.DateTimeFormat("hu-HU", {
   month: "short",
   day: "numeric",
   weekday: "long",
 });
+
+//* ---------------------------------------------------------------------------
+//* „Ma" — AZ EGYHASÁBOS ALAK (`/design`)
+//* ---------------------------------------------------------------------------
+//! A `/ma` KORÁBBI ELRENDEZÉSE, félretéve. Ugyanaz az adat, ugyanazok a
+//! komponensek (`components/ma/*`), csak a lap szerkezete más: itt a nap egy
+//! folyamatos hasáb, napköteg és lebegő „most" sor nélkül. A nézetváltóban
+//! szándékosan NEM szerepel, és `noindex` — nem a diákok lapja, hanem az a
+//! forma, amihez a mostani `/ma` mérhető.
 
 export function DesignPage() {
   const [classes, setClasses] = useState<TimetableClass[]>([]);
@@ -146,7 +116,13 @@ export function DesignPage() {
   const clock = useClock();
   const epoch = useVisibilityEpoch();
 
+  //! A NAP, AMIT MUTATUNK. Hétköznap ez a mai; hétvégén a következő tanítási
+  //! nap. A hét ebből következik, nem fordítva.
+  //* Kliens-oldali érték (a látogató naptára szerint) — a szerveren nem
+  //* számoljuk ki, hogy ne legyen hidratálási eltérés.
   const [focusKey, setFocusKey] = useState<string | null>(null);
+  //* A nap, amit a hét paneljéből kiválasztottak. `null` = maradjon az
+  //* alapértelmezett (ma, hétvégén a következő tanítási nap).
   const [pickedKey, setPickedKey] = useState<string | null>(null);
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => {
@@ -161,6 +137,9 @@ export function DesignPage() {
       if (opts?.showPending) setPending(true);
       lastFetch.current = Date.now();
 
+      //! ELŐSZÖR A MENTETT PÉLDÁNY, AZONNAL. A folyosón a hálózat lassú vagy
+      //! nincs; egy üres képernyő a lekérés két másodpercéig pont azt a
+      //! pillanatot veszi el, amiért a lapot megnyitották.
       const local = loadCachedWeek(cls, weekStart);
       if (local) {
         setView((current) => current ?? local.view);
@@ -168,13 +147,19 @@ export function DesignPage() {
       }
 
       try {
-        const fresh = await buildTimetableView({ userClass: cls, weekStart });
+        const fresh = await buildTimetableView({
+          userClass: cls,
+          weekStart,
+        });
         if (fresh.ok) {
           setView(fresh);
           setError(null);
           setCached(null);
           saveCachedWeek(cls, weekStart, fresh);
         } else {
+          //! A HIBA NEM TÖRLI A MENTETT ADATOT. Ha van tegnapi órarendünk, azt
+          //! mutatjuk tovább — megjelölve, hogy mikori. Kevesebbet mondani,
+          //! mint amennyit tudunk, itt nem óvatosság, hanem kár.
           setError(fresh.error ?? null);
           if (!local) setView(fresh);
         }
@@ -195,6 +180,11 @@ export function DesignPage() {
     void fetchTimetableClasses().then((list) => setClasses(list.classes));
   }, [focusKey, load]);
 
+  //! VISSZATÉRÉSKOR ÚJRA — DE NEM MINDEN VISSZATÉRÉSKOR. A lapot a zsebből
+  //! veszik elő, és az órarend addigra órákkal korábbi lehet. Viszont a
+  //! lapváltás olcsó és gyakori: fék nélkül egy ide-oda kapcsolgatás percenként
+  //! tucatnyi kérést küldene EGY iskolai szerverre, ami nem a miénk. Az órarend
+  //! napon belül alig változik, egy perc türelmi idő bőven elég.
   const lastFetch = useRef(0);
   useEffect(() => {
     if (!focusKey || !selectedClass) return;
@@ -208,13 +198,27 @@ export function DesignPage() {
   }, [focusKey, selectedClass, load]);
 
   const classShort = view?.resolvedClass?.short ?? selectedClass;
+
+  //! MELYIK OSZTÁLYT NÉZIK — ÉS SEMMI MÁST. Csak a FELOLDOTT osztályt jelezzük:
+  //! a `selectedClass` még lehet elgépelt vagy ismeretlen, azt nincs értelme
+  //! beleszámolni. A deduplikáció (osztályonként naponta egyszer eszközönként) a
+  //! `reportClassUse`-ban van.
   const resolvedShort = view?.resolvedClass?.short;
   useEffect(() => {
     reportClassUse(resolvedShort);
   }, [resolvedShort]);
 
+  //! A DÖNTÉSEK OSZTÁLYHOZ KÖTVE ÉLNEK, és ez a lap már ír is közéjük: a
+  //! „Tantárgyak" panel sorából kiválasztható, melyik csoportra jár a diák.
+  //! Ugyanaz a horog, mint a heti rácson — így a két nézet ugyanabból a
+  //! tárolóból dolgozik, és egy itt hozott döntés ott is látszik.
   const { prefs, choose } = useMergePreferences({ classShort });
 
+  //! A DUÁLIS BEOSZTÁS A DIÁKÉ, NEM SZABÁLYÉ. Amíg nincs beállítva (`null`), a
+  //! lap egyetlen napot sem nyilvánít duálissá — inkább mutasson egy fölösleges
+  //! órarendet egy munkahelyi napon, mint hogy elrejtse valakinek a mai óráit.
+  //! A `state` csak azért létezik, hogy a beállítás azonnal átrajzolja a lapot;
+  //! az igazság a localStorage-ban van.
   const [dualSchedule, setDualSchedule] = useState<DualSchedule | null>(null);
   useEffect(() => {
     setDualSchedule(classShort ? loadDualSchedule(classShort) : null);
@@ -229,244 +233,80 @@ export function DesignPage() {
     [classShort],
   );
 
+  //* A megjelenített nap: a kiválasztott, vagy ha nincs, az alapértelmezett.
   const shownKey = pickedKey ?? focusKey;
-  const [allGroups, setAllGroups] = useState(false);
 
+  const day = useMemo(
+    () =>
+      view && shownKey
+        ? buildDayModel(view, prefs, shownKey, dualSchedule)
+        : null,
+    [view, prefs, shownKey, dualSchedule],
+  );
+  //! A NAP KÉT OLVASATA. A feloldott nap az, ami a DIÁKÉ — ezen áll a „most", a
+  //! napi összefoglaló, minden. A másik az OSZTÁLYÉ: minden csoport órája, úgy,
+  //! ahogy a forrás küldte. A kettő nem versenyez: a lap az elsőt mutatja, a
+  //! másodikat egy gombbal elő lehet hívni — mert az „elrejtettem egy órát"
+  //! csak akkor becsületes döntés, ha vissza is lehet nézni, mit rejt el.
+  const dayAll = useMemo(
+    () =>
+      view && shownKey ? buildDayModel(view, [], shownKey, dualSchedule) : null,
+    [view, shownKey, dualSchedule],
+  );
+  const [allGroups, setAllGroups] = useState(false);
+  //* A saját órák kulcsai: ebből tudja a lista, melyik kártya nem a diáké.
+  const mineKeys = useMemo(
+    () =>
+      new Set(
+        (day?.segments ?? [])
+          .filter((seg) => seg.kind === "lesson")
+          .map((seg) => seg.key),
+      ),
+    [day],
+  );
+  const hiddenCount =
+    dayAll && day ? Math.max(0, dayAll.lessonCount - day.lessonCount) : 0;
+  const shownDay = allGroups && dayAll ? dayAll : day;
+
+  const later = useMemo(
+    () => (view && shownKey ? laterItemsOf(view, prefs, shownKey) : []),
+    [view, prefs, shownKey],
+  );
   const week = useMemo(
     () => (view ? buildWeekModel(view, prefs, dualSchedule) : null),
     [view, prefs, dualSchedule],
   );
 
-  //! A KÖTEG MINDEN NAPJA ELŐRE FELÉPÜL. Öt nap modellje két olvasatban (a
-  //! diáké és az osztályé) tíz tiszta függvényhívás ugyanabból a már letöltött
-  //! hétből — cserébe a lapozás közben nem kell számolni, a szomszéd nap a
-  //! mozdulat első képkockájától kész.
-  const panels = useMemo(() => {
-    if (!view || !week) return [];
-    return week.days.map((weekDay) => {
-      const day = buildDayModel(view, prefs, weekDay.dateKey, dualSchedule);
-      const dayAll = buildDayModel(view, [], weekDay.dateKey, dualSchedule);
-      const mineKeys = new Set(
-        (day?.segments ?? [])
-          .filter((seg) => seg.kind === "lesson")
-          .map((seg) => seg.key),
-      );
-      return {
-        dateKey: weekDay.dateKey,
-        day,
-        dayAll,
-        mineKeys,
-        hiddenCount:
-          dayAll && day ? Math.max(0, dayAll.lessonCount - day.lessonCount) : 0,
-      };
-    });
-  }, [view, week, prefs, dualSchedule]);
+  const isToday = shownKey !== null && today !== null && shownKey === today;
+  //! A DUÁLIS NAP NEM AZ OSZTÁLY NAPJA. Ha a diák saját beosztása szerint a
+  //! munkahelyen van, a lap NEM az osztály óráit mutatja neki: azok azon a
+  //! napon nem róla szólnak. A nap helyén egyetlen 8:00–15:00 téglalap áll —
+  //! az osztály órarendje pedig egy koppintással előhívható marad („Teljes
+  //! órarend"), mert elrejteni és letagadni nem ugyanaz.
+  const dualDay = day?.dual === "dual";
 
-  const index = useMemo(() => {
-    const found = panels.findIndex((p) => p.dateKey === shownKey);
-    return found >= 0 ? found : 0;
-  }, [panels, shownKey]);
-
-  //* A köteg tört állása — a napsáv jelölője ebből mozog, képkockánként.
-  const progress = useMotionValue(0);
-
-  const pickIndex = useCallback(
-    (next: number) => {
-      const target = panels[next];
-      if (!target) return;
-      setPickedKey(target.dateKey);
-      setPreviewKey(null);
-    },
-    [panels],
-  );
-
-  //! A „MOST" CSAK MA IGAZ. Más napra lapozva a hero a nap első óráján áll meg
-  //! — visszaszámlálni napokon át értelmetlen.
-  const active = panels[index];
-  const isToday =
-    active?.dateKey != null && today != null && active.dateKey === today;
-  const later = useMemo(
-    () =>
-      view && active && isToday
-        ? laterItemsOf(view, prefs, active.dateKey)
-        : [],
-    [view, prefs, active, isToday],
-  );
-  const state =
-    clock && active?.day && isToday
-      ? nowState(active.day.items, later, clock.min)
-      : null;
-
+  //* A beállító rács a MAI napot emeli ki, nem a nézettet: az oszlop-jelölés
+  //* tájékozódás („hol tartunk a ciklusban"), nem a kiválasztás visszhangja.
   const todayDow = useMemo(() => {
     if (!today) return null;
     const dow = ((dateFromKey(today).getDay() + 6) % 7) + 1;
     return dow <= 5 ? dow : null;
   }, [today]);
 
-  //! HÉTVÉGÉN A KÖVETKEZŐ HÉT ÁLL A LAPON — DE A VÁLASZ A HÉTVÉGÉRŐL SZÓL.
-  //! A `focusDayKey` szombaton és vasárnap a következő hétfőre visz, mert a
-  //! rács kérdése („mi jön") csak ott értelmes. A hero kérdése viszont a MAI
-  //! napé: aki szombaton nyitja meg a lapot, nem hétfőt él, hanem hétvégét. A
-  //! kettő nem mond ellent egymásnak — a lap a hétfőt MUTATJA, a hero pedig a
-  //! hétvégét MÉRI, egészen az első hétfői becsengetésig.
-  const isWeekend = useMemo(() => {
-    if (!today) return false;
-    const dow = dateFromKey(today).getDay();
-    return dow === 0 || dow === 6;
-  }, [today]);
+  //! A „MOST" CSAK MA IGAZ. Hétvégén a lap a következő tanítási napot mutatja —
+  //! ott visszaszámlálni napokon át értelmetlen, ezért a panel a nap első
+  //! óráján áll meg.
+  const state =
+    clock && day && isToday ? nowState(day.items, later, clock.min) : null;
 
-  //* A pillanat ezredmásodpercben. A napokon átnyúló távolság NEM 24 óra
-  //* többszöröse (nyári időszámítás), ezért a hero valódi időbélyegekkel
-  //* számol — a mai éjfél és az órajel együtt pontosan a mostot adja.
-  const nowMs = useMemo(
-    () =>
-      today && clock ? midnightOf(today).getTime() + clock.sec * 1000 : null,
-    [today, clock],
-  );
+  const preview = useMemo(() => {
+    if (!day) return null;
+    if (previewKey) return day.items.find((i) => i.key === previewKey) ?? null;
+    if (!isToday) return day.items[0] ?? null;
+    return null;
+  }, [day, previewKey, isToday]);
 
-  //! MI EZ A NAP, HA NINCS RAJTA ÓRA. Három különböző napfajta három
-  //! különböző választ érdemel (lásd `rest-hero.tsx`); hogy melyik melyik, azt
-  //! a `rest-day.ts` dönti el. Itt csak az dől el, MELYIK LAPRA kerül — és
-  //! hogy mi az a következő óra, amire mutathat.
-  const rests = useMemo(() => {
-    const out = new Map<string, { rest: RestDay; next: RestNext | null }>();
-    if (!view) return out;
-    for (const panel of panels) {
-      const { day, dateKey } = panel;
-      if (day?.dual === "dual") continue;
-      //! A HÉTVÉGE KÁRTYÁJA A KÖVETKEZŐ TANÍTÁSI NAP LAPJÁN ÁLL, mert magának a
-      //! szombatnak nincs lapja a kötegben. Ha viszont az a nap maga is
-      //! pihenőnap (szünet első hétfője), akkor az ERŐSEBB állítás: a lap a
-      //! szünetről beszél, nem a hétvégéről, ami épp beleolvad.
-      const weekend =
-        isWeekend && dateKey === focusKey && (day?.lessonCount ?? 0) > 0;
-      if (!weekend && (!day || day.lessonCount > 0)) continue;
-
-      const item = weekend
-        ? (day?.items[0] ?? null)
-        : (laterItemsOf(view, prefs, dateKey)[0] ?? null);
-      out.set(dateKey, {
-        rest: describeRestDay({
-          dateKey,
-          weekend,
-          teaching: day?.teaching ?? null,
-          notes: day?.notes ?? [],
-          isToday: dateKey === today,
-        }),
-        next: item
-          ? {
-              dateKey: item.dateKey,
-              dayName: item.dayName,
-              startMin: item.startMin,
-              relative:
-                today && item.dateKey === addDaysKey(today, 1)
-                  ? "Holnap"
-                  : null,
-            }
-          : null,
-      });
-    }
-    return out;
-  }, [panels, view, prefs, isWeekend, focusKey, today]);
-
-  //! A HÉTVÉGE SZAKASZA — KÉT VALÓDI VÉGPONT, egy sem kitalálva. Szombat
-  //! éjfél az egyik; a másik a következő tanítási nap ELSŐ órája, a diák saját,
-  //! csoportbontás-feloldott órarendjéből. Ezért mond mást ez a sáv annak, aki
-  //! nulladik órára jár, mint annak, aki nem.
-  const weekendSpan = useMemo(() => {
-    if (!isWeekend || !today || !focusKey) return null;
-    const entry = rests.get(focusKey);
-    if (!entry || entry.rest.kind !== "weekend" || !entry.next) return null;
-    const from = midnightOf(today);
-    //* Vasárnap a hétvége már szombaton elkezdődött.
-    if (from.getDay() === 0) from.setDate(from.getDate() - 1);
-    //* Éjfélhez adott PERCEK: a `setMinutes` a túlcsordulást órákra váltja, így
-    //* a 480. perc pontosan 8:00 lesz.
-    const to = midnightOf(entry.next.dateKey);
-    to.setMinutes(entry.next.startMin);
-    return { fromMs: from.getTime(), toMs: to.getTime() };
-  }, [isWeekend, today, focusKey, rests]);
-
-  //! A HERO ELGÖRDÜLÉSE INDÍTJA A SORT — nem a görgetés mértéke. Az őrszem a
-  //! hero alatt áll az AKTÍV napon; ha az kicsúszik a lebegő fejléc alól, a
-  //! „most" sor előbukkan, ha visszajön, eltűnik. Két ugyanolyan érték soha nem
-  //! áll egyszerre a képen.
-  const [heroGone, setHeroGone] = useState(false);
-  const heroWatchRef = useRef<IntersectionObserver | null>(null);
-  //! A SZÜNET HETE ÜRES HÉT — ÉS EDDIG ÖRÖKÖS PÖRGŐ KARIKA VOLT. A
-  //! `timetable/cards` egy egész szünetre nem küld NAPOKAT sem, csak egy üres
-  //! választ; a `buildTimetableView` ezt nevesített hibaként adja tovább, a
-  //! köteg viszont nulla lapból épül fel, és a lap a betöltés-jelzőnél ragad.
-  //! A téli szünet két hete alatt tehát pont az a felület nem jelent meg, amit
-  //! ez a munka megírt.
-  //!
-  //! ÉS NEM TALÁLGATUNK. Hogy azért nincs adat, mert szünet van, azt nem az
-  //! üres válaszból következtetjük ki — megkérdezzük a TANÉV RENDJÉT, ami
-  //! pontosan erre való (`school-calendar.ts`). Ha az azt mondja, nincs
-  //! tanítás, akkor a lap a szünetről beszél; ha nem mondja, vagy nem érhető
-  //! el, marad a nevesített hiba.
-  const [emptyPlan, setEmptyPlan] = useState<SchoolDayPlan | null | undefined>(
-    undefined,
-  );
-  const weekEmpty = view !== null && view.days.length === 0;
-  useEffect(() => {
-    if (!weekEmpty || !focusKey) return;
-    let alive = true;
-    void loadSchoolPlan([focusKey]).then((plan) => {
-      if (alive) setEmptyPlan(plan.get(focusKey) ?? null);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [weekEmpty, focusKey]);
-
-  //! A FIGYELŐT AZ ELEM INDÍTJA, NEM EGY EFFEKT. Az őrszemet minden napon MÁSIK
-  //! elem hordozza: napváltáskor a régi kikerül a fából, az új bekerül. Egy
-  //! `useEffect`-nek ehhez ki kellene találnia, mikor cserélődött a `ref`
-  //! tartalma — amit a React nem mond meg, csak a függőségekből lehetne
-  //! kikövetkeztetni, és egy rossz sorrendű futásnál a figyelő némán elmarad.
-  //! A visszahívásos `ref` viszont PONTOSAN a csatolás és a leválás
-  //! pillanatában fut le: a figyelő így nem tud lemaradni az elemétől.
-  const watchHero = useCallback((el: HTMLDivElement | null) => {
-    heroWatchRef.current?.disconnect();
-    heroWatchRef.current = null;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setHeroGone(!entry.isIntersecting),
-      { rootMargin: `-${CHROME_H}px 0px 0px 0px`, threshold: 0 },
-    );
-    observer.observe(el);
-    heroWatchRef.current = observer;
-  }, []);
-
-  //! ÜRES HÉT: A LAP NEM PÖRÖG TOVÁBB, HANEM VÁLASZOL. A napköteg itt nem
-  //! épülhet fel — nincs miből —, de a kérdés, amivel a lapot megnyitották,
-  //! ettől még kap választ: vagy a szünetét, vagy a hibáét.
-  if (weekEmpty && shownKey && emptyPlan !== undefined) {
-    return (
-      <EmptyWeekScreen
-        dateKey={shownKey}
-        isToday={shownKey === today}
-        plan={emptyPlan}
-        classes={classes}
-        selectedClass={selectedClass}
-        pending={pending}
-        error={error}
-        onRetry={() =>
-          void load(selectedClass, shownKey, { showPending: true })
-        }
-        onClass={(next) => {
-          setSelectedClass(next);
-          saveCachedClass(next);
-          setEmptyPlan(undefined);
-          setView(null);
-          void load(next, shownKey, { showPending: true });
-        }}
-      />
-    );
-  }
-
-  if (!view || !shownKey || !week || panels.length === 0) {
+  if (!view || !shownKey) {
     return (
       <main className="flex min-h-[100dvh] items-center justify-center bg-background">
         <MorphingInfinity className="size-24 text-muted-foreground" />
@@ -475,37 +315,70 @@ export function DesignPage() {
   }
 
   return (
-    <main className="relative min-h-[100dvh] bg-background tt-safe">
-      {/*//! A FÉNYMEZŐ A LAPÉ, NEM A HERO DOBOZÁÉ. Az eredeti elrendezésben a
-          //! negyedelt címer visszfénye a hero szekció háttere volt — itt a hero
-          //! a napköteg belsejébe került, és vele együtt lapozna. Egy háttér, ami
-          //! oldalra csúszik a tartalommal, nem háttér: ezért díszrétegként áll a
-          //! lap tetején, rögzített magassággal, alsó elolvadással. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[30rem] overflow-hidden"
-      >
-        <div className="absolute -top-40 -left-40 size-96 rounded-full bg-[radial-gradient(circle,oklch(0.55_0.2_27/0.14),transparent_70%)]" />
-        <div className="absolute -right-32 bottom-0 size-120 rounded-full bg-[radial-gradient(circle,var(--hero-crest-aura),transparent_70%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-linear-to-b from-transparent to-background" />
-      </div>
+    //! A JEDLIK-SZAKKÖR KEZDŐLAP SZÓTÁRA. Fent a hero fénymezője, benne az idő
+    //! a főszereplő; alatta csendes munkafelület, `lg`-től fő hasáb + keskeny
+    //! sáv. A DOM-ban a fő hasáb áll elöl, így a mobil olvasási sorrend
+    //! egyben prioritás-sorrend is.
+    <main className="min-h-[100dvh] bg-background tt-safe">
+      {/*//* Az `/orarend` keretét egy 1 px-es felső vonal indítja; enélkül a
+          //* váltó ezen a lapon pontosan ennyivel magasabban ülne. Vonalat nem
+          //* húzunk ide — a fénymező tetejét elvágná —, csak a hiányzó pixelt
+          //* pótoljuk, hogy a két sáv egy magasságban legyen. */}
+      <section className="relative w-full overflow-hidden pt-[calc(env(safe-area-inset-top)+1px)] text-hero-foreground">
+        {/* A negyedelt címer-mező visszfénye: piros fent balra, kék lent jobbra */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-40 -left-40 size-96 rounded-full bg-[radial-gradient(circle,oklch(0.55_0.2_27/0.14),transparent_70%)]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-32 -bottom-48 size-120 rounded-full bg-[radial-gradient(circle,var(--hero-crest-aura),transparent_70%)]"
+        />
+        {/*//* Lágy alsó fade: a színátmenetek élét a --background felé olvasztja. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-linear-to-b from-transparent to-background"
+        />
 
-      {/*//! A LEBEGŐ FEJLÉC. Áttetsző réteg, ami alatt a lap tartalma fut
-          //! tovább — nem egy elvett csík a lap tetejéből. A széle nem vonal,
-          //! hanem elhalványuló él (`dsg-chrome`): keret csak ott, ahol a
-          //! lebegő felület tényleg takar valamit. */}
-      <div className="dsg-chrome sticky top-0 z-30 text-hero-foreground">
+        {/*//! A FEJLÉCSÁV AZ ABLAKÉ, NEM A HASÁBÉ. A lap tartalma `max-w-5xl`
+            //! középre zárt hasáb — de a sávot ez eddig magával vitte, és
+            //! 1280 px-en a váltó 1122 px-nél állt, míg az `/orarend` teljes
+            //! szélességű eszköztárában 1264-nél: 141 px ugrás egyetlen
+            //! koppintásra. A sáv ezért kilép a hasábból, és ugyanazt a
+            //! legnagyobb szélességet, margót és térközt kapja, mint a másik
+            //! lap eszköztára (`SITE_BAR_*`, lásd `site-nav.tsx`). A sáv két
+            //! vége az ablak két széléhez tapad; a hasáb alatta kezdődik. */}
         <div
           className={cn(
-            "mx-auto flex w-full items-center",
+            "relative z-10 mx-auto flex w-full items-center",
             SITE_BAR_MAX,
             SITE_BAR_METRICS,
           )}
         >
+          {/*//* A terméknév ugyanaz a bal horgony, mint az `/orarend` sávjában —
+              //* és ugyanúgy elrejtőzik telefonon, ahol a hely a vezérlőké. A
+              //* lap CÍME a dátum, az alatta lévő hasáb tetején. */}
           <span className="shrink-0 text-base font-bold tracking-tight max-sm:sr-only">
             Órarend
           </span>
           <div className={cn("ml-auto", SITE_BAR_CLUSTER)}>
+            {/*//* Ha nem a mai napot nézzük, az út vissza mindig egy koppintás. */}
+            {pickedKey && pickedKey !== today && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPickedKey(null)}
+                className="h-8 shrink-0 touch-target rounded-full border-hero-foreground/25 bg-transparent px-3 text-xs"
+              >
+                Ma
+              </Button>
+            )}
+            {/*//! A HARANG ITT VAN A LEGINKÁBB A HELYÉN. Ez a lap arra felel,
+                //! hogy „mi megy most, mi jön utána" — az óra előtti
+                //! emlékeztető pontosan ugyanez a kérdés, csak akkor, amikor a
+                //! lap nincs nyitva. A vezérlő az OSZTÁLYVÁLASZTÓ mellé kerül,
+                //! mert az értesítés a kiválasztott osztályról szól: a kettő
+                //! ugyanazt az alanyt osztja. */}
             <NotificationMenu classes={classes} currentClass={selectedClass} />
             <ClassPicker
               classes={classes}
@@ -524,506 +397,273 @@ export function DesignPage() {
           </div>
         </div>
 
-        {/*//! A NAPSÁV A KÖTEG FÖLÖTT ÁLL, NEM AZ ABLAK FÖLÖTT. A fejléc FELSŐ
-            //! sora szándékosan az ablaké (`SITE_BAR_MAX`, lásd `site-nav.tsx`):
-            //! a nézetváltónak a lap két szélén kell ülnie, hogy a `/orarend`
-            //! ugyanoda tegye. A napsáv viszont nem a lapról szól, hanem a
-            //! KÖTEGRŐL — egy vezérlő a dolog mellett álljon, amit mozgat.
-            //! `SITE_BAR_MAX`-szal 1280 px-en öt fül feszült ki 1248 képpontra
-            //! egy 688 képpontos köteg fölött: háromkarakteres címkék 250
-            //! képpontonként, a jelölő pedig egy tenyérnyi folt a köteg mellett.
-            //!
-            //! Ezért a sáv UGYANAZT a hasábot és UGYANAZT a rácsot kapja, mint a
-            //! tartalom — nem hasonló számokat, hanem ugyanazt a sávdefiníciót,
-            //! így az igazodás szerkezetből következik, nem egyeztetésből. */}
-        <div className="mx-auto w-full max-w-5xl px-4 pb-1.5 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-8">
+        <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pt-3 pb-8 sm:px-6 sm:pt-4">
+          {/*//* A cím kapja a teljes szélességet: a vezérlők fölötte, a saját
+              //* sávjukban ülnek, így a dátum nem tör két sorba, és a
+              //* „14:20-ig" sem szakad szét a kötőjelnél. */}
           <div className="min-w-0">
-            <DayStrip
-              days={week.days}
-              index={index}
-              progress={progress}
-              todayDateKey={today ?? ""}
-              onPick={pickIndex}
-            />
-            <NowBar
-              visible={heroGone}
-              state={state}
-              clock={clock}
-              epoch={epoch}
-              day={active?.day ?? null}
-              isToday={isToday}
-              dayName={active?.day?.dayName ?? ""}
-              onReturn={() =>
-                window.scrollTo({
-                  top: 0,
-                  behavior: window.matchMedia(
-                    "(prefers-reduced-motion: reduce)",
-                  ).matches
-                    ? "auto"
-                    : "smooth",
-                })
-              }
-            />
+            <h1 className="text-2xl font-bold tracking-tight first-letter:uppercase sm:text-3xl">
+              {dayFmt.format(dateFromKey(shownKey))}
+            </h1>
+            <p className="mt-1 text-sm text-hero-foreground/60">
+              {!isToday &&
+                !pickedKey &&
+                "Hétvége — a következő tanítási nap · "}
+              {day ? daySummary(day, isToday) : "Nincs adat erre a napra"}
+              {day && day.lessonCount > 0 && day.dual !== "dual" && (
+                <>
+                  {" · "}
+                  <span className="whitespace-nowrap tabular-nums">
+                    {minLabel(day.lastMin)}-ig
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+
+          {/*//! AZ IDŐ A FŐSZEREPLŐ. A blokk nem nyúlik a teljes szélességig: a
+              //! nagy óra olvasható blokk-méretben a legerősebb, nem elnyújtva. */}
+          {/*//! DUÁLIS NAPON IS ÁLL A HERO — csak más műszerrel. A nagy óra
+              //! kérdése („mennyi van még hátra") a munkahelyen töltött napon
+              //! szó szerint ugyanaz; ami hiányzik, az a futó ÓRA, nem a
+              //! kérdés. A `DualHero` ugyanerre a helyre, ugyanekkora számmal
+              //! a munkanapot válaszolja — a nap listája helyén lentebb ezért
+              //! már nem áll második sáv ugyanerről. */}
+          <div className="mt-6 lg:max-w-2xl">
+            {dualDay ? (
+              <DualHero nowSec={clock && isToday ? clock.sec : null} />
+            ) : error && !day ? (
+              <ErrorPanel
+                error={error}
+                pending={pending}
+                onRetry={() =>
+                  void load(selectedClass, shownKey, { showPending: true })
+                }
+              />
+            ) : (
+              <NowBlock
+                state={state}
+                clock={clock}
+                epoch={epoch}
+                preview={preview}
+                onClearPreview={isToday ? () => setPreviewKey(null) : () => {}}
+                previewDismissable={isToday && previewKey !== null}
+              />
+            )}
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pb-10 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start lg:gap-8">
-        {/*//! A NAP MAGA A FOGANTYÚ. A dátumtól a nap listájáig minden EGY lap:
-            //! oldalra húzva a cím, a hero és az órák együtt mozdulnak. Ha a
-            //! hero állva maradna és csak a lista lapozna, a lap két különböző
-            //! napról beszélne ugyanabban a pillanatban. */}
-        <DayDeck
-          keys={panels.map((p) => p.dateKey)}
-          index={index}
-          onIndexChange={(next) => pickIndex(next)}
-          progress={progress}
-          //! A TELJES SZÉLESSÉGŰ FOGANTYÚ CSAK EGY HASÁBOS ELRENDEZÉSBEN AZ.
-          //! Telefonon a köteg kilép a hasáb margójából, hogy a húzás a képernyő
-          //! széléig érjen — a hüvelykujj onnan indul. `lg`-től viszont a köteg
-          //! egy RÁCSCELLA: ugyanez a negatív margó 24 képponttal benyúlt a
-          //! sávok közé (a 32 képpontos hézagból 8 maradt), és a köteg vágóéle
-          //! a szomszéd hasáb alá lógott. Ott a köteg a cellája, semmi több.
-          className="-mx-4 sm:-mx-6 lg:mx-0"
-          renderPanel={(i) => {
-            const panel = panels[i];
-            if (!panel) return null;
-            return (
-              <div className="px-4 sm:px-6 lg:px-0">
-                <DayPanelBody
-                  panel={panel}
-                  isActive={i === index}
-                  isToday={panel.dateKey === today}
-                  onSentinel={i === index ? watchHero : null}
-                  //! A HÉTVÉGE-JELÖLÉS A FÓKUSZ LAPJÁÉ, NEM MINDEN NEM-MAI
-                  //! NAPÉ. A korábbi feltétel („nem ma") a hét MIND A NÉGY
-                  //! másik lapjára kiírta a „Hétvége" előtagot: szerdán a keddi
-                  //! lapra lapozva is hétvége állt a dátum alatt.
-                  weekendNote={isWeekend && panel.dateKey === focusKey}
-                  rest={rests.get(panel.dateKey) ?? null}
-                  restSpan={panel.dateKey === focusKey ? weekendSpan : null}
-                  nowMs={nowMs}
-                  allGroups={allGroups}
-                  onAllGroups={(next) => {
-                    setAllGroups(next);
-                    setPreviewKey(null);
-                  }}
-                  previewKey={previewKey}
-                  onPreview={setPreviewKey}
-                  clock={clock}
-                  epoch={epoch}
-                  state={i === index ? state : null}
-                  error={error}
-                  pending={pending}
-                  onRetry={() =>
-                    void load(selectedClass, panel.dateKey, {
-                      showPending: true,
-                    })
-                  }
-                  cached={cached}
-                />
+      <div className="mx-auto w-full max-w-5xl px-4 pb-10 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start lg:gap-8">
+        <div className="space-y-10">
+          <section aria-labelledby="today-heading">
+            <div className="mb-3 flex items-baseline justify-between gap-4">
+              <h2
+                id="today-heading"
+                className="text-base font-semibold text-foreground"
+              >
+                {isToday ? "A mai nap" : "A nap"}
+                {/*//* Duális napon a lista csak akkor az OSZTÁLYÉ, ha elő is
+                    //* hívták — enélkül a cím a téglalapra mondaná ugyanezt. */}
+                {dualDay && allGroups && (
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">
+                    az osztály órarendje
+                  </span>
+                )}
+              </h2>
+              <div className="flex shrink-0 items-center gap-3">
+                {/*//! „MIT REJTETTEM EL?" — EGY KAPCSOLÓ, NEM EGY JELVÉNY
+                    //! MINDEN KÁRTYÁN. A csoportbontás feloldása egész órákat
+                    //! vesz ki a napból; kártyánkénti jelvénnyel ez apró
+                    //! felkiáltójelek sorozata lenne, itt viszont egyetlen
+                    //! kérdés az egész napra.
+                    //!
+                    //! ALAPBÓL KIKAPCSOLVA, DE MINDIG OTT. A lap a diák SAJÁT
+                    //! napját mutatja — más csoport órája alapértelmezés
+                    //! szerint nincs benne. A jelölőnégyzet viszont akkor is
+                    //! látszik, ha épp nincs mit felfedni: így nem kell
+                    //! kitalálni, hogy a hiányzó óra hova lett, és nem egy
+                    //! eltűnő-felbukkanó gombra kell vadászni. */}
+                {dayAll && dayAll.lessonCount > 0 && (
+                  <label
+                    className={cn(
+                      "flex cursor-pointer select-none items-center gap-1.5 text-xs font-medium transition-colors",
+                      "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring motion-reduce:transition-none",
+                      allGroups
+                        ? "text-primary"
+                        : "text-muted-strong hover:text-foreground",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={allGroups}
+                      onChange={(e) => {
+                        setAllGroups(e.target.checked);
+                        setPreviewKey(null);
+                      }}
+                      className="size-3.5 shrink-0 cursor-pointer accent-primary focus-visible:outline-none"
+                    />
+                    Teljes órarend
+                  </label>
+                )}
+                <Link
+                  href="/orarend"
+                  className="text-sm text-primary hover:underline"
+                >
+                  Heti órarend
+                </Link>
               </div>
-            );
-          }}
-        />
+            </div>
 
-        {/*//* Másodlagos sáv: a hét — amire a rácsból csak végigolvasva lenne
-            //* válasz. A napváltás innen is megy, csak most nem ez az EGYETLEN
-            //* útja: ami itt marad, az a nap TERHELÉSE, nem a helyzet. */}
-        {/*//! A RITMUS MONDJA MEG, HOL VÁLT A TÉMA. Eddig 40 képpont választotta
-            //! el a napot a héttől, és ugyanaz a 40 választotta el a hét két
-            //! panelját egymástól: négy egyforma hézag, tehát öt egyenrangú
-            //! blokk — pedig az első határ RÉGIÓT vált („a napom" → „a hetem"),
-            //! a többi csak témát a régión belül. A nagy hézag most a régió
-            //! határán van, a panelek közti pedig szűkebb: a tagolás így
-            //! olvasható anélkül, hogy keretet kéne köré rakni. */}
-        <div className="mt-14 space-y-8 lg:mt-0">
-          <WeekPulse
-            week={week}
-            focusKey={shownKey}
-            todayDateKey={today ?? ""}
-            onFocus={(dateKey) => {
-              setPickedKey(dateKey);
-              setPreviewKey(null);
-            }}
-          />
-          <DualPanel
-            schedule={dualSchedule}
-            weekLetter={week.weekLetter}
-            todayDow={todayDow}
-            classShort={classShort}
-            onChange={changeDualSchedule}
-          />
-          <MovedThisWeek
-            week={week}
-            onFocus={(dateKey) => {
-              setPickedKey(dateKey);
-              setPreviewKey(null);
-            }}
-          />
-          <SubjectLoads week={week} onChoose={choose} />
-        </div>
-      </div>
-    </main>
-  );
-}
+            {/*//! A NAP KÖRÜLMÉNYEI. Duális napon is kimegy: hogy az iskolában
+                //! rövidítettek az órák, az a munkahelyi napra nem tartozik, de
+                //! a „nincs tanítás" és a napra kiírt esemény igen — a lap
+                //! ilyenkor is EZT a napot mutatja. */}
+            {day && <DayPlanRow day={day} isToday={isToday} className="mb-3" />}
 
-//! AZ ÜRES HÉT LAPJA. Nincs napköteg, nincs napsáv, nincs „most" — a hét
-//! egyetlen napjáról sincs kártya. Ami marad, az a lap két állandó eleme: a
-//! fejléc (osztályváltás, értesítés, nézetváltó) és EGY válasz. A válasz vagy a
-//! szüneté — a tanév rendje szerint —, vagy a hibáé; egy harmadik lehetőség
-//! (üres rács) nincs, mert arról nem derülne ki, baj van-e.
-function EmptyWeekScreen({
-  dateKey,
-  isToday,
-  plan,
-  classes,
-  selectedClass,
-  pending,
-  error,
-  onRetry,
-  onClass,
-}: {
-  dateKey: string;
-  isToday: boolean;
-  /** A nap a tanév rendjéből; `null` = nem érhető el. */
-  plan: SchoolDayPlan | null;
-  classes: TimetableClass[];
-  selectedClass: string;
-  pending: boolean;
-  error: TimetableError | null;
-  onRetry: () => void;
-  onClass: (next: string) => void;
-}) {
-  const rest =
-    plan && !plan.teaching
-      ? describeRestDay({
-          dateKey,
-          weekend: false,
-          teaching: false,
-          notes: plan.notes,
-          isToday,
-        })
-      : null;
-
-  return (
-    <main className="relative min-h-[100dvh] bg-background tt-safe">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[30rem] overflow-hidden"
-      >
-        <div className="absolute -top-40 -left-40 size-96 rounded-full bg-[radial-gradient(circle,oklch(0.55_0.2_27/0.14),transparent_70%)]" />
-        <div className="absolute -right-32 bottom-0 size-120 rounded-full bg-[radial-gradient(circle,var(--hero-crest-aura),transparent_70%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-linear-to-b from-transparent to-background" />
-      </div>
-
-      <div className="dsg-chrome sticky top-0 z-30 text-hero-foreground">
-        <div
-          className={cn(
-            "mx-auto flex w-full items-center",
-            SITE_BAR_MAX,
-            SITE_BAR_METRICS,
-          )}
-        >
-          <span className="shrink-0 text-base font-bold tracking-tight max-sm:sr-only">
-            Órarend
-          </span>
-          <div className={cn("ml-auto", SITE_BAR_CLUSTER)}>
-            <NotificationMenu classes={classes} currentClass={selectedClass} />
-            <ClassPicker
-              classes={classes}
-              value={selectedClass}
-              disabled={pending}
-              onChange={onClass}
-            />
-            <SiteNav />
-          </div>
-        </div>
-      </div>
-
-      <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pt-3 pb-10 sm:px-6 sm:pt-4">
-        <h2 className="text-2xl font-bold tracking-tight first-letter:uppercase sm:text-3xl">
-          {dayFmt.format(dateFromKey(dateKey))}
-        </h2>
-        <p className="mt-1 text-sm text-hero-foreground/60">
-          {rest ? rest.label : "Erre a hétre nem érkezett órarend"}
-        </p>
-        <div className="mt-6 lg:max-w-2xl">
-          {rest ? (
-            <RestHero rest={rest} next={null} span={null} nowMs={null} />
-          ) : error ? (
-            <ErrorPanel error={error} pending={pending} onRetry={onRetry} />
-          ) : (
-            <MorphingInfinity className="size-24 text-muted-foreground" />
-          )}
-        </div>
-      </div>
-    </main>
-  );
-}
-
-type Panel = {
-  dateKey: string;
-  day: ReturnType<typeof buildDayModel>;
-  dayAll: ReturnType<typeof buildDayModel>;
-  mineKeys: Set<string>;
-  hiddenCount: number;
-};
-
-//! EGY NAP, EGY LAP. Pontosan az, ami a `/ma` fő hasábjában áll — a cím, a
-//! hero, a nap körülményei és az órák —, csak most egy lapozható felületen. A
-//! komponensek és a szövegek változatlanok; ez a fájl nem ír át semmit, csak
-//! másképp rakja egymás mellé.
-function DayPanelBody({
-  panel,
-  isActive,
-  isToday,
-  onSentinel,
-  weekendNote,
-  rest,
-  restSpan,
-  nowMs,
-  allGroups,
-  onAllGroups,
-  previewKey,
-  onPreview,
-  clock,
-  epoch,
-  state,
-  error,
-  pending,
-  onRetry,
-  cached,
-}: {
-  panel: Panel;
-  isActive: boolean;
-  isToday: boolean;
-  onSentinel: ((el: HTMLDivElement | null) => void) | null;
-  weekendNote: boolean;
-  /** Pihenőnap-e ez a lap, és ha igen, mire mutat. `null` = rendes tanítási nap. */
-  rest: { rest: RestDay; next: RestNext | null } | null;
-  restSpan: { fromMs: number; toMs: number } | null;
-  nowMs: number | null;
-  allGroups: boolean;
-  onAllGroups: (next: boolean) => void;
-  previewKey: string | null;
-  onPreview: (key: string | null) => void;
-  clock: ReturnType<typeof useClock>;
-  epoch: number;
-  state: ReturnType<typeof nowState> | null;
-  error: TimetableError | null;
-  pending: boolean;
-  onRetry: () => void;
-  cached: CachedWeek | null;
-}) {
-  const { day, dayAll, mineKeys, hiddenCount } = panel;
-  const dualDay = day?.dual === "dual";
-  const shownDay = allGroups && dayAll ? dayAll : day;
-  //* Az előnézet csak az AKTÍV napon él: a szomszéd lapok a saját első órájukat
-  //* mutatják, mert ott nincs „most", amihez képest kiválasztani lehetne.
-  const preview = !day
-    ? null
-    : isActive && previewKey
-      ? (day.items.find((i) => i.key === previewKey) ?? null)
-      : isToday
-        ? null
-        : (day.items[0] ?? null);
-
-  return (
-    <>
-      <div className="pt-3 pb-8 sm:pt-4">
-        <div className="min-w-0">
-          <h2 className="text-2xl font-bold tracking-tight first-letter:uppercase sm:text-3xl">
-            {dayFmt.format(dateFromKey(panel.dateKey))}
-          </h2>
-          <p className="mt-1 text-sm text-hero-foreground/60">
-            {/*//* A hero mondja ki, hogy hétvége van; ez a sor csak azt
-                //* magyarázza meg, miért HÉTFŐ áll a dátum helyén. */}
-            {weekendNote && "A következő tanítási nap · "}
-            {day ? daySummary(day, isToday) : "Nincs adat erre a napra"}
-            {day && day.lessonCount > 0 && day.dual !== "dual" && (
-              <>
-                {" · "}
-                <span className="whitespace-nowrap tabular-nums">
-                  {minLabel(day.lastMin)}-ig
-                </span>
-              </>
+            {/*//! A NAPI ELLENŐRZÉS — mindig ott, akkor is, ha nincs hír. */}
+            {day && day.dual !== "dual" && (
+              <ChangeRow day={day} className="mb-3" />
             )}
-          </p>
-        </div>
 
-        <div className="mt-6 lg:max-w-2xl">
-          {dualDay ? (
-            <DualHero nowSec={clock && isToday ? clock.sec : null} />
-          ) : error && !day ? (
-            <ErrorPanel error={error} pending={pending} onRetry={onRetry} />
-          ) : rest ? (
-            //! ITT EDDIG EGY ÜRES DOBOZ ÁLLT. Óra nélküli napon a `NowBlock`-nak
-            //! nincs mit mutatnia: a „most" kiszámíthatatlan, az előnézetnek
-            //! nincs mit előnéznie, és a blokk `aria-hidden` helykitöltővé
-            //! esik össze. Az év napjainak közel fele ilyen.
-            <RestHero
-              rest={rest.rest}
-              next={rest.next}
-              span={restSpan}
-              nowMs={nowMs}
-            />
-          ) : (
-            <NowBlock
-              state={state}
-              clock={clock}
-              epoch={epoch}
-              preview={preview}
-              onClearPreview={isToday ? () => onPreview(null) : () => {}}
-              previewDismissable={isToday && previewKey !== null}
-            />
-          )}
-        </div>
-      </div>
-
-      {/*//* Az őrszem: eddig tart a hero. Ami ez alá kerül, azt a lebegő
-          //* fejléc „most" sora már összecsukva viszi tovább. */}
-      {onSentinel && (
-        <div ref={onSentinel} className="h-px w-full" aria-hidden />
-      )}
-
-      <section aria-label="A nap órái">
-        <div className="mb-3 flex items-baseline justify-between gap-4">
-          <h3 className="text-base font-semibold text-foreground">
-            {isToday ? "A mai nap" : "A nap"}
-            {dualDay && allGroups && (
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                az osztály órarendje
-              </span>
-            )}
-          </h3>
-          <div className="flex shrink-0 items-center gap-3">
-            {dayAll && dayAll.lessonCount > 0 && (
-              <label
+            {day && day.dual !== "dual" && day.conflicts > 0 && (
+              //! A DÖNTÉS INNEN EGY KOPPINTÁS. Amíg a feloldás csak a rácson
+              //! volt meg, ez a sor kiküldte a diákot a lapról egy másikra —
+              //! most a saját „Tantárgyak" paneljére mutat, ahol a választás
+              //! mellett az is ott áll, mennyi órát jelent.
+              <a
+                href="#subjects-heading"
                 className={cn(
-                  "flex cursor-pointer select-none items-center gap-1.5 text-xs font-medium transition-colors",
-                  "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring motion-reduce:transition-none",
-                  allGroups
-                    ? "text-primary"
-                    : "text-muted-strong hover:text-foreground",
+                  "mb-3 flex items-start gap-2 rounded-xl border border-primary/30 bg-primary/8 px-4 py-3 text-sm leading-snug text-foreground transition-colors",
+                  "hover:bg-primary/12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
                 )}
               >
-                <input
-                  type="checkbox"
-                  checked={allGroups}
-                  onChange={(e) => onAllGroups(e.target.checked)}
-                  className="size-3.5 shrink-0 cursor-pointer accent-primary focus-visible:outline-none"
+                <Merge
+                  className="mt-0.5 size-4 shrink-0 text-primary"
+                  aria-hidden
                 />
-                Teljes órarend
-              </label>
+                <span className="min-w-0 flex-1 text-pretty">
+                  {day.conflicts === 1
+                    ? "Egy csoportbontás eldöntetlen"
+                    : `${day.conflicts} csoportbontás eldöntetlen`}{" "}
+                  <span className="text-muted-strong">
+                    — a „most” pontatlan lehet, amíg nem választod ki, melyik
+                    csoportra jársz.
+                  </span>
+                </span>
+                <span className="shrink-0 self-center font-medium text-primary">
+                  Kiválasztom
+                </span>
+              </a>
             )}
-            <Link
-              href="/orarend"
-              className="text-sm text-primary hover:underline"
-            >
-              Heti órarend
-            </Link>
-          </div>
-        </div>
 
-        {day && <DayPlanRow day={day} isToday={isToday} className="mb-3" />}
-
-        {day && day.dual !== "dual" && <ChangeRow day={day} className="mb-3" />}
-
-        {day && day.dual !== "dual" && day.conflicts > 0 && (
-          <a
-            href="#subjects-heading"
-            className={cn(
-              "mb-3 flex items-start gap-2 rounded-xl border border-primary/30 bg-primary/8 px-4 py-3 text-sm leading-snug text-foreground transition-colors",
-              "hover:bg-primary/12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
-            )}
-          >
-            <Merge
-              className="mt-0.5 size-4 shrink-0 text-primary"
-              aria-hidden
-            />
-            <span className="min-w-0 flex-1 text-pretty">
-              {day.conflicts === 1
-                ? "Egy csoportbontás eldöntetlen"
-                : `${day.conflicts} csoportbontás eldöntetlen`}{" "}
-              <span className="text-muted-strong">
-                — a „most” pontatlan lehet, amíg nem választod ki, melyik
-                csoportra jársz.
-              </span>
-            </span>
-            <span className="shrink-0 self-center font-medium text-primary">
-              Kiválasztom
-            </span>
-          </a>
-        )}
-
-        {dualDay && !allGroups ? (
-          <p className="text-sm text-pretty text-muted-foreground">
-            Az osztály órarendje nem rád vonatkozik.
-            {dayAll &&
-              dayAll.lessonCount > 0 &&
-              " A „Teljes órarend” megmutatja, mi megy ilyenkor az osztálynak."}
-          </p>
-        ) : shownDay && day && shownDay.lessonCount > 0 ? (
-          <>
-            <DayRibbon
-              day={shownDay}
-              nowMin={
-                clock && isToday && day.dual !== "dual" ? clock.min : null
-              }
-              selectedKey={isActive ? previewKey : null}
-              mineKeys={allGroups ? mineKeys : null}
-              className="mb-3"
-            />
-            <DayList
-              day={shownDay}
-              nowMin={
-                clock && isToday && day.dual !== "dual" ? clock.min : null
-              }
-              selectedKey={isActive ? previewKey : null}
-              onSelect={onPreview}
-              mineKeys={allGroups ? mineKeys : null}
-            />
-            {allGroups && (
-              <p className="mt-2 text-xs text-pretty text-muted-foreground">
-                {hiddenCount > 0 ? (
-                  <>
-                    Az osztály teljes napja látszik. A szaggatott kártyák egy
-                    másik csoporté —{" "}
-                    {hiddenCount === 1 ? "egy órát" : `${hiddenCount} órát`}{" "}
-                    rejtett el a csoportbontás-döntésed.
-                  </>
-                ) : (
-                  "Az osztály teljes napja látszik — ezen a napon nincs másik csoportnak órája."
+            {dualDay && !allGroups ? (
+              //! A MUNKANAPOT A HERO MONDTA KI, ITT MÁR CSAK A KÖVETKEZMÉNYE
+              //! ÁLL. A nap listájának a helyén nem ismételjük meg a sávot:
+              //! egy lapon egy műszer mutassa ugyanazt az időt. Ami itt hozzá
+              //! jön, az a MIÉRT üres a lista — és hogy az osztályé egy
+              //! kapcsolóval előhívható.
+              <p className="text-sm text-pretty text-muted-foreground">
+                Az osztály órarendje nem rád vonatkozik.
+                {dayAll &&
+                  dayAll.lessonCount > 0 &&
+                  " A „Teljes órarend” megmutatja, mi megy ilyenkor az osztálynak."}
+              </p>
+            ) : shownDay && day && shownDay.lessonCount > 0 ? (
+              <>
+                <DayRibbon
+                  day={shownDay}
+                  nowMin={
+                    clock && isToday && day.dual !== "dual" ? clock.min : null
+                  }
+                  selectedKey={previewKey}
+                  mineKeys={allGroups ? mineKeys : null}
+                  className="mb-3"
+                />
+                <DayList
+                  day={shownDay}
+                  nowMin={
+                    clock && isToday && day.dual !== "dual" ? clock.min : null
+                  }
+                  selectedKey={previewKey}
+                  onSelect={setPreviewKey}
+                  mineKeys={allGroups ? mineKeys : null}
+                />
+                {allGroups && (
+                  //* A visszaút mindig kimondva: mi látszik most és miért.
+                  <p className="mt-2 text-xs text-pretty text-muted-foreground">
+                    {hiddenCount > 0 ? (
+                      <>
+                        Az osztály teljes napja látszik. A szaggatott kártyák
+                        egy másik csoporté —{" "}
+                        {hiddenCount === 1 ? "egy órát" : `${hiddenCount} órát`}{" "}
+                        rejtett el a csoportbontás-döntésed.
+                      </>
+                    ) : (
+                      //* Üres kéz: ha nincs mit felfedni, ezt is ki kell mondani
+                      //* — különben úgy tűnne, a kapcsoló nem működik.
+                      "Az osztály teljes napja látszik — ezen a napon nincs másik csoportnak órája."
+                    )}
+                  </p>
                 )}
+              </>
+            ) : (
+              <p className="rounded-xl border border-dashed border-border px-4 py-5 text-sm text-pretty text-muted-strong">
+                {/*//! A CSEND OKÁT IS MEGMONDJUK. Ha a napnak VAN órája, csak
+                    //! mind egy másik csoporté, a „nem küldött órát" hazugság
+                    //! lenne — és a diák a forrást hibáztatná a saját döntése
+                    //! helyett. A „Teljes órarend" ilyenkor is ott van fent. */}
+                {!day
+                  ? "Erre a napra nincs adat."
+                  : hiddenCount > 0
+                    ? "Ezen a napon minden óra egy másik csoporté — a „Teljes órarend” megmutatja őket."
+                    : "A forrás nem küldött órát erre a napra."}
               </p>
             )}
-          </>
-        ) : (
-          <p className="rounded-xl border border-dashed border-border px-4 py-5 text-sm text-pretty text-muted-strong">
-            {!day
-              ? "Erre a napra nincs adat."
-              : hiddenCount > 0
-                ? "Ezen a napon minden óra egy másik csoporté — a „Teljes órarend” megmutatja őket."
-                : //! SZÜNETBEN A HIÁNY NEM REJTÉLY. „A forrás nem küldött órát"
-                  //! azt sugallja, hogy valami elmaradt — pedig a tanév rendje
-                  //! szerint ezen a napon NINCS mit küldeni. A mondat csak ott
-                  //! marad gyanakvó, ahol tényleg indokolt.
-                  rest
-                  ? "Ezen a napon nincs kiírt óra."
-                  : "A forrás nem küldött órát erre a napra."}
-          </p>
-        )}
 
-        {cached && (
-          <StaleNote
-            fetchedAt={cached.fetchedAt}
-            offline={!!error}
-            className="mt-3"
-          />
+            {cached && (
+              <StaleNote
+                fetchedAt={cached.fetchedAt}
+                offline={!!error}
+                className="mt-3"
+              />
+            )}
+          </section>
+        </div>
+
+        {/*//* Másodlagos sáv: a hét — amire a rácsból csak végigolvasva lenne
+            //* válasz. Követés és navigáció; az egyetlen cselekvés a duális
+            //* beosztás, mert az nem a forrásból jön, hanem a diáktól. */}
+        {week && (
+          <div className="mt-10 space-y-10 lg:mt-0">
+            <WeekPulse
+              week={week}
+              focusKey={shownKey}
+              todayDateKey={today ?? ""}
+              onFocus={(dateKey) => {
+                setPickedKey(dateKey);
+                setPreviewKey(null);
+              }}
+            />
+            <DualPanel
+              schedule={dualSchedule}
+              weekLetter={week.weekLetter}
+              todayDow={todayDow}
+              classShort={classShort}
+              onChange={changeDualSchedule}
+            />
+            <MovedThisWeek
+              week={week}
+              onFocus={(dateKey) => {
+                setPickedKey(dateKey);
+                setPreviewKey(null);
+              }}
+            />
+            <SubjectLoads week={week} onChoose={choose} />
+          </div>
         )}
-      </section>
-    </>
+      </div>
+    </main>
   );
 }
 
@@ -1040,6 +680,9 @@ function ClassPicker({
   disabled: boolean;
   onChange: (next: string) => void;
 }) {
+  //! HA A LISTA NEM JÖTT MEG, A VÁLASZTÓ NEM TŰNHET EL NYOMTALANUL. Üres
+  //! listával a `<select>` használhatatlan — de a diáknak akkor is látnia kell,
+  //! MELYIK osztály órarendjét nézi. Ilyenkor néma címke áll a helyén.
   if (classes.length === 0) {
     return value ? (
       <span
@@ -1077,7 +720,9 @@ function ClassPicker({
   );
 }
 
-//! A HIBA MEGMONDJA, KINÉL VAN. Ugyanaz a szótár, mint a heti nézetben.
+//! A HIBA MEGMONDJA, KINÉL VAN. Ugyanaz a szótár, mint a heti nézetben: a
+//! `TimetableError` már tartalmazza a címet, a magyarázatot és azt, hogy van-e
+//! értelme újra próbálni — itt csak megjelenítjük.
 function ErrorPanel({
   error,
   pending,
@@ -1089,7 +734,7 @@ function ErrorPanel({
 }) {
   return (
     <section className="rounded-2xl border border-hero-foreground/15 bg-hero-foreground/[0.06] p-5 sm:p-6">
-      <h3 className="text-xl font-bold tracking-tight">{error.title}</h3>
+      <h2 className="text-xl font-bold tracking-tight">{error.title}</h2>
       <p className="mt-2 max-w-md text-sm text-hero-foreground/70">
         {error.message}
       </p>

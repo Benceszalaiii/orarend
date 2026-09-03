@@ -440,7 +440,7 @@
   }
 
   /*//! ---------------------------------------------------------------------
-      //! A LEBEGŐ FEJLÉC (`/design`)
+      //! A LEBEGŐ FEJLÉC (`/ma`)
       //! ---------------------------------------------------------------------
       //! ÁTTETSZŐ RÉTEG, NEM ELVETT CSÍK. A lap tartalma a fejléc ALATT fut
       //! tovább, homályosan — így a sáv lebegő felületnek olvasódik, ami a
@@ -450,7 +450,7 @@
       //*
       //* A felső él világosabb: a fény, ami megcsillan az anyagon. Ez az
       //* egyetlen jelzés arról, hogy a réteg VASTAG — árnyék nélkül is. */
-  .dsg-chrome {
+  .ma-chrome {
     background-color: color-mix(in oklab, var(--background) 68%, transparent);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -461,7 +461,7 @@
       //! is ott állna, amikor nincs alatta semmi — a lap tetején egy üres
       //! vonalat húzva. Ehelyett a réteg alsó pereme egy rövid, halványuló
       //! sávban olvad a tartalomba: pontosan ott van jelen, ahol takar. */
-  .dsg-chrome::after {
+  .ma-chrome::after {
     content: "";
     position: absolute;
     inset-inline: 0;
@@ -480,32 +480,32 @@
       //! olvashatatlanabb — ilyenkor a fejléc egyszerűen tömör felület lesz,
       //! és megkapja azt a vonalat, amit az él helyett hordozott. */
   @media (prefers-reduced-transparency: reduce) {
-    .dsg-chrome {
+    .ma-chrome {
       background-color: var(--background);
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
       border-bottom-color: var(--border);
     }
-    .dsg-chrome::after {
+    .ma-chrome::after {
       display: none;
     }
   }
   /*//* Nagy kontraszt: tömör alap, kimondott keret — a lebegés itt nem ér
       //* annyit, mint az elhatárolás. */
   @media (prefers-contrast: more) {
-    .dsg-chrome {
+    .ma-chrome {
       background-color: var(--background);
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
       border-bottom-color: var(--foreground);
     }
-    .dsg-chrome::after {
+    .ma-chrome::after {
       display: none;
     }
   }
 
   /*//! ---------------------------------------------------------------------
-      //! AZ ÉVSZAK RÉTEGE — a szünet háttere (`/design`)
+      //! AZ ÉVSZAK RÉTEGE — a szünet háttere (`/ma`)
       //! ---------------------------------------------------------------------
       //! A LAP EGYETLEN DÍSZÍTŐ MOZGÁSA, ÉS EZT MEGENGEDHETI. Mindenütt máshol
       //! a mozgás állapotot közöl; a szünet viszont attól szünet, hogy nincs
@@ -520,25 +520,25 @@
       //! ponton toporogna. A `cqh` viszont a szülő magasságához mér, ezért a
       //! réteg méret-tárolóvá válik: a mérete amúgy is teljesen a `inset-0`-ból
       //! következik, tartalomtól függetlenül. */
-  .dsg-sky {
+  .ma-sky {
     container-type: size;
   }
-  @keyframes dsg-fall {
+  @keyframes ma-fall {
     from {
       transform: translate3d(0, -10cqh, 0) rotate(0deg);
     }
     to {
-      transform: translate3d(var(--dsg-drift, 0), 115cqh, 0)
-        rotate(var(--dsg-spin, 0deg));
+      transform: translate3d(var(--ma-drift, 0), 115cqh, 0)
+        rotate(var(--ma-spin, 0deg));
     }
   }
-  @keyframes dsg-rise {
+  @keyframes ma-rise {
     from {
       transform: translate3d(0, 115cqh, 0) rotate(0deg);
     }
     to {
-      transform: translate3d(var(--dsg-drift, 0), -10cqh, 0)
-        rotate(var(--dsg-spin, 0deg));
+      transform: translate3d(var(--ma-drift, 0), -10cqh, 0)
+        rotate(var(--ma-spin, 0deg));
     }
   }
   /*//! NINCS `will-change`. Szünethéten mind az öt nap lapja pihenőnap, és a
@@ -546,22 +546,22 @@
       //! nyolcvan külön rétegre kényszerítené a böngészőt — telefonon ez
       //! memória, nem simaság. A futó transzformáció amúgy is saját réteget
       //! kap, csak épp addig, amíg tényleg fut. */
-  .dsg-fall,
-  .dsg-rise {
-    animation-duration: var(--dsg-dur, 16s);
-    animation-delay: var(--dsg-delay, 0s);
+  .ma-fall,
+  .ma-rise {
+    animation-duration: var(--ma-dur, 16s);
+    animation-delay: var(--ma-delay, 0s);
     animation-timing-function: linear;
     animation-iteration-count: infinite;
   }
-  .dsg-fall {
-    animation-name: dsg-fall;
+  .ma-fall {
+    animation-name: ma-fall;
   }
-  .dsg-rise {
-    animation-name: dsg-rise;
+  .ma-rise {
+    animation-name: ma-rise;
   }
 
   /*//* A hó: kerek, hideg, lágy peremmel — nem pötty, hanem pehely. */
-  .dsg-grain-snow {
+  .ma-grain-snow {
     border-radius: 9999px;
     background: radial-gradient(
       circle,
@@ -572,7 +572,7 @@
   }
   /*//* A levél: egyik végén hegyes, a másikon kerek — egy sarok elhagyása
       //* elég hozzá, hogy ne korong legyen. */
-  .dsg-grain-leaf {
+  .ma-grain-leaf {
     border-radius: 9999px 2px 9999px 2px;
     background: linear-gradient(
       140deg,
@@ -580,7 +580,7 @@
       oklch(0.56 0.16 38)
     );
   }
-  .dsg-grain-petal {
+  .ma-grain-petal {
     border-radius: 9999px 2px 9999px 2px;
     background: linear-gradient(
       140deg,
@@ -589,7 +589,7 @@
     );
   }
   /*//* A nyári porszem: fény, nem tárgy — élesebb közepe nincs is. */
-  .dsg-grain-mote {
+  .ma-grain-mote {
     border-radius: 9999px;
     background: radial-gradient(
       circle,
@@ -606,7 +606,7 @@
       //! sárga, mintha a fák mögül ablakok világítanának. A kettő között marad
       //! a kártya saját felülete: a szín a JELENETET rajzolja meg, nem a dobozt
       //! festi át. */
-  .dsg-sky-christmas {
+  .ma-sky-christmas {
     background:
       radial-gradient(
         130% 60% at 50% 118%,
@@ -619,7 +619,7 @@
         transparent 68%
       );
   }
-  .dsg-sky-newyear {
+  .ma-sky-newyear {
     background:
       radial-gradient(
         120% 80% at 50% 115%,
@@ -632,21 +632,21 @@
         transparent 65%
       );
   }
-  .dsg-sky-autumn {
+  .ma-sky-autumn {
     background: radial-gradient(
       110% 90% at 30% 0%,
       oklch(0.68 0.15 52 / 0.22),
       transparent 62%
     );
   }
-  .dsg-sky-spring {
+  .ma-sky-spring {
     background: radial-gradient(
       110% 90% at 70% 0%,
       oklch(0.8 0.1 350 / 0.2),
       transparent 62%
     );
   }
-  .dsg-sky-summer {
+  .ma-sky-summer {
     background: radial-gradient(
       110% 90% at 50% 110%,
       oklch(0.85 0.14 80 / 0.22),
@@ -656,7 +656,7 @@
 
   /*//! A CSILLAG LÉLEGZIK, NEM VILLOG. Nyolc másodperces ki-be úszás: a
       //! villogás figyelmet KÖVETEL, a lélegzés csak jelen van. */
-  @keyframes dsg-twinkle {
+  @keyframes ma-twinkle {
     0%,
     100% {
       opacity: 0.35;
@@ -667,25 +667,25 @@
       transform: scale(1);
     }
   }
-  .dsg-twinkle {
-    animation: dsg-twinkle 8s ease-in-out infinite;
+  .ma-twinkle {
+    animation: ma-twinkle 8s ease-in-out infinite;
   }
 
   /*//! MOZGÁS NÉLKÜL A MEZŐ ÁLL — DE OTT MARAD. Az `animation: none` egy üres
       //! dobozt hagyna, és aki kevesebb mozgást kért, az nem kevesebb szünetet
-      //! kért. A szemcse ezért a saját fázisában merevedik ki (`--dsg-rest`), a
+      //! kért. A szemcse ezért a saját fázisában merevedik ki (`--ma-rest`), a
       //! mező szórása változatlan: ugyanaz a kép, csak megállítva. */
   @media (prefers-reduced-motion: reduce) {
-    .dsg-fall,
-    .dsg-rise {
+    .ma-fall,
+    .ma-rise {
       animation: none;
       transform: translate3d(
-        calc(var(--dsg-drift, 0) * 0.5),
-        var(--dsg-rest, 50cqh),
+        calc(var(--ma-drift, 0) * 0.5),
+        var(--ma-rest, 50cqh),
         0
       );
     }
-    .dsg-twinkle {
+    .ma-twinkle {
       animation: none;
       opacity: 0.8;
     }
@@ -698,7 +698,7 @@
     /*//* Kétszer írt osztály: elég fajsúly ahhoz, hogy a rétegen belüli
         //* elrendezés-segédosztályokat (`absolute`, `block`) is felülírja —
         //* `!important` nélkül, ami a kaszkádot fordítaná meg. */
-    .dsg-scene.dsg-scene {
+    .ma-scene.ma-scene {
       display: none;
     }
   }

@@ -2,7 +2,7 @@
 
 import { CalendarDays, Star } from "lucide-react";
 import Link from "next/link";
-import { PineRidge, SeasonalSky } from "@/components/design/seasonal-sky";
+import { PineRidge, SeasonalSky } from "@/components/ma/seasonal-sky";
 import { countdownLabel } from "@/components/timetable/now";
 import { minLabel } from "@/components/timetable/shared";
 import type { RestDay, RestSeason } from "@/lib/rest-day";
@@ -42,11 +42,11 @@ const block =
 const dowFmt = new Intl.DateTimeFormat("hu-HU", { weekday: "short" });
 
 const SKY: Record<RestSeason, string> = {
-  christmas: "dsg-sky-christmas",
-  newyear: "dsg-sky-newyear",
-  autumn: "dsg-sky-autumn",
-  spring: "dsg-sky-spring",
-  summer: "dsg-sky-summer",
+  christmas: "ma-sky-christmas",
+  newyear: "ma-sky-newyear",
+  autumn: "ma-sky-autumn",
+  spring: "ma-sky-spring",
+  summer: "ma-sky-summer",
   none: "",
 };
 
@@ -125,10 +125,10 @@ export function RestHero({
       {sky && (
         <div
           aria-hidden
-          className={cn("dsg-scene absolute inset-0 -z-10", sky)}
+          className={cn("ma-scene absolute inset-0 -z-10", sky)}
         />
       )}
-      {winter && <PineRidge className="dsg-scene -z-10" />}
+      {winter && <PineRidge className="ma-scene -z-10" />}
       <SeasonalSky season={rest.season} className="-z-10" />
       {/*//! EGY CSILLAG A FENYŐK FÖLÖTT. Nem a sarokban ülő díszjel: a
           //! fenyősor fölé, a horizont közelébe kerül, mert ott jelenetté áll
@@ -137,7 +137,7 @@ export function RestHero({
       {winter && (
         <Star
           aria-hidden
-          className="dsg-twinkle dsg-scene absolute right-[22%] bottom-12 -z-10 size-4 fill-current text-hero-foreground/50 sm:bottom-14 sm:size-5"
+          className="ma-twinkle ma-scene absolute right-[22%] bottom-12 -z-10 size-4 fill-current text-hero-foreground/50 sm:bottom-14 sm:size-5"
         />
       )}
 

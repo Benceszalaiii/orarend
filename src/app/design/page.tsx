@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import { DesignPage } from "./design-client";
 
-//! A `/ma` ÁTRENDEZETT ALAKJA — kapcsolóra váró kísérlet. Ugyanaz az adat,
-//! ugyanazok a komponensek; ami más, az a lap szerkezete (lásd a
-//! `design-client.tsx` fejlécét). A nézetváltóban szándékosan NEM szerepel:
-//! ez még nem a diákok lapja, hanem a következő `/ma` próbája.
+//! A `/ma` KORÁBBI ALAKJA, ÖSSZEHASONLÍTÁSRA. Ugyanaz az adat és ugyanazok a
+//! komponensek, egyhasábos elrendezésben — lásd a `design-client.tsx`
+//! fejlécét. A nézetváltóban szándékosan nem szerepel: a diákok lapja a `/ma`.
 export const metadata: Metadata = {
-  title: "Ma (átrendezve) – Órarend",
+  title: "Ma (egyhasábos) – Órarend",
   description:
-    "A mai nap egy képernyőn — lapozható napokkal és állandó „most” sorral.",
+    "A `/ma` korábbi elrendezése: a mai nap egy folyamatos hasábban.",
   robots: { index: false, follow: false },
 };
 
