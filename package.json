@@ -11,11 +11,15 @@
     "format": "biome format --write"
   },
   "dependencies": {
+    "@prisma/composer": "0.16.0",
+    "@prisma/composer-prisma-cloud": "0.16.0",
     "@upstash/redis": "^1.38.3",
     "@vercel/analytics": "^2.0.1",
+    "alchemy": "2.0.0-beta.74",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
+    "effect": "4.0.0-rc.112",
     "lucide-react": "^1.38.0",
     "motion": "^13.1.1",
     "next": "16.3.3",
@@ -36,6 +40,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
+    "prisma": "8.0.0-rc.12",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
@@ -47,5 +52,14 @@
   "trustedDependencies": [
     "sharp",
     "unrs-resolver"
-  ]
+  ],
+  "overrides": {
+    "@effect/platform-bun": "4.0.0-rc.112",
+    "@effect/platform-node": "4.0.0-rc.112",
+    "@effect/platform-node-shared": "4.0.0-rc.112",
+    "@effect/sql-d1": "4.0.0-rc.112",
+    "@effect/sql-pg": "4.0.0-rc.112",
+    "@effect/vitest": "4.0.0-rc.112",
+    "effect": "4.0.0-rc.112"
+  }
 }
