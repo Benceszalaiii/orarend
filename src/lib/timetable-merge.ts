@@ -1,3 +1,4 @@
+import { notifyPrefsChanged } from "./prefs-events";
 import type { TimetableLesson } from "./timetable";
 
 export const MERGE_GAP_MAX_MIN = 25;
@@ -633,6 +634,7 @@ export function saveLocalPreferences(
     if (prefs.length === 0) delete store[classShort];
     else store[classShort] = prefs;
     window.localStorage.setItem(MERGE_PREFS_STORAGE_KEY, JSON.stringify(store));
+    notifyPrefsChanged();
   } catch {}
 }
 
@@ -640,6 +642,7 @@ export function clearAllLocalPreferences(): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(MERGE_PREFS_STORAGE_KEY);
+    notifyPrefsChanged();
   } catch {}
 }
 

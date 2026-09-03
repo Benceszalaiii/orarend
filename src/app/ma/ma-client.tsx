@@ -30,6 +30,7 @@ import {
   WeekPulse,
 } from "@/components/ma/week-panels";
 import { NotificationMenu } from "@/components/pwa/notification-menu";
+import { SiteFooter } from "@/components/site-footer";
 import {
   SITE_BAR_CLUSTER,
   SITE_BAR_MAX,
@@ -673,6 +674,14 @@ export function MaPage() {
           <SubjectLoads week={week} onChoose={choose} />
         </div>
       </div>
+
+      {/*//! A LÁBLÉC A GÖRGETÉS VÉGÉN VÁR, NEM A NAP ELŐTT. A `/ma` a napi
+          //! menetről szól: ami nem az — a készítő neve, a változásnapló, az
+          //! adatvédelem, a telepítés — csak akkor kerül elő, amikor a diák már
+          //! végigolvasta a hetét is. A `z-10` a lap tetején ülő fénymező
+          //! FÖLÉ emeli; a fénymező `pointer-events-none`, de a rétegsorrend
+          //! nélkül a lábléc hivatkozásai alá kerülnének. */}
+      <SiteFooter className="relative z-10" />
     </main>
   );
 }
@@ -767,6 +776,14 @@ function EmptyWeekScreen({
           )}
         </div>
       </div>
+
+      {/*//! A LÁBLÉC A GÖRGETÉS VÉGÉN VÁR, NEM A NAP ELŐTT. A `/ma` a napi
+          //! menetről szól: ami nem az — a készítő neve, a változásnapló, az
+          //! adatvédelem, a telepítés — csak akkor kerül elő, amikor a diák már
+          //! végigolvasta a hetét is. A `z-10` a lap tetején ülő fénymező
+          //! FÖLÉ emeli; a fénymező `pointer-events-none`, de a rétegsorrend
+          //! nélkül a lábléc hivatkozásai alá kerülnének. */}
+      <SiteFooter className="relative z-10" />
     </main>
   );
 }

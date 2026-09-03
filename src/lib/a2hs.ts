@@ -40,7 +40,7 @@ const A2HS_STORAGE_KEY = "orarend:a2hs:v1";
 //!   és egy `standalone`-ra szűkített kérdés ezeket hamisan böngészőnek látná.
 const INSTALLED_DISPLAY_MODES = ["standalone", "fullscreen", "minimal-ui"];
 
-function isInstalled(): boolean {
+export function isAppInstalled(): boolean {
   const legacy = (navigator as Navigator & { standalone?: boolean }).standalone;
   if (legacy === true) return true;
   try {
@@ -56,7 +56,7 @@ function isInstalled(): boolean {
 //* menü, vagy egyáltalán semmi (beágyazott nézetek — Instagram, Facebook).
 const NOT_SAFARI = /CriOS|FxiOS|EdgiOS|OPiOS|Instagram|FBAN|FBAV|GSA/;
 
-function isIphoneSafari(): boolean {
+export function isIphoneSafari(): boolean {
   const ua = navigator.userAgent;
   if (!/iPhone|iPod/.test(ua)) return false;
   //* A beágyazott WKWebView-ek zöméből hiányzik a „Safari" jelölés — az
@@ -94,7 +94,7 @@ export function markA2HSSeen(): void {
 //* azonosítójából KIMARAD a „Safari" jelölés, így az `isIphoneSafari` maga is
 //* nemet mondana — a két feltétel egymástól függetlenül is véd.
 export function shouldOfferIosA2HS(): boolean {
-  return !isInstalled() && isIphoneSafari() && !hasSeenA2HS();
+  return !isAppInstalled() && isIphoneSafari() && !hasSeenA2HS();
 }
 
 //* Ugyanaz a kérdés az androidos ágra — a böngésző-felismerés nélkül.
@@ -109,5 +109,5 @@ export function shouldOfferIosA2HS(): boolean {
 //* képkockából is a kezünkben maradhat (lásd a komponens `appinstalled`
 //* ágát), és a jelölő olvasása sem kerül semmibe.
 export function shouldOfferAndroidA2HS(): boolean {
-  return !isInstalled() && !hasSeenA2HS();
+  return !isAppInstalled() && !hasSeenA2HS();
 }

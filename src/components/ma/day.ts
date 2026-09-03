@@ -236,7 +236,7 @@ export function agendaItem(
 
 //! A HÉT JELÖLÉSE A HÉTÉ, NEM A NAPÉ. A Jedlikinfo egyes napokra üres jelölést
 //! ad (tanítás nélküli hétfő), a hét egésze viszont egyértelmű — ezért az első
-//! értelmes napból olvassuk ki. (Ugyanez a logika a `/dualis` lapon is.)
+//! értelmes napból olvassuk ki.
 export function weekLetterOf(view: TimetableView): string {
   return view.days.find((d) => d.week === "A" || d.week === "B")?.week ?? "";
 }

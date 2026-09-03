@@ -1,8 +1,35 @@
 import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
+import { PrefsSync } from "@/components/prefs-sync";
 import { AddToHomeScreen } from "@/components/pwa/add-to-home-screen";
 import { RegisterSW } from "@/components/register-sw";
+
+//* A DEKORÁCIÓS BETŰ. Csak ott szólal meg, ahol a `font-script` osztály
+//* kimondja — a törzsszöveg marad a rendszerbetűn.
+//! NINCS ELŐTÖLTVE: 166 kB-os TTF, és a lap nagy részén egy betű sem íródik
+//! vele. `preload: false` mellett a böngésző csak akkor tölti le, ha tényleg
+//! rajzol vele; a `swap` addig a `cursive` tartalékkal ír.
+const petitFormalScript = localFont({
+  src: "../../public/PetitFormalScript-Regular.ttf",
+  weight: "400",
+  style: "normal",
+  display: "swap",
+  preload: false,
+  fallback: ["cursive"],
+  variable: "--font-petit-formal-script",
+});
+
+const jakartaSans = localFont({
+  src: "../../public/Lexend-VariableFont_wght.ttf",
+  weight: "100 700",
+  style: "normal",
+  display: "swap",
+  preload: false,
+  fallback: ["sans-serif"],
+  variable: "--font-jakarta-sans",
+});
 
 export const metadata: Metadata = {
   title: "Órarend",
@@ -36,7 +63,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="hu"
-      className="dark h-full antialiased"
+      className={`dark h-full antialiased ${petitFormalScript.variable} ${jakartaSans.variable}`}
       style={{ colorScheme: "dark" }}
     >
       <head>
@@ -52,10 +79,21 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/*//! A `/ma` felület irányszerződése. Nem JSX-megjegyzésként, mert azt a
             //! fordító elnyeli: ennek a LEFORDÍTOTT kimenetben kell megmaradnia,
             //! hogy a döntés utólag is visszaolvasható legyen a laprol. */}
-            
+
         {children}
-            
+
         <RegisterSW />
+        {/*//! A BEÁLLÍTÁS-SZINKRON MOTORJA. Nem rajzol semmit; azért ül a
+            //! gyökérben, mert a lap MINDEN nézetéből lehet beállítást
+            //! módosítani, és mindegyiket ugyanaz a kör kell hogy felvigye.
+            //*
+            //! ÁRA EGY KÉRÉS OLDALBETÖLTÉSENKÉNT: a munkamenet lekérdezése
+            //! (`/api/auth/get-session`) a be nem jelentkezett látogatónál is
+            //! lefut egyszer. A fiókgombbal KÖZÖS ez az egy kérés (a Better Auth
+            //! kliense összevonja őket), és pár száz bájt — ezért fér bele.
+            //! Ha a bejelentkezés nincs beállítva, a gomb és a szinkron is
+            //! néma marad (lásd `auth-config.ts`). */}
+        <PrefsSync />
         {/*//* A telepítés tippje csak iOS-en, csak egyszer — a döntést maga a
             //* komponens hozza meg (lásd `lib/a2hs.ts`). */}
         <AddToHomeScreen />

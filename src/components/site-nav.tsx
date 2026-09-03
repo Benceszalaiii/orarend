@@ -3,12 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
+import { AccountMenu } from "@/components/account-menu";
 import { isViewRoute, saveLastView, type ViewRoute } from "@/lib/last-view";
 import { cn } from "@/lib/utils";
 
-//* A `/dualis` még nincs kész (WIP), ezért egyelőre nem jelenik meg a
-//* navigációban.
-//*
 //* A `/adatvedelem` szándékosan NINCS benne: az nem egy nézet ugyanarra az
 //* adatra, hanem egy lábjegyzet — a helye a lap alján van, nem a váltóban.
 
@@ -69,17 +67,13 @@ export function SiteNav({ className }: { className?: string }) {
 
   //! A VÁLTÓ AZ EGYETLEN HELY, AHOL MINDEN NÉZET ÁTMEGY — ezért itt jegyezzük
   //! meg, melyiket nézte utoljára a diák, hogy a `/` oda vigyen vissza. Csak a
-  //! váltóban szereplő útvonalak számítanak: a `/dualis` (WIP) is kirajzolja
-  //! ezt a sávot, de nem nyitóoldalnak való.
+  //! váltóban szereplő útvonalak számítanak: ezt a sávot más lap is
+  //! kirajzolhatja anélkül, hogy nyitóoldalnak való lenne.
   useEffect(() => {
     if (isViewRoute(pathname)) {
       saveLastView(pathname);
     }
   }, [pathname]);
-
-  if (ROUTES.length <= 1) {
-    return null;
-  }
 
   return (
     //! A VÁLTÓ SAJÁT, RÖGZÍTETT MAGASSÁGÚ HELYET KAP. A pirula maga 30 px; a
@@ -93,44 +87,52 @@ export function SiteNav({ className }: { className?: string }) {
     //! ugyanabban a magasságban ül.
     <div
       className={cn(
-        "flex h-9 shrink-0 touch-target items-center self-start",
+        "flex h-9 shrink-0 touch-target items-center gap-1.5 self-start sm:gap-2",
         className,
       )}
     >
-      <nav
-        aria-label="Nézetek"
-        className="flex shrink-0 items-center gap-0.5 rounded-full border border-input p-0.5 dark:bg-input/30"
-      >
-        {ROUTES.map((route) => {
-          const active = pathname === route.href;
-          return (
-            <Link
-              key={route.href}
-              href={route.href}
-              title={route.title}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
-                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
-                active
-                  ? "bg-foreground text-background"
-                  : "text-muted-strong hover:bg-muted hover:text-foreground",
-              )}
-            >
-              {/*//! A CÍMKE RÖVIDÜL, A NÉV NEM. Képernyőolvasónak és a
+      {/*//! A FIÓK A VÁLTÓ MELLETT ÜL, NEM KÜLÖN. Ez az egyetlen hely, amit
+          //! MINDHÁROM fejlécsáv (az `/orarend` rácsáé, a `/ma`-é és a
+          //! designlapé) egyformán kirajzol — ha a gomb a lapokon külön-külön
+          //! kerülne be, ugyanaz a néhány pixelnyi elcsúszás állna elő, amit a
+          //! váltónál egyszer már megmértünk és kijavítottunk (lásd fentebb). */}
+      {ROUTES.length > 1 ? (
+        <nav
+          aria-label="Nézetek"
+          className="flex shrink-0 items-center gap-0.5 rounded-full border border-input p-0.5 dark:bg-input/30"
+        >
+          {ROUTES.map((route) => {
+            const active = pathname === route.href;
+            return (
+              <Link
+                key={route.href}
+                href={route.href}
+                title={route.title}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
+                  active
+                    ? "bg-foreground text-background"
+                    : "text-muted-strong hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {/*//! A CÍMKE RÖVIDÜL, A NÉV NEM. Képernyőolvasónak és a
                 //! `title`-nek mindig a teljes név jár — a `sm` alatt csak a
                 //! látható szöveg kurtul. */}
-              <span className="sr-only">{route.label}</span>
-              <span aria-hidden className="sm:hidden">
-                {route.short}
-              </span>
-              <span aria-hidden className="hidden sm:inline">
-                {route.label}
-              </span>
-            </Link>
-          );
-        })}
-      </nav>
+                <span className="sr-only">{route.label}</span>
+                <span aria-hidden className="sm:hidden">
+                  {route.short}
+                </span>
+                <span aria-hidden className="hidden sm:inline">
+                  {route.label}
+                </span>
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
+      <AccountMenu />
     </div>
   );
 }

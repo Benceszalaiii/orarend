@@ -84,9 +84,9 @@ Two mechanisms a generic timetable viewer could not truthfully copy:
 ## Brand Commitments
 
 - Name: **Órarend**.
-- Existing routes: `/orarend` (week grid, default), `/dualis` (same grid, dual
-  labels, noindex), `/adatvedelem` (privacy), `/statisztika` (operator-only
-  usage report, password-gated, noindex).
+- Existing routes: `/orarend` (week grid, default), `/ma` (today's view),
+  `/adatvedelem` (privacy), `/statisztika` (operator-only usage report,
+  password-gated, noindex).
 - The subject-color system is **data, not decoration**: a hash of the subject
   seeds one of 12 accent hues (`src/lib/accent.ts`), and print explicitly
   re-requests those backgrounds because the color identifies the subject.

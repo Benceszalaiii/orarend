@@ -1,13 +1,19 @@
 "use client";
 
 import { Download, Share, SquarePlus, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   markA2HSSeen,
   shouldOfferAndroidA2HS,
   shouldOfferIosA2HS,
 } from "@/lib/a2hs";
+import {
+  consumeInstallPrompt,
+  hasInstallPrompt,
+  startInstallCapture,
+  subscribeInstallPrompt,
+} from "@/lib/install-prompt";
 
 //* ---------------------------------------------------------------------------
 //* „TEDD KI A KEZDŐKÉPERNYŐRE" — EGYSZER, iOS-EN ÉS ANDROIDON
@@ -17,6 +23,11 @@ import {
 //! másodszor odaállni már kártétel. A jelölőt ezért a MEGJELENÉSKOR írjuk ki,
 //! nem az elutasításkor: aki elgörget mellette, az is látta — és a látott
 //! ajánlatot nem tesszük elé újra.
+//!
+//! AZ „EGYSZER" MOSTANTÓL NEM ZÁRJA EL A TELEPÍTÉST. Amíg ez a kártya volt az
+//! egyetlen ajánlat, az elküldése egyben a telepítés eltemetése is volt. A
+//! lábléc gombja (`site-footer.tsx`) azóta állandó helyet ad neki: ez a kártya
+//! már csak a FIGYELEMFELHÍVÁS egyszeri joga, nem a funkció egyetlen ajtaja.
 //!
 //! NEM MODÁLIS. A diák azért nyitotta meg a lapot, hogy megnézze, mi jön most.
 //! Egy párbeszédablak ezt a választ takarná el, és a telepítés kedvéért
@@ -36,26 +47,52 @@ import {
 //!   koppint egyet, és a rendszer saját párbeszéde jön. Lépéseket leírni ott,
 //!   ahol egy gomb elvégzi a munkát, csak munka a felhasználónak.
 
-//* A Chrome telepítési ajánlata. A típus nincs benne a szabványos DOM
-//* leírásokban (a Safari és a Firefox nem küldi), ezért írjuk le mi.
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
-
 type Variant = "ios" | "android";
 
 //* A megjelenés késleltetése: a lap első képkockája az órarendé. A tipp akkor
 //* jön, amikor a diák már megkapta, amiért jött.
 const DELAY_MS = 2500;
 
+//! A LÉPÉSEK EGY HELYEN ÁLLNAK, MERT KÉT HELYEN KELLENEK. Ugyanez a két sor
+//! jelenik meg a lábléc „Telepítés" gombja alatt is (`site-footer.tsx`): ha a
+//! Safari menüpontja átnevezésre kerül, egy helyen kell átírni — két, egymástól
+//! elcsúszó útmutató rosszabb, mint egy elavult.
+export function IosInstallSteps() {
+  return (
+    <ol className="space-y-2 text-muted-strong">
+      <li className="flex items-center gap-2.5">
+        <Share className="size-4 shrink-0 text-primary" aria-hidden />
+        <span>
+          Koppints a{" "}
+          <strong className="font-medium text-foreground">Megosztás</strong>{" "}
+          gombra a Safari eszköztárán.
+        </span>
+      </li>
+      <li className="flex items-center gap-2.5">
+        <SquarePlus className="size-4 shrink-0 text-primary" aria-hidden />
+        <span>
+          Válaszd a{" "}
+          <strong className="font-medium text-foreground">
+            Főképernyőhöz adás
+          </strong>{" "}
+          pontot.
+        </span>
+      </li>
+    </ol>
+  );
+}
+
 export function AddToHomeScreen() {
   const [variant, setVariant] = useState<Variant | null>(null);
-  //* Az esemény akkor is a miénk marad, amikor a kártya már látszik — a
-  //* telepítést a gomb róla indítja, jóval a megérkezése után.
-  const installEvent = useRef<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
+    //! AZ ELKAPÁS FÜGGETLEN A KÁRTYÁTÓL. A `beforeinstallprompt` a lap
+    //! betöltése után pár száz ezredmásodperccel érkezik, és csak EGYSZER —
+    //! akkor is el kell kapni, ha ez a kártya épp nem szólal meg (mert már
+    //! szóltunk egyszer), különben a lábléc gombjának nem maradna mit
+    //! elindítania.
+    startInstallCapture();
+
     let timer: number | undefined;
     const cleanups: Array<() => void> = [];
     let revealed = false;
@@ -86,29 +123,19 @@ export function AddToHomeScreen() {
     if (shouldOfferIosA2HS()) {
       reveal("ios");
     } else if (shouldOfferAndroidA2HS()) {
-      //! A `preventDefault` NEM ELNYELI AZ AJÁNLATOT, ÁTVESZI. Nélküle a
-      //! Chrome a saját sávját mutatná, és a miénk mellé kerülne egy második,
-      //! ugyanarról szóló kérdés; vele az ajánlat egyetlen helyre költözik — a
-      //! kártyánk gombjára. Ezért kötelező, hogy a gomb tényleg működjön: ha
-      //! eldobnánk az eseményt, a telepítés ELÉRHETETLENNÉ válna.
-      const onBeforeInstallPrompt = (event: Event) => {
-        event.preventDefault();
-        installEvent.current = event as BeforeInstallPromptEvent;
-        reveal("android");
+      //* Az ajánlat a közös tárolóból jön. Lehet, hogy már ott van (az esemény
+      //* korábban érkezett, mint ahogy ez a komponens felállt), lehet, hogy
+      //* csak ezután jön — a feliratkozás mindkettőt lefedi.
+      const check = () => {
+        if (hasInstallPrompt()) reveal("android");
       };
-      window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-      cleanups.push(() =>
-        window.removeEventListener(
-          "beforeinstallprompt",
-          onBeforeInstallPrompt,
-        ),
-      );
+      cleanups.push(subscribeInstallPrompt(check));
+      check();
 
       //! HA KÖZBEN TELEPÍTETTÉK, ELTŰNÜNK. A telepítés a böngésző saját
       //! menüjéből is elindítható, és a `display-mode` a MÁR FUTÓ böngészőlapon
       //! nem vált át — a kártya ott maradna, és olyat kérne, ami épp megtörtént.
       const onInstalled = () => {
-        installEvent.current = null;
         setVariant(null);
         markA2HSSeen();
       };
@@ -127,14 +154,12 @@ export function AddToHomeScreen() {
   if (!variant) return null;
 
   const install = () => {
-    const event = installEvent.current;
-    installEvent.current = null;
     //* Előbb a saját kártyát tesszük el: a rendszer párbeszéde elé nem kell egy
     //* második, ugyanarról szóló felület. A választ már nem kérdezzük vissza —
     //* elutasítás után sem szólunk újra (ezt a `userChoice` meg tudná mondani,
     //* de nem lenne mit kezdenünk vele).
     setVariant(null);
-    void event?.prompt();
+    void consumeInstallPrompt()?.prompt();
   };
 
   return (
@@ -174,31 +199,9 @@ export function AddToHomeScreen() {
         {variant === "ios" ? (
           /*//* A két lépés a Safari saját ikonjaival: a menüpontot a felhasználó
               //* a képen ismeri fel, nem a szövegben. */
-          <ol className="mt-3 space-y-2 text-muted-strong">
-            <li className="flex items-center gap-2.5">
-              <Share className="size-4 shrink-0 text-primary" aria-hidden />
-              <span>
-                Koppints a{" "}
-                <strong className="font-medium text-foreground">
-                  Megosztás
-                </strong>{" "}
-                gombra a Safari eszköztárán.
-              </span>
-            </li>
-            <li className="flex items-center gap-2.5">
-              <SquarePlus
-                className="size-4 shrink-0 text-primary"
-                aria-hidden
-              />
-              <span>
-                Válaszd a{" "}
-                <strong className="font-medium text-foreground">
-                  Főképernyőhöz adás
-                </strong>{" "}
-                pontot.
-              </span>
-            </li>
-          </ol>
+          <div className="mt-3">
+            <IosInstallSteps />
+          </div>
         ) : (
           <Button className="mt-3 w-full" onClick={install}>
             <Download aria-hidden />

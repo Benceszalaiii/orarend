@@ -42,3 +42,7 @@ yarn-error.log*
 next-env.d.ts
 .prisma-composer/
 .alchemy/
+
+# Prisma: generált kliens. Nem verziózzuk — a `build` szkript minden
+# telepítés után újragenerálja a sémából (lásd package.json).
+/prisma/generated/

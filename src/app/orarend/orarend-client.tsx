@@ -23,6 +23,7 @@ import {
   type TimetableError,
   type TimetableView,
 } from "@/lib/timetable";
+import { type CachedWeek, loadWeekOrCached } from "@/lib/timetable-cache";
 
 export function OrarendPage() {
   const [classes, setClasses] = useState<TimetableClass[]>([]);
@@ -34,13 +35,16 @@ export function OrarendPage() {
     TimetableError | undefined
   >();
   const [fatal, setFatal] = useState<TimetableError | null>(null);
+  //! AZ ELSŐ HÉT IS JÖHET A KÉSZÜLÉKRŐL. A lapozást a rács intézi, de a
+  //! LEGELSŐ hetet ez a hatás tölti be — hálózat nélkül eddig a „nem érhető el"
+  //! lap jött, holott a mentett példány ott volt (a `/ma` abból rajzolt).
+  const [initialStale, setInitialStale] = useState<CachedWeek | null>(null);
 
   //! A DUÁLIS JELÖLÉS CSAK AKKOR JELENIK MEG, HA A DIÁK MAGA ÁLLÍTOTTA BE A
   //! BEOSZTÁSÁT (lásd `/ma`, `DualPanel`). Enélkül nem tudjuk, mely napok
   //! esnek a munkahelyre — és nem is TALÁLGATUNK: az `/orarend` pontosan úgy
-  //! néz ki, mint eddig. Beállítás után viszont ugyanazt kapja, mint a
-  //! `/dualis`: jelvényt a nap fejlécében és egy 8:00–15:00 blokkot a nap
-  //! helyén.
+  //! néz ki, mint eddig. Beállítás után viszont jelvényt kap a nap fejlécében
+  //! és egy 8:00–15:00 blokkot a nap helyén.
   //!
   //! A RÁCS MINDEN NAPRA KÉRDEZ, ÉS AZ OSZTÁLYT IS Ő TUDJA — az osztályváltó
   //! ugyanis benne ül, nem itt. A beosztás viszont OSZTÁLYONKÉNT külön van
@@ -148,14 +152,19 @@ export function OrarendPage() {
     const cached = loadCachedClass() || PUBLIC_DEFAULT_CLASS;
     (async () => {
       try {
-        const [list, initialView] = await Promise.all([
+        const [list, first] = await Promise.all([
           fetchTimetableClasses(),
-          buildTimetableView({ userClass: cached }),
+          //* A hét kulcsa ugyanaz, amit a `/ma` ír (osztály + hétfő), tehát a
+          //* két lap UGYANAZT a mentett hetet találja meg.
+          loadWeekOrCached(cached, mondayOf(), () =>
+            buildTimetableView({ userClass: cached }),
+          ),
         ]);
         if (cancelled) return;
         setClasses(list.classes);
         setClassesError(list.error);
-        setView(initialView);
+        setView(first.view);
+        setInitialStale(first.cached);
       } catch (err) {
         //! Ide csak váratlan kivétel jut (a hálózati hibákat a hívott függvények
         //! már nevesítve adják vissza) — a fajtáját akkor is megőrizzük.
@@ -177,6 +186,7 @@ export function OrarendPage() {
       {view ? (
         <TimetableCalendar
           initialView={fatal ? { ...view, ok: false, error: fatal } : view}
+          initialStale={fatal ? null : initialStale}
           classes={classes}
           classesError={classesError}
           variant="fullscreen"

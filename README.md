@@ -241,7 +241,7 @@ kapcsol be semmit — egy elfelejtett env-változó itt sem viheti el az óraren
 src/
   app/
     orarend/       heti rács (alapértelmezett útvonal)
-    dualis/        ugyanaz a rács duális napjelöléssel (noindex)
+    ma/            a mai nap egy képernyőn
     adatvedelem/   adatvédelmi tájékoztató
     statisztika/   jelszóval védett használati kimutatás (noindex)
     api/hasznalat/ osztályszintű használati számláló

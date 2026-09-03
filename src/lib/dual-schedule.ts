@@ -16,6 +16,7 @@
 //! nem rontja el a beosztást — pont úgy, ahogy a `dualis.ts` is csinálja.
 
 import type { DualStatus } from "./dualis";
+import { notifyPrefsChanged } from "./prefs-events";
 
 export const DUAL_SCHEDULE_STORAGE_KEY = "orarend:dual-schedule:v1";
 
@@ -133,6 +134,14 @@ function sanitize(value: unknown): DualSchedule | null {
   return { A: days(raw.A), B: days(raw.B) };
 }
 
+//! A SZINKRONNAK AZ EGÉSZ TÁROLÓ KELL, NEM EGY OSZTÁLY. A `loadDualSchedule`
+//! osztályra kérdez, mert a rács is így kérdez — a beállítás-szinkron viszont
+//! nem tudja előre, mely osztályokhoz van mentés, és épp az a dolga, hogy
+//! MINDET átvigye a másik készülékre (lásd `prefs-local.ts`).
+export function loadAllDualSchedules(): Record<string, DualSchedule> {
+  return readStore();
+}
+
 /** `null` = ez az osztály még nincs beállítva (nem ugyanaz, mint „nincs duális nap"). */
 export function loadDualSchedule(classShort: string): DualSchedule | null {
   if (!classShort) return null;
@@ -151,6 +160,7 @@ export function saveDualSchedule(
       DUAL_SCHEDULE_STORAGE_KEY,
       JSON.stringify(store),
     );
+    notifyPrefsChanged();
   } catch {}
 }
 
@@ -164,5 +174,6 @@ export function forgetDualSchedule(classShort: string): void {
       DUAL_SCHEDULE_STORAGE_KEY,
       JSON.stringify(store),
     );
+    notifyPrefsChanged();
   } catch {}
 }

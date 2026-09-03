@@ -40,10 +40,9 @@ export type SchoolDayPlan = {
 //* ---------------------------------------------------------------------------
 //* GYORSÍTÓTÁR
 //* ---------------------------------------------------------------------------
-//! EGY HÓNAP EGYSZER. A hét-lapozás ugyanazt a hónapot kéri újra és újra, a
-//! `/dualis` pedig EGY hétre három osztály órarendjét építi össze — ott
-//! háromszor futna le ugyanaz a kérés. Az értesítéseket számoló háttérfeladat
-//! (`/api/ertesites/tick`) meg osztályonként megy végig ugyanazon a héten.
+//! EGY HÓNAP EGYSZER. A hét-lapozás ugyanazt a hónapot kéri újra és újra, az
+//! értesítéseket számoló háttérfeladat (`/api/ertesites/tick`) pedig
+//! osztályonként megy végig ugyanazon a héten.
 //! A tanév rendje ezalatt nem változik: ez a térkép egyetlen kérésre húzza
 //! össze mindet.
 //*

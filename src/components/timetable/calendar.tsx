@@ -25,6 +25,8 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
+import { StaleNote } from "@/components/ma/day-status";
+import { SiteFooterLinks } from "@/components/site-footer";
 import {
   SITE_BAR_CLUSTER,
   SITE_BAR_MAX,
@@ -56,6 +58,11 @@ import {
   periodsOfDay,
   saveCachedClass,
 } from "@/lib/timetable";
+import {
+  type CachedWeek,
+  loadWeekOrCached,
+  type WeekLoad,
+} from "@/lib/timetable-cache";
 import {
   type GhostBlock,
   type LessonRun,
@@ -579,8 +586,7 @@ export function TimetableCalendar({
   dualStatusForDay,
   dualSetup,
   notifySetup,
-  loadView,
-  reloadToken,
+  initialStale = null,
 }: {
   initialView: TimetableView;
   classes: TimetableClass[];
@@ -597,10 +603,9 @@ export function TimetableCalendar({
   //* Beágyazva egyik sincs átadva, így az /event kártyája változatlan.
   heading?: React.ReactNode;
   trailing?: React.ReactNode;
-  //! DUÁLIS JELÖLÉS — DE A SZABÁLYT NEM A RÁCS ISMERI. Ugyanaz a rajz két
-  //! forrásból: a `/dualis` a KÖNYVSZERINTI blokkot mutatja (`dualStatusOf`),
-  //! az `/orarend` viszont a diák SAJÁT, kézzel beállított beosztását
-  //! (`dualStatusFor`). A rács ezért nem dönt, hanem KÉRDEZ — napra, a hét
+  //! DUÁLIS JELÖLÉS — DE A SZABÁLYT NEM A RÁCS ISMERI. Az `/orarend` a diák
+  //! SAJÁT, kézzel beállított beosztását mutatja (`dualStatusFor`), és a
+  //! szabály laponként más lehet. A rács ezért nem dönt, hanem KÉRDEZ — napra, a hét
   //! A/B-jelölésével és az ÉPPEN nézett osztállyal, mert a beosztás
   //! osztályonként külön van. `undefined` válasz = ezen a lapon (vagy ennél az
   //! osztálynál) nincs duális jelölés: a rács pontosan úgy néz ki, mint eddig.
@@ -613,8 +618,7 @@ export function TimetableCalendar({
   //! mint a `dualStatusForDay`-nél: a rács csak azt tudja, MELYIK osztály
   //! MELYIK hetét nézik éppen — a beosztás tárolása és a párbeszéd a lapé.
   //! Ezért nem komponenst kap, hanem egy hívást, amit a nézett osztállyal és
-  //! héttel kérdez meg; ami nem ad vissza semmit (a `/dualis`, az `/event`),
-  //! annál a sáv változatlan.
+  //! héttel kérdez meg; ami nem ad vissza semmit, annál a sáv változatlan.
   dualSetup?: (ctx: {
     classShort: string;
     weekLetter: string;
@@ -622,21 +626,19 @@ export function TimetableCalendar({
   //! AZ ÉRTESÍTÉS-HARANG UGYANEZEN A HATÁRON ÁLL. A rács azt tudja, MELYIK
   //! osztály órarendjét nézik éppen — a feliratkozás, az engedélykérés és a
   //! párbeszéd viszont a lapé (`components/pwa/notification-menu.tsx`). Ezért
-  //! itt is hívás, nem komponens; ami nem ad vissza semmit (a `/dualis`, az
-  //! `/event`), annál a sáv változatlan.
+  //! itt is hívás, nem komponens; ami nem ad vissza semmit, annál a sáv
+  //! változatlan.
   notifySetup?: (ctx: { classShort: string }) => React.ReactNode;
-  //! SAJÁT BETÖLTŐ. A `/dualis` nem egy osztály órarendjét lapozza, hanem egy
-  //! TERVET, ami két osztály óráiból áll össze — a hét-lapozás viszont
-  //! ugyanaz a mozdulat. Ha meg van adva, a rács ezen keresztül kér új hetet
-  //! az `buildTimetableView` helyett; minden más (lapozás, billentyűk,
-  //! nyomtatás) változatlanul működik.
-  loadView?: (weekStart: string) => Promise<TimetableView>;
-  //! ÚJRATÖLTÉSI JEL. A tervválasztó nem hetet vált, hanem ugyanannak a hétnek
-  //! egy MÁSIK tervét kéri — hálózat nélkül. A szülő ennek az értéknek a
-  //! változtatásával kéri újra a `loadView`-t az aktuális hétre.
-  reloadToken?: string | number;
+  //! AZ ELSŐ HÉT IS JÖHET A MENTETT PÉLDÁNYBÓL. Az `initialView`-t a lap tölti
+  //! be (`/orarend`), tehát csak Ő tudja, hálózatból jött-e vagy a készülékről
+  //! — a rács enélkül elhallgatná a legelső, hidegen megnyitott hét korát.
+  initialStale?: CachedWeek | null;
 }) {
   const [view, setView] = useState<TimetableView>(initialView);
+  //! HONNAN VAN AZ ÉPPEN MUTATOTT HÉT. Nem `null` = a készüléken tárolt
+  //! példányból, mert a forrás nem volt elérhető. A rács ezt KIÍRJA: egy régi
+  //! órarendet igazként mutatni rosszabb, mint hibát mutatni.
+  const [stale, setStale] = useState<CachedWeek | null>(initialStale);
   const [selectedClass, setSelectedClass] = useState<string>(
     initialView.resolvedClass?.short ?? "",
   );
@@ -675,13 +677,10 @@ export function TimetableCalendar({
   const classShort = view.resolvedClass?.short ?? "";
 
   //! MELYIK OSZTÁLYT NÉZIK — ÉS SEMMI MÁST. Osztályonként és naponta egyszer
-  //! eszközönként (a deduplikáció a `reportClassUse`-ban van). A `loadView`
-  //! ugyanaz a határ, mint a `saveCachedClass`-nál: a `/dualis` „osztálya" egy
-  //! TERV azonosítója (`A`, `B`…), nem létező osztály — azt nincs mit mérni.
+  //! eszközönként (a deduplikáció a `reportClassUse`-ban van).
   useEffect(() => {
-    if (loadView) return;
     reportClassUse(classShort);
-  }, [classShort, loadView]);
+  }, [classShort]);
 
   const prefsApi = useMergePreferences({
     classShort,
@@ -705,31 +704,35 @@ export function TimetableCalendar({
   //! ott van, mire az ujj elengedi. A szomszéd hetet ezért a szélső napra érve
   //! előre lekérjük (lásd lentebb), és a lapozás ugyanezt az ígéretet találja
   //! itt: nem hálózatot vár, csak kirajzol.
-  //!
-  //! CSAK SAJÁT BETÖLTŐ NÉLKÜL. A `/dualis` `loadView`-ja nem hálózatból
-  //! dolgozik (a már letöltött hét nyers adatából állít tervet), tehát nincs
-  //! mit előre kérni — ráadásul a terv menet közben változik, egy korábban
-  //! eltett példány elavulna. Ott ez a függvény átereszt.
   const weekCache = useRef(
-    new Map<string, { at: number; view: Promise<TimetableView> }>(),
+    new Map<string, { at: number; view: Promise<WeekLoad> }>(),
   );
   const requestWeek = useCallback(
-    (cls: string, week: string): Promise<TimetableView> => {
-      if (loadView) return loadView(week);
+    (cls: string, week: string): Promise<WeekLoad> => {
       const key = `${cls}|${week}`;
       const cached = weekCache.current.get(key);
       if (cached && Date.now() - cached.at < WEEK_PREFETCH_TTL) {
         return cached.view;
       }
-      const view = buildTimetableView({
-        userClass: cls || null,
-        weekStart: week,
-        classOverride: cls || undefined,
-      }).then((res) => {
+      //! A MENTETT HÉT UGYANEZEN AZ ÚTON JÖN. Hálózat nélkül a
+      //! `buildTimetableView` nevesített hibát ad, a készüléken viszont ott
+      //! lehet ugyanennek a hétnek a legutóbbi példánya — a `/ma` mindig is
+      //! abból rajzolt, a rács pedig hibát mutatott. A döntést a
+      //! `loadWeekOrCached` hozza (lásd `lib/timetable-cache.ts`).
+      const view = loadWeekOrCached(cls, week, () =>
+        buildTimetableView({
+          userClass: cls || null,
+          weekStart: week,
+          classOverride: cls || undefined,
+        }),
+      ).then((res) => {
         //! A HIBÁS VÁLASZT NEM TESSZÜK EL. A `buildTimetableView` a hálózati
         //! hibát is nevesített nézetként adja vissza — eltéve az „Újra" gomb
         //! ugyanazt a hibát kapná meg, hálózat nélkül, örökre.
-        if (!res.ok) weekCache.current.delete(key);
+        //! A MENTETT HETET SEM: az „Újra" pont attól ér valamit, hogy a
+        //! visszatérő hálózatot MEGPRÓBÁLJA, nem a percekkel korábbi
+        //! pillanatképet adja vissza másodszor is.
+        if (!res.view.ok || res.cached) weekCache.current.delete(key);
         return res;
       });
       //* A kivétel a hívónál csapódik le (`load`); itt csak azért kezeljük le,
@@ -743,7 +746,7 @@ export function TimetableCalendar({
       }
       return view;
     },
-    [loadView],
+    [],
   );
 
   //* A héthatáron átérkező hét igazítása (lásd `landRef.current` lentebb, a
@@ -768,11 +771,12 @@ export function TimetableCalendar({
     setAnimateGrid(true);
     setPending(true);
     try {
-      const res = await requestWeek(cls, nextWeek);
+      const { view: res, cached } = await requestWeek(cls, nextWeek);
       const next = res.resolvedClass?.short ?? cls;
       weekTransition(
         () => {
           setView(res);
+          setStale(cached);
           setSelectedClass(next);
         },
         {
@@ -783,10 +787,7 @@ export function TimetableCalendar({
       );
       //* A választást csak SIKERES betöltés után jegyezzük meg, hogy a
       //* következő megnyitás ne a `PUBLIC_DEFAULT_CLASS`-ra essen vissza.
-      //! SAJÁT BETÖLTŐNÉL NEM MENTÜNK: a `/dualis` „osztálya" egy terv, nem
-      //! létező osztály — elmentve az `/orarend` következő megnyitása próbálná
-      //! betölteni, és ismeretlen osztályra futna.
-      if (next && !loadView) saveCachedClass(next);
+      if (next) saveCachedClass(next);
     } catch (err) {
       //! Ide csak akkor jutunk, ha maga a betöltés dobott (a hálózati hibákat
       //! a `buildTimetableView` már nevesítve adja vissza) — a kivétel fajtáját
@@ -796,30 +797,40 @@ export function TimetableCalendar({
         ok: false,
         error: describeTimetableFailure(err),
       }));
+      //* A hibaüzenet fölött nincs mit „régiként" jelölni.
+      setStale(null);
     } finally {
       setPending(false);
     }
   };
 
-  //! A TERVVÁLTÁS ÚJRATÖLTÉS, DE NEM HÁLÓZATI. A `loadView` a szülőnél a már
-  //! letöltött hét nyers adatából állítja elő a másik tervet, tehát ez a
-  //! „betöltés" azonnali. A `load` függvényt szándékosan NEM tesszük a
-  //! függőségek közé: minden renderben új, és a hatás ettől végtelen ciklusba
-  //! esne — a jelre viszont pontosan egyszer kell lefutnia.
+  //! A `load` REF MÖGÖTT. Minden renderben új függvény keletkezik belőle; egy
+  //! hatás függőségei közé téve az végtelen ciklusba esne. A ref-en keresztül
+  //! a hatások mindig a FRISS `load`-ot hívják, de nem futnak újra miatta.
   const loadRef = useRef(load);
   loadRef.current = load;
-  const firstToken = useRef(true);
+
+  //! A MENTETT HÉTBŐL VISSZA KELL TALÁLNI A FRISSHEZ. A rács hálózat nélkül a
+  //! készüléken tárolt hetet mutatja — de a térerő a folyosón perceken belül
+  //! visszajön, és addig SEMMI nem kérdezné meg újra: a diák egy órával korábbi
+  //! órarendet nézne, mert nem jutott eszébe frissíteni. A `/ma` ezt már így
+  //! csinálja (láthatóságra újratölt); a rács mostantól ugyanígy.
+  //*
+  //* Csak amíg a nézet MENTETT: friss adatnál ez fölösleges forgalom lenne
+  //* azon a kiszolgálón, amit egy iskola tart fenn.
   useEffect(() => {
-    if (reloadToken === undefined) return;
-    if (firstToken.current) {
-      firstToken.current = false;
-      return;
-    }
-    loadRef.current(view.weekStart);
-    //* `view.weekStart` szándékosan kimarad: a jel az egyetlen kiváltó ok, a
-    //* hetet a friss `load` úgyis a ref-ből olvassa.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadToken]);
+    if (!stale) return;
+    const retry = () => {
+      if (document.visibilityState !== "visible") return;
+      loadRef.current(view.weekStart);
+    };
+    window.addEventListener("online", retry);
+    document.addEventListener("visibilitychange", retry);
+    return () => {
+      window.removeEventListener("online", retry);
+      document.removeEventListener("visibilitychange", retry);
+    };
+  }, [stale, view.weekStart]);
 
   //* Hét-lapozás egy lépéssel — a gombok és a billentyűk közös bejárata.
   const step = (delta: number) =>
@@ -869,8 +880,7 @@ export function TimetableCalendar({
   //! ─── A DUÁLIS NAP HELYÉN EGY BLOKK ÁLL ───────────────────────────────────
   //! Azon a napon a munkahelyen vagy: az osztály órarendje NEM a te napod. A
   //! rács ezért nem tesz úgy, mintha lenne órád — a nap óráit egyetlen
-  //! 8:00–15:00 kártya váltja fel, óra-bontás nélkül. (Ugyanaz a döntés, ami a
-  //! `/dualis` tervei mögött áll, csak ott a terv eleve enélkül épül fel.)
+  //! 8:00–15:00 kártya váltja fel, óra-bontás nélkül.
   //!
   //! CSAK OTT, AHOL VAN MIT FELVÁLTANI. Egy adat nélküli hétre (szünet,
   //! forráshiba) nem találunk ki duális napokat: a hét üressége a hír, nem a
@@ -882,8 +892,6 @@ export function TimetableCalendar({
     const dualDows = new Set(dualDays.map((d) => d.dayOfWeek));
     return [
       ...view.lessons.filter((l) => !dualDows.has(l.dayOfWeek)),
-      //* A `/dualis` terveiben már benne van ugyanez a blokk — a szűrés miatt
-      //* az eredetit itt is a sajátunk váltja fel, azonos tartalommal.
       ...dualDays.map(dualBlockLesson),
     ];
   }, [view.lessons, days, dualOf, dualStatusForDay]);
@@ -1553,8 +1561,7 @@ export function TimetableCalendar({
   //! csak abba az egy irányba kérjük le a szomszédot. Jellemzően még azelőtt
   //! megérkezik, hogy a mozdulat elindulna.
   useEffect(() => {
-    //* Saját betöltővel nincs mit előre kérni (lásd `requestWeek`).
-    if (variant !== "fullscreen" || !paging || pending || loadView) return;
+    if (variant !== "fullscreen" || !paging || pending) return;
     const last = gridDays.length - 1;
     if (last < 1) return;
     const dir = activeDay <= 0 ? -1 : activeDay >= last ? 1 : 0;
@@ -1571,7 +1578,6 @@ export function TimetableCalendar({
     variant,
     paging,
     pending,
-    loadView,
     activeDay,
     gridDays.length,
     selectedClass,
@@ -1819,8 +1825,8 @@ export function TimetableCalendar({
       {/*//! A SÁV NEM EGY TÖRDELŐ LISTA, HANEM KÉT HASÁB. Amíg egyetlen
           //! `flex-wrap` sor volt, a lapváltó a lista VÉGÉN ült, és hogy
           //! hányadik sorba esik, azt a mellette álló tartalom döntötte el: a
-          //! hét-címke hossza, az A/B jelvény megléte, a duális gomb, a
-          //! `/dualis` tervválasztója. Mérve: 375 px-en a harmadik sorban
+          //! hét-címke hossza, az A/B jelvény megléte, a duális gomb, az
+          //! azóta megszűnt `/dualis` tervválasztója. Mérve: 375 px-en a harmadik sorban
           //! (126 px), 1024 px-en a másodikban (58 px), 1120 px-en az elsőben
           //! (13 px) — ugyanaz a gomb, három magasságban, tartalomtól függően.
           //! Egy törésponttal ezt nem lehet megfogni, mert a törés helye maga is
@@ -1864,9 +1870,9 @@ export function TimetableCalendar({
             //! oldalán (lásd `SITE_BAR_CLUSTER`): a lapváltó a két lapon
             //! ugyanabban a magasságban és ugyanannál az x-nél áll. */}
         <div className={cn(SITE_BAR_CLUSTER, "lg:order-2")}>
-          {/*//! A LAPVÁLTÓ MELLETTI VEZÉRLŐK TÖRDELHETNEK, A VÁLTÓ NEM. A
-              //! `/dualis` egy 132 px-es tervválasztót és egy súgógombot is
-              //! betesz ide: 375 px-en ez a csoport 424 px-re hízott, és eddig
+          {/*//! A LAPVÁLTÓ MELLETTI VEZÉRLŐK TÖRDELHETNEK, A VÁLTÓ NEM. Az
+              //! azóta megszűnt `/dualis` egy 132 px-es tervválasztót és egy
+              //! súgógombot is betett ide: 375 px-en ez a csoport 424 px-re hízott, és eddig
               //! VÍZSZINTESEN tolta szét a lapot — a dokumentum 436 px széles
               //! lett egy 375 px-es kijelzőn. Ez a belső csoport ezért tördel;
               //! a váltó kívüle, a saját dobozában marad az első sorban. */}
@@ -1948,8 +1954,9 @@ export function TimetableCalendar({
             {trailing}
           </div>
           {/*//! A VÁLTÓ A SÁVÉ, NEM A HÍVÓÉ. Amíg a lapok a `trailing`-ben adták
-              //! be, a helye a mellé csomagolt tartalomtól függött — a `/dualis`
-              //! tervválasztója például elé került, és vele együtt tördelt. Egy
+              //! be, a helye a mellé csomagolt tartalomtól függött — az azóta
+              //! megszűnt `/dualis` tervválasztója például elé került, és vele
+              //! együtt tördelt. Egy
               //! lapszintű vezérlő helye nem lehet a hívó fél döntése: teljes
               //! nézetben ez a sáv A LAP FEJLÉCE, tehát a váltó ide tartozik. */}
           {fullscreen && <SiteNav />}
@@ -2099,6 +2106,18 @@ export function TimetableCalendar({
           </div>
         </div>
       </div>
+
+      {/*//! MEGMONDJUK, HA A HÉT A KÉSZÜLÉKRŐL JÖN. A rács ugyanúgy néz ki
+          //! mentett és friss adattal — épp ezért kell EGY SOR, ami elárulja a
+          //! különbséget. Ugyanaz a jelzés, mint a `/ma`-n (`StaleNote`), hogy
+          //! a két lap ne mást mondjon ugyanarról az adatról. */}
+      {stale && (
+        <StaleNote
+          fetchedAt={stale.fetchedAt}
+          offline
+          className="shrink-0 justify-center border-b border-border/60 bg-muted/30 px-4 py-1.5 print:hidden"
+        />
+      )}
 
       {/* Rács / állapotok */}
       {/*//! A SORREND SZÁMÍT. Az osztály hiánya a leggyakoribb ok, de NEM az
@@ -2859,12 +2878,20 @@ function LegendMenu() {
           </dt>
           <dd>Részletlap bezárása</dd>
         </dl>
-        <Link
-          href="/adatvedelem"
-          className="mt-3 block border-t border-border pt-3 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-        >
-          Adatvédelmi tájékoztató
-        </Link>
+        {/*//! ITT NINCS LÁBLÉC, MERT A LAP NEM GÖRDÜL. A heti rács
+            //! szándékosan a teljes képernyőt tölti ki: alá tett lábléc csak
+            //! úgy lenne elérhető, ha a lapot görgethetővé tennénk — pont azt
+            //! rontanánk el, amiért ez a nézet létezik. A lábjegyzetek ezért
+            //! ebbe a buborékba költöznek, UGYANABBÓL a listából, amit a
+            //! lábléc rajzol (`site-footer.tsx`): egy forrás, két megjelenés.
+            //* Álló listaként, mert a buborék keskeny — vízszintesen a
+            //* hivatkozások fele a második sorba törne. */}
+        <div className="mt-3 border-t border-border pt-3">
+          <SiteFooterLinks className="flex-col items-start gap-y-2.5" />
+          <p className="mt-2.5 text-xs text-muted-foreground">
+            Készítette Szalai Bence
+          </p>
+        </div>
       </PopoverContent>
     </Popover>
   );

@@ -1,4 +1,8 @@
-import type { TimetableDay, TimetableView } from "./timetable";
+import type {
+  TimetableDay,
+  TimetableErrorKind,
+  TimetableView,
+} from "./timetable";
 
 //! ─── HELYI PÉLDÁNY AZ UTOLSÓ LEKÉRT HÉTRŐL ────────────────────────────────
 //! A lap telepíthető (PWA), és a folyosón rendszeresen nincs térerő. A service
@@ -106,4 +110,59 @@ export function ageLabel(fetchedAt: number, now: number = Date.now()): string {
   if (hours < 24) return `${hours} órája`;
   const days = Math.floor(hours / 24);
   return days === 1 ? "tegnap" : `${days} napja`;
+}
+
+//! ─── HÁLÓZAT ELŐSZÖR, UTÁNA A MENTETT PÉLDÁNY ─────────────────────────────
+//! A `/ma` maga kezelte ezt a lépést, a HETI RÁCS viszont nem: hálózat nélkül
+//! az `/orarend` a „A Jedlikinfo API nem érhető el" lapot mutatta — MIKÖZBEN
+//! ugyanannak a hétnek a mentett példánya ott volt a készüléken, és a `/ma`
+//! éppen abból rajzolt. Ugyanaz az adat, két különböző válasz: ezért került a
+//! szabály ide, egyetlen helyre.
+//*
+//* A hívó adja a lekérést (`fetchFresh`), mert a rács a saját paramétereivel
+//* dolgozik; a döntés — mikor ér valamit a mentett hét — itt lakik.
+
+export type WeekLoad = {
+  view: TimetableView;
+  /** Nem `null`, ha a nézet a MENTETT példányból jön — a lapnak ki kell írnia. */
+  cached: CachedWeek | null;
+};
+
+//! CSAK ELÉRHETETLENSÉGRE ESÜNK VISSZA. A „nincs ilyen osztály" vagy a
+//! értelmezhetetlen válasz VÁLASZ, nem hiány: ott a mentett hét ELTAKARNÁ az
+//! igazi okot, és a diák egy nem létező osztály régi órarendjét nézné.
+const UNREACHABLE: ReadonlySet<TimetableErrorKind> = new Set([
+  "offline",
+  "network",
+  "timeout",
+  "server",
+]);
+
+export async function loadWeekOrCached(
+  classShort: string,
+  weekStart: string,
+  fetchFresh: () => Promise<TimetableView>,
+): Promise<WeekLoad> {
+  let fresh: TimetableView;
+  try {
+    fresh = await fetchFresh();
+  } catch (err) {
+    //* Váratlan kivétel: a mentett hét itt is jobb a semminél, de ha nincs,
+    //* a hibát TOVÁBBDOBJUK — a hívó nevesíti (`describeTimetableFailure`).
+    const local = loadCachedWeek(classShort, weekStart);
+    if (local) return { view: local.view, cached: local };
+    throw err;
+  }
+
+  if (fresh.ok) {
+    saveCachedWeek(classShort, weekStart, fresh);
+    return { view: fresh, cached: null };
+  }
+
+  if (fresh.error && UNREACHABLE.has(fresh.error.kind)) {
+    const local = loadCachedWeek(classShort, weekStart);
+    if (local) return { view: local.view, cached: local };
+  }
+
+  return { view: fresh, cached: null };
 }

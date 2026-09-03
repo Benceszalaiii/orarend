@@ -7,7 +7,7 @@
 //! Szándékosan kézzel írt és rövid: egy offline gyorsítótár-könyvtár több
 //! viselkedést hozna, mint amennyit ez a lap használ.
 
-const VERSION = "orarend-v2";
+const VERSION = "orarend-v3";
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -27,9 +27,74 @@ const RUNTIME = `${VERSION}-runtime`;
 //* nincs `process.env`.
 const DEV = new URL(self.location.href).searchParams.get("dev") === "1";
 
-//* A két nézet, amit érdemes hidegen is megnyitni. Nem az összes útvonal: a
-//* `/adatvedelem`-et senki nem olvassa offline.
-const PRECACHE = ["/ma", "/orarend", "/icon-192.png", "/icon-512.png"];
+//! MINDEN ELŐRE GENERÁLT ÚTVONAL ELŐRE MENTVE. Korábban csak a `/ma` és az
+//! `/orarend` volt itt, a navigációs tartalék pedig ISMERETLEN cím esetén a
+//! `/ma`-t adta vissza — vagyis a `/statisztika` hálózat nélkül a MAI NAP
+//! tartalmát rajzolta ki, `/statisztika` címmel a sávban. Rossz oldal a jó
+//! URL-en: ez rosszabb a hibánál, mert nem látszik rajta, hogy hibás.
+//*
+//* Ami kimarad: a `/statisztika` (kiszolgálón dől el, belépéshez kötött) és a
+//* `/design` (fejlesztői próbalap). Ezek hálózat nélkül az `OFFLINE_URL`-t
+//* kapják — egy lapot, ami MEGMONDJA, hogy nincs kapcsolat.
+const OFFLINE_URL = "/offline.html";
+const PRECACHE = [
+  "/",
+  "/ma",
+  "/orarend",
+  "/adatvedelem",
+  OFFLINE_URL,
+  "/icon-192.png",
+  "/icon-512.png",
+];
+
+//! A HTML ÖNMAGÁBAN NEM LAP. A `/_next/static/` alatti kód- és stíluslapok
+//! neve BUILDENKÉNT változik (tartalom-hash), ezért nem lehet őket listába
+//! írni — ki viszont OLVASHATÓK abból a HTML-ből, amit épp elmentettünk.
+//*
+//* Enélkül a legelső látogatás utáni offline nyitás TELJESEN ÜRES lapot adott:
+//* a váz megvolt, a hozzá tartozó JS és CSS nem, mert azokat a böngésző még a
+//* worker átvétele ELŐTT töltötte le — a `fetch` figyelő tehát soha nem látta
+//* őket, és a futásidejű gyorsítótárba sem kerültek be. A lap csak a MÁSODIK
+//* megnyitás után vált offline-képessé, amiről a felhasználó mit sem tudott.
+const ASSET_PATTERN = /\/_next\/static\/[A-Za-z0-9._\-/]+/g;
+
+async function precache() {
+  const shell = await caches.open(SHELL);
+  const assets = new Set();
+
+  //! EGYENKÉNT, NEM `addAll`-LAL. Az `addAll` ATOMI: egyetlen hibás útvonal az
+  //! EGÉSZ előre mentést eldobja — a korábbi `.catch()` ezt elnyelte, és a lap
+  //! némán offline-képtelen maradt. Külön kérésekkel egy hiányzó cím csak
+  //! ÖNMAGÁT viszi el, a többi váz megmarad.
+  await Promise.all(
+    PRECACHE.map(async (url) => {
+      try {
+        //! `reload`: telepítéskor a böngésző saját HTTP-gyorsítótárát
+        //! KIKERÜLJÜK, különben egy frissítés után a régi HTML kerülne a friss
+        //! vázba.
+        const res = await fetch(new Request(url, { cache: "reload" }));
+        if (!res.ok) return;
+        const copy = res.clone();
+        await shell.put(url, res);
+        if (!(copy.headers.get("content-type") || "").includes("text/html")) {
+          return;
+        }
+        for (const asset of (await copy.text()).match(ASSET_PATTERN) ?? []) {
+          assets.add(asset);
+        }
+      } catch {
+        /* ez az egy útvonal marad ki — a többi váz megvan */
+      }
+    }),
+  );
+
+  //* A hash-elt fájlok örökre érvényesek, tehát a böngésző HTTP-gyorsítótárát
+  //* itt NEM kerüljük ki: ami már letöltődött, azt ne töltsük le újra.
+  const runtime = await caches.open(RUNTIME);
+  await Promise.all(
+    [...assets].map((url) => runtime.add(url).catch(() => undefined)),
+  );
+}
 
 self.addEventListener("install", (event) => {
   //* Fejlesztésben nincs mit előre menteni — a váz úgyis percenként változik.
@@ -38,17 +103,7 @@ self.addEventListener("install", (event) => {
     return;
   }
   event.waitUntil(
-    caches
-      .open(SHELL)
-      //! `reload`: telepítéskor a böngésző saját HTTP-gyorsítótárát KIKERÜLJÜK,
-      //! különben egy frissítés után a régi HTML kerülne a friss vázba.
-      .then((cache) =>
-        cache.addAll(
-          PRECACHE.map((url) => new Request(url, { cache: "reload" })),
-        ),
-      )
-      //* Egy hiányzó útvonal nem buktathatja meg a telepítést: a lap enélkül is
-      //* működik, csak online.
+    precache()
       .catch(() => undefined)
       .then(() => self.skipWaiting()),
   );
@@ -104,10 +159,18 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(async () => {
-          const cached = await caches.match(request);
-          //* Ismeretlen útvonal offline: a napi nézet a legjobb tipp — az az,
-          //* amiért az ikont kitették.
-          return cached || (await caches.match("/ma")) || Response.error();
+          //* `ignoreSearch`: a mentett példány a tiszta útvonalon ül, a
+          //* megnyitás viszont gyakran hoz lekérdezést (`?utm=`, megosztott
+          //* link) — enélkül a saját oldalunkat NEM ismernénk fel.
+          const cached =
+            (await caches.match(request)) ||
+            (await caches.match(request, { ignoreSearch: true }));
+          if (cached) return cached;
+          //! ISMERETLEN ÚTVONALRA NEM ADUNK MÁS OLDALT. Régen a `/ma` jött
+          //! ilyenkor: a `/statisztika` hálózat nélkül a mai nap tartalmát
+          //! mutatta, a saját címén. Aki nem tudja, hogy offline van, az azt
+          //! hiszi, ELROMLOTT a lap. Az `OFFLINE_URL` kimondja, mi történt.
+          return (await caches.match(OFFLINE_URL)) || Response.error();
         }),
     );
     return;

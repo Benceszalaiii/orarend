@@ -1,0 +1,227 @@
+//! ─── AZ ADATBÁZIS SÉMÁJA ────────────────────────────────────────────────────
+//! Ez a séma KIZÁRÓLAG a bejelentkezést és a beállítás-szinkront szolgálja ki.
+//! Az órarend adata NEM kerül ide: az a Jedlikinfóé, mi csak megjelenítjük. A
+//! használati statisztika és a push-feliratkozások továbbra is a Redisben élnek
+//! (`lib/usage-store.ts`, `lib/push-store.ts`) — azok NÉVTELENEK, és nem szabad,
+//! hogy egy fiókhoz köthetővé váljanak pusztán attól, hogy most már van fiók.
+//!
+//! A táblaneveket a Better Auth adja (`@@map`); a mezőket a
+//! `bun run db:generate` fordítja klienssé.
+
+generator client {
+  provider = "prisma-client"
+  output   = "./generated/"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+//! ─── FELHASZNÁLÓ ────────────────────────────────────────────────────────────
+//! NINCS REGISZTRÁCIÓ. Egy sor kizárólag akkor születik, ha valaki sikeresen
+//! bejelentkezett az ISKOLAI rendszerbe (Jedlikinfo / Active Directory) — a
+//! fiókot nem mi hozzuk létre, hanem a suli rendszere IGAZOLJA, és mi ebből
+//! származtatunk egy helyi sort.
+//!
+//! A JELSZÓ ÁTFOLYIK, DE SEHOL NEM ÁLL MEG. A belépéskor a szerverünk
+//! továbbítja az iskolai API-nak, és ott véget is ér az útja: nem tároljuk,
+//! nem kivonatoljuk és nem naplózzuk. Ezért nincs `password` mező a
+//! felhasználón, és ezért nem szabad soha bekapcsolni az `emailAndPassword`
+//! ágat (lásd `src/lib/auth.ts`) — az ugyanis a MI jelszavunkat tárolná, és
+//! ezzel egy második, gyengébb bejárat nyílna ugyanahhoz a fiókhoz.
+model User {
+  id String @id
+
+  //* A megjelenítendő név. Ha az iskolai válasz ad nevet, azt vesszük át; ha
+  //* nem, a felhasználónév marad. Sose találgatunk belőle keresztnevet: az
+  //* iskolai fiókok névsémája nem megbízható.
+  name String
+
+  //! AZ E-MAIL SZINTETIKUS, ÉS EZ SZÁNDÉKOS. A Better Auth egyedi e-mailt vár
+  //! minden felhasználóra, az iskolai bejelentkezés viszont nem ad megbízható
+  //! címet. Ezért `<felhasználónév>@jedlik-ad.invalid` kerül ide: a `.invalid`
+  //! az RFC 2606 szerint SOHA nem létező tartomány, tehát erre a címre levelet
+  //! küldeni technikailag lehetetlen — nem tudunk véletlenül sem kispamelni
+  //! senkit, és valódi iskolai e-mail-cím sem szivárog ki innen.
+  //!
+  //! EBBŐL KÖVETKEZIK: e-mailes folyamatot (jelszó-emlékeztető, cím-igazolás)
+  //! ezen az appon SOHA nem szabad bekapcsolni — a levél a semmibe menne.
+  email         String
+  emailVerified Boolean @default(false)
+  image         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  //! ─── AZ ISKOLAI AZONOSSÁG ────────────────────────────────────────────────
+  //! Ezeket a mezőket KIZÁRÓLAG a szerver írja, az iskolai válaszból. A kliens
+  //! soha nem küldheti be őket — enélkül bárki tanárrá vagy más osztály tagjává
+  //! tehetné magát egy `/update-user` hívással (az a végpont emiatt is zárva
+  //! van, lásd `src/lib/auth.ts`).
+
+  //* Az iskolai felhasználónév kisbetűsítve — ez a fiók valódi kulcsa. Egyedi:
+  //* egy iskolai fiókhoz pontosan egy helyi fiók tartozhat.
+  username String @unique
+
+  //* Ugyanaz, ahogy a diák beírta (nagybetűkkel együtt) — csak megjelenítésre.
+  displayUsername String?
+
+  //! AZ OSZTÁLY — EZÉRT ÉRI MEG EGYÁLTALÁN AZ ISKOLAI BELÉPÉS. Ezt az adatot
+  //! semmilyen külső azonosító (Google, Microsoft) nem adja meg: csak a suli
+  //! saját rendszere tudja, ki melyik osztályba jár. Belépés után a lap ebből
+  //! tudja azonnal a helyes órarendet, találgatás és kézi beállítás nélkül.
+  //* `null` = tanár, vagy az iskolai válasz nem adta meg.
+  class String?
+
+  //! `false` az alapértelmezés, de a mező értékét CSAK akkor írjuk felül, ha az
+  //! iskolai válasz ténylegesen nyilatkozott róla. Hiányzó adatból nem
+  //! minősítünk vissza senkit tanárból diákká — lásd `src/lib/jedlik-ad.ts`.
+  isTeacher Boolean @default(false)
+
+  //* Mikor néztük meg utoljára az iskolai rendszerben, hogy az osztály és a
+  //* tanár-státusz stimmel-e. Minden jelszavas belépés frissíti; a passkey-s
+  //* belépés NEM (ott nincs jelszó, amit az iskola felé továbbadhatnánk).
+  adCheckedAt DateTime?
+
+  sessions   Session[]
+  accounts   Account[]
+  passkeys   Passkey[]
+  preference Preference?
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+//! ─── FIÓK-KÖTÉS ────────────────────────────────────────────────────────────
+//! Egy sor = egy belépési mód egy felhasználóhoz. Nálunk ez az iskolai fiók
+//! (`providerId: "jedlik-ad"`), és az `accountId` a kisbetűsített iskolai
+//! felhasználónév. Szándékosan nem az e-mail-cím a kulcs: az nálunk szintetikus.
+//!
+//! A `password` mező a Better Auth sémájából jön, és NÁLUNK MINDIG `null` MARAD.
+//! Az iskolai jelszó a belépéskor csak ÁTFOLYIK a szerveren az iskolai API felé;
+//! nincs olyan kódút, ami ebbe az oszlopba írna. Ha valaha érték kerülne ide, az
+//! hiba — a jelszó gazdája az iskola, nem mi.
+model Account {
+  id                    String    @id
+  issuer                String
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([issuer, accountId], map: "account_issuer_accountId_uidx")
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+//! ─── PASSKEY ───────────────────────────────────────────────────────────────
+//! A KÉNYELMES ÚT, NEM A BEJÁRAT. A fiók mindig az iskolai belépésből születik;
+//! a passkey-t a diák UTÁNA veszi fel, hogy legközelebb ne kelljen begépelnie
+//! az iskolai jelszavát — egy ujjlenyomat vagy arcfelismerés elég. Ez nem csak
+//! kényelem: minden passkey-s belépés EGGYEL KEVESEBB alkalom, amikor az
+//! iskolai jelszó egyáltalán elhagyja a diák fejét.
+//!
+//! A `publicKey` NYILVÁNOS kulcs: önmagában nem lehet vele belépni, a privát
+//! fele az eszközt soha nem hagyja el. A `counter` a klónozás elleni számláló.
+model Passkey {
+  id           String    @id
+  name         String?
+  publicKey    String
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialID String
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime?
+  aaguid       String?
+
+  @@index([userId])
+  @@index([credentialID])
+  @@map("passkey")
+}
+
+//! ─── SEBESSÉGKORLÁT ────────────────────────────────────────────────────────
+//! A Better Auth korlátozója élesben alapból bekapcsolt, DE memóriában tárol.
+//! Ez az app serverless-en fut: ott minden hideg indítás ÜRES memóriával kezd,
+//! tehát a memóriaszámláló gyakorlatilag nem korlátoz. Ezért
+//! `rateLimit.storage: "database"` — és ezért kell ez a tábla.
+model RateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+
+  @@map("rate_limit")
+}
+
+//! ─── A SZINKRONIZÁLT BEÁLLÍTÁSOK ───────────────────────────────────────────
+//! EZ AZ EGÉSZ BEJELENTKEZÉS OKA. A diák beállításai (osztály, összevont
+//! csoportbontások, duális beosztás, utoljára nézett nézet) eddig kizárólag a
+//! böngésző `localStorage`-ában éltek: telefonról gépre átülve elölről kezdte.
+//!
+//! EGY SOR EGY FELHASZNÁLÓHOZ, EGY JSON-BLOB. Nem bontjuk mezőkre, mert a
+//! beállítások alakja a felülettel együtt változik, és minden apró UI-döntéshez
+//! sémamigrációt kérni túl drága. Cserébe az alakot a SZERVER ellenőrzi, mielőtt
+//! beírná (`src/lib/prefs-shared.ts`): ide nem kerülhet olyasmi, amit a kliens
+//! szabadon talált ki.
+//!
+//! AMI SZÁNDÉKOSAN NINCS ITT: a heti órarend helyi példánya
+//! (`orarend:week-cache:v1`), a telepítési tipp jelölője és a napi
+//! statisztika-jelölő — az első offline tartalék, a másik kettő készülékfüggő;
+//! egyiket sincs értelme átvinni másik eszközre.
+model Preference {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  //* A `SyncedPrefs` alakja (`src/lib/prefs-shared.ts`) JSON-ként.
+  data Json
+
+  //! A KONFLIKTUSFELOLDÁS EGYETLEN TÁMPONTJA. Két eszköz ugyanazt a sort írja;
+  //! a kliens minden feltöltésnél megmondja, MELYIK verzióra épít. Ha időközben
+  //! nagyobb lett, a szerver elutasítja az írást, a kliens pedig előbb letölti
+  //! az újat. Enélkül a lassabb eszköz némán felülírná a frissebb beállítást.
+  revision Int @default(1)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("preference")
+}

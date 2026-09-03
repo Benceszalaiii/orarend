@@ -104,6 +104,11 @@
 
   --font-sans: ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, Menlo, monospace;
+  /*//* A `font-script` DEKORÁCIÓS BETŰ. A változót a `next/font/local` tölti
+      //* fel a gyökérelrendezésben (`--font-petit-formal-script`); ha az a
+      //* class valamiért nem kerül a `<html>`-re, a `cursive` fog helyette
+      //* megszólalni, nem a törzsbetű. */
+  --font-script: var(--font-petit-formal-script), cursive;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

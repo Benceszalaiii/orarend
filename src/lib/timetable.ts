@@ -6,6 +6,7 @@
 //! hely dönti el: `jedlik-api.ts`.
 
 import { API_BASE, FETCH_TIMEOUT_MS, JEDLIK_API_ORIGIN } from "./jedlik-api";
+import { notifyPrefsChanged } from "./prefs-events";
 import {
   loadDayBells,
   loadRingSystemNames,
@@ -33,6 +34,7 @@ export function loadCachedClass(): string | null {
 export function saveCachedClass(short: string): void {
   try {
     window.localStorage.setItem(CLASS_STORAGE_KEY, short);
+    notifyPrefsChanged();
   } catch {
     /* privát módban nincs tárhely — a választás ekkor nem marad meg */
   }

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#17181c" />
+    <title>Nincs kapcsolat – Órarend</title>
+    <!--
+      ! EZ A LAP NEM A NEXT.JS-BŐL JÖN, ÉS EZ SZÁNDÉKOS. Akkor kell
+      ! megjelennie, amikor NINCS hálózat és a kért útvonal nincs előre
+      ! mentve (`/statisztika`, ismeretlen cím). Egy React-oldal ilyenkor a
+      ! saját darabjait sem tudná betölteni — ezért itt minden EGY fájlban van:
+      ! se script, se külső betűtípus, se `/_next/` hivatkozás.
+      *
+      * A színek a `globals.css` sötét témájából valók, hogy a telepített app
+      * ne villantson idegen lapot.
+    -->
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1.5rem calc(2rem + env(safe-area-inset-bottom));
+        background: #17181c;
+        color: #ededf0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+          Roboto, "Helvetica Neue", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      main { width: 100%; max-width: 26rem; text-align: center; }
+      .mark {
+        width: 3rem; height: 3rem; margin: 0 auto 1.25rem;
+        display: grid; place-items: center;
+        border-radius: 9999px;
+        background: #232429;
+        color: #9b9ba5;
+      }
+      h1 { margin: 0 0 0.625rem; font-size: 1.375rem; letter-spacing: -0.02em; }
+      p { margin: 0 0 0.5rem; font-size: 0.9375rem; line-height: 1.6; color: #9b9ba5; }
+      .links { display: flex; flex-wrap: wrap; gap: 0.625rem; justify-content: center; margin-top: 1.75rem; }
+      a {
+        display: inline-block;
+        padding: 0.625rem 1.125rem;
+        border-radius: 0.75rem;
+        border: 1px solid #2e2f36;
+        background: #232429;
+        color: #ededf0;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      a.primary { background: #ededf0; border-color: #ededf0; color: #17181c; }
+      a:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+      @media (prefers-reduced-motion: no-preference) {
+        a { transition: background-color 120ms ease, border-color 120ms ease; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">
+        <svg aria-hidden="true" focusable="false"
+             width="24" height="24" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3l18 18" />
+          <path d="M8.5 16.5a5 5 0 0 1 7 0" />
+          <path d="M5 12.86a10 10 0 0 1 5.2-2.68" />
+          <path d="M16.85 11.25a10 10 0 0 1 2.15 1.61" />
+          <path d="M2 8.82a15 15 0 0 1 4.17-2.65" />
+          <path d="M10.66 5.05A15 15 0 0 1 22 8.82" />
+          <path d="M12 20h.01" />
+        </svg>
+      </div>
+
+      <h1>Nincs kapcsolat</h1>
+      <!--* Megmondjuk, MI érhető el enélkül is — a „nincs net” önmagában
+           * zsákutca, a mentett órarend viszont nem. -->
+      <p>Ez az oldal csak hálózattal nyílik meg.</p>
+      <p>A legutóbb megnyitott heted viszont a készüléken van: az órarend
+        offline is megmutatja, csak azt is kiírja, mikor frissült utoljára.</p>
+
+      <div class="links">
+        <a class="primary" href="/ma">Mai nap</a>
+        <a href="/orarend">Heti órarend</a>
+      </div>
+    </main>
+  </body>
+</html>

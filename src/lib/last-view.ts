@@ -13,6 +13,8 @@
 //* ezért történik kliensoldalon.
 //* ---------------------------------------------------------------------------
 
+import { notifyPrefsChanged } from "./prefs-events";
+
 export const VIEW_ROUTES = ["/orarend", "/ma"] as const;
 
 export type ViewRoute = (typeof VIEW_ROUTES)[number];
@@ -42,6 +44,7 @@ export function loadLastView(): ViewRoute | null {
 export function saveLastView(route: ViewRoute): void {
   try {
     window.localStorage.setItem(LAST_VIEW_STORAGE_KEY, route);
+    notifyPrefsChanged();
   } catch {
     /* privát módban nincs tárhely — ilyenkor a `/` marad az alapértelmezésen */
   }
