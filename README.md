@@ -156,12 +156,65 @@ levélküldésénél.
 
 > **Az ütemezés kívülről jön.** A repóban nincs `vercel.json`: a Vercel
 > Hobby-terve naponta csak egyszer futtat cront, ami az óra előtti
-> emlékeztetőhöz kevés. A végpont ettől függetlenül működik — bármilyen
-> ütemező hívhatja percenként: `GET /api/ertesites/tick` az
-> `Authorization: Bearer $CRON_SECRET` fejléccel. Percenkénti cront támogató
-> platformon (vagy Vercel Prón) elég egy `vercel.json`-t hozzáadni a
-> `{ "crons": [{ "path": "/api/ertesites/tick", "schedule": "* * * * *" }] }`
-> tartalommal.
+> emlékeztetőhöz kevés. A végpont bármelyik ütemezőnek megfelel — a hívás
+> `GET` vagy `POST` a `/api/ertesites/tick`-re, `Authorization: Bearer
+> $CRON_SECRET` fejléccel.
+
+### Ütemezés Upstash QStash-sel
+
+A QStash **Vercel-integráción keresztül napi 500 üzenet** a keret. Percenként
+futva ez már a tanítási sávban is kevés lenne — de percenként futni sosem volt
+szükséges: a `LEAD_WINDOW_MINUTES` (6 perc) miatt egy emlékeztető nem egy
+pillanatban, hanem egy **hat perc széles ablakban** esedékes. Egy **5
+percenkénti** tick ezért minden ablakba beleesik; nem szerencse kérdése, hanem
+a `push-shared.ts`-ben leírt tűrés.
+
+| Sáv | Mire jó | Hívás/nap |
+| --- | --- | --- |
+| `*/5 6-17` | a tanítási nap: emlékeztető + változásfigyelés | 144 |
+| `*/5 19-21` | esti sáv: a másnapi változások még aznap kimennek | 36 |
+| | **összesen** | **180** |
+
+Ez az 500-as keret **harmada** — marad hely kézi tesztre, egy harmadik sávra,
+és arra is, ha a suli később hosszabb napot csenget.
+
+> **Egy feltétel:** ha a csengetési rend percei 5-tel oszthatók (7:15, 8:10,
+> 9:05 …), akkor `start - 10` is az, vagyis a tick PONT az emlékeztető
+> percében fut, és a „10 perc múlva" szöveg igaz. Ha valamelyik óra ettől
+> eltérő percben kezdődik, a jelzés ugyanúgy kimegy, csak legfeljebb 4 perccel
+> később — a szöveg viszont továbbra is 10 percet mond. Ha ez zavar, `*/3`
+> (napi 300 hívás) legfeljebb 2 perc csúszást hagy, és szintén belefér.
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $QSTASH_TOKEN" \
+  -H "Upstash-Cron: CRON_TZ=Europe/Budapest */5 6-17,19-21 * * 1-5" \
+  -H "Upstash-Method: GET" \
+  -H "Upstash-Forward-Authorization: Bearer $CRON_SECRET" \
+  -H "Upstash-Retries: 0" \
+  "https://qstash.upstash.io/v2/schedules/https://<a-domain>/api/ertesites/tick"
+```
+
+Amire figyelni kell:
+
+- **`Upstash-Forward-` prefix.** A QStash a saját `Authorization` fejlécével
+  azonosítja magát nálad; a tick titkát ezért `Upstash-Forward-Authorization`
+  néven kell átadni, és a prefix nélkül érkezik meg a végponthoz.
+- **`Upstash-Method: GET`.** A QStash alapból `POST`-tal hív. A végpont
+  mindkettőt kiszolgálja, szóval ez nem törik el, ha lemarad.
+- **`Upstash-Retries: 0`.** Az újrapróbálkozás itt fölösleges: egy perc múlva
+  úgyis jön a következő tick, a foglalások miatt pedig egy sikeres kiküldést
+  nem küld el újra senki. Minden retry viszont üzenet a napi keretből.
+- Az óra-mező sávjai a záró órát is tartalmazzák: az utolsó délutáni tick
+  17:55-kor, az utolsó esti 21:55-kor fut. A `CRON_TZ` miatt a nyári/téli
+  időszámítás váltása sem csúsztatja el a sávokat.
+- **A `*/5` nem szabadon hangolható.** Ha 6 percnél ritkábbra állítod, az
+  emlékeztetők egy része NÉMÁN elmarad: a tick átlépi az ablakot. A kettő
+  együtt mozog — a `LEAD_WINDOW_MINUTES`-t is emelni kell hozzá.
+
+Percenkénti cront támogató platformon (vagy Vercel Prón) ugyanez egy
+`vercel.json`-nal is megoldható:
+`{ "crons": [{ "path": "/api/ertesites/tick", "schedule": "* * * * *" }] }`.
 
 | Env-változó | Mire kell |
 | --- | --- |
@@ -169,6 +222,9 @@ levélküldésénél.
 | `VAPID_PRIVATE_KEY` | **A küldés joga.** Aki megszerzi, a te nevedben ír a diákok telefonjára |
 | `VAPID_SUBJECT` | Elérhetőség a push-szolgáltatóknak (`mailto:` vagy `https://`) |
 | `CRON_SECRET` | Az ütemezett feladat kulcsa. Nélküle a végpont `404` |
+
+A `QSTASH_TOKEN` nem az app env-változója — csak az ütemezés
+létrehozásához kell egyszer, az Upstash konzoljából.
 
 Kulcspár generálása: `bunx web-push generate-vapid-keys`.
 

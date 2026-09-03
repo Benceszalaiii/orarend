@@ -31,15 +31,15 @@ import {
 //! ─── A HÁTTÉRFELADAT ───────────────────────────────────────────────────────
 //!
 //! Ez a végpont az EGYETLEN hely, ahonnan értesítés kimegy. Percenként fut
-//! (`vercel.json`), és két kérdést tesz fel minden olyan osztályra, amire van
-//! feliratkozó:
+//! (kívülről hívja egy ütemező — lásd a READMÉ-t), és két kérdést tesz fel
+//! minden olyan osztályra, amire van feliratkozó:
 //!
 //!   1. Kezdődik-e valamelyik óra 10 perc múlva? → emlékeztető.
 //!   2. Változott-e a hét azóta, hogy utoljára megnéztük? → változás-jelzés.
 //!
 //! MINDKÉT VÁLASZ IDEMPOTENS. A feladat bármikor újraindulhat vagy kétszer is
-//! lefuthat ugyanarra a percre (a Vercel újrapróbálkozik, az ablak több tickre
-//! is igaz); a kiküldést ezért nem az ütemezés pontossága, hanem a tárolóban
+//! lefuthat ugyanarra a percre (az ütemező újrapróbálkozik, az ablak több
+//! tickre is igaz); a kiküldést ezért nem az ütemezés pontossága, a tárolóban
 //! LEFOGLALT kulcs zárja ki (lásd `push-store.ts`). Ugyanaz a minta, mint a
 //! jedlik-szakkor levélküldésének foglalásánál.
 
@@ -218,3 +218,10 @@ export async function GET(request: Request) {
 
   return Response.json({ classes: classes.length, ...tally });
 }
+
+//! UGYANAZ A FELADAT POST-ra IS. Nem kényelmi másolat: a QStash (és a legtöbb
+//! üzenetsoros ütemező) alapértelmezésben POST-tal hív, a metódust külön
+//! fejlécben kell átállítani. Egy elfelejtett `Upstash-Method: GET` így nem
+//! néma 405-öt hoz, hanem lefuttatja a tickt. A törzset nem olvassuk: a
+//! bemenet az idő, nem a kérés.
+export const POST = GET;

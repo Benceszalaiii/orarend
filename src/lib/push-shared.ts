@@ -13,9 +13,12 @@
 //! ELŐZŐ órán ül — ott egy rezgés nem segítség, hanem büntetés.
 export const LEAD_MINUTES = 10;
 
-//! MENNYI CSÚSZÁST NYELÜNK EL. Az ütemező nem percpontos (a Vercel percenként
-//! INDÍTJA a feladatot, de a sorban állás, a hidegindítás és a push-szolgáltató
-//! is késhet). Ha egy tick kimarad, az emlékeztető NE vesszen el — ezért nem
+//! MENNYI CSÚSZÁST NYELÜNK EL. Az ütemező nem percpontos (a sorban állás, a
+//! hidegindítás és a push-szolgáltató is késhet), és nem is fut percenként:
+//! a napi üzenetkeret miatt 5 percenként hívjuk (lásd a READMÉ-t). EZ AZ
+//! ABLAK TEHÁT A TICK SŰRŰSÉGÉNEK A FELSŐ KORLÁTJA IS: ha az ütemezés ennél
+//! ritkább lesz, az emlékeztetők egy része némán elmarad. Ha egy tick
+//! kimarad, az emlékeztető NE vesszen el — ezért nem
 //! egy pillanatot, hanem egy ablakot nézünk. Cserébe egy kimaradás után a
 //! jelzés pár perccel később ér oda; ezt vállaljuk, mert a néma elmaradás
 //! rosszabb: a diák megbízna benne, és nem kapna semmit.
