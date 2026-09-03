@@ -439,6 +439,270 @@
     animation-name: tt-morph-in;
   }
 
+  /*//! ---------------------------------------------------------------------
+      //! A LEBEGŐ FEJLÉC (`/design`)
+      //! ---------------------------------------------------------------------
+      //! ÁTTETSZŐ RÉTEG, NEM ELVETT CSÍK. A lap tartalma a fejléc ALATT fut
+      //! tovább, homályosan — így a sáv lebegő felületnek olvasódik, ami a
+      //! naphoz tartozik, nem egy külön dobozból figyelő kezelőfelületnek. A
+      //! `saturate` azért kell, mert az elmosás önmagában kifakítja a mögé
+      //! kerülő tantárgyszíneket, és a szín ebben a projektben azonosító.
+      //*
+      //* A felső él világosabb: a fény, ami megcsillan az anyagon. Ez az
+      //* egyetlen jelzés arról, hogy a réteg VASTAG — árnyék nélkül is. */
+  .dsg-chrome {
+    background-color: color-mix(in oklab, var(--background) 68%, transparent);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid transparent;
+    padding-top: env(safe-area-inset-top);
+  }
+  /*//! ELMOSÓDÓ ÉL, NEM VONAL. Egy 1 képpontos elválasztó a fejléc alatt akkor
+      //! is ott állna, amikor nincs alatta semmi — a lap tetején egy üres
+      //! vonalat húzva. Ehelyett a réteg alsó pereme egy rövid, halványuló
+      //! sávban olvad a tartalomba: pontosan ott van jelen, ahol takar. */
+  .dsg-chrome::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 100%;
+    height: 12px;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--background) 55%, transparent),
+      transparent
+    );
+  }
+
+  /*//! ÁTTETSZŐSÉG NÉLKÜL: TÖMÖR, NEM ELMOSOTT. Akinek a rendszere kevesebb
+      //! áttetszőséget kér, annak a homályos réteg nem finomabb, hanem
+      //! olvashatatlanabb — ilyenkor a fejléc egyszerűen tömör felület lesz,
+      //! és megkapja azt a vonalat, amit az él helyett hordozott. */
+  @media (prefers-reduced-transparency: reduce) {
+    .dsg-chrome {
+      background-color: var(--background);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      border-bottom-color: var(--border);
+    }
+    .dsg-chrome::after {
+      display: none;
+    }
+  }
+  /*//* Nagy kontraszt: tömör alap, kimondott keret — a lebegés itt nem ér
+      //* annyit, mint az elhatárolás. */
+  @media (prefers-contrast: more) {
+    .dsg-chrome {
+      background-color: var(--background);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      border-bottom-color: var(--foreground);
+    }
+    .dsg-chrome::after {
+      display: none;
+    }
+  }
+
+  /*//! ---------------------------------------------------------------------
+      //! AZ ÉVSZAK RÉTEGE — a szünet háttere (`/design`)
+      //! ---------------------------------------------------------------------
+      //! A LAP EGYETLEN DÍSZÍTŐ MOZGÁSA, ÉS EZT MEGENGEDHETI. Mindenütt máshol
+      //! a mozgás állapotot közöl; a szünet viszont attól szünet, hogy nincs
+      //! rajta állapot. Évente ötször jön el — ennyiszer egy felület ünnepelhet.
+      //*
+      //* KIZÁRÓLAG `transform` ÉS `opacity`: a mező huszonkét elemből áll, és
+      //* mindegyik végig a kompozitoron marad. Elrendezést egyik sem érint.
+      //! ÉS MIND A KÁRTYA `overflow: hidden` DOBOZÁN BELÜL: a szemcse sosem
+      //! kerül a lap tartalma elé, se a fejléc alá — a hó a kártyában esik. */
+  /*//! A DOBOZ MAGASSÁGA A MÉRTÉKEGYSÉG. Egy `transform: translateY(100%)` a
+      //! SZEMCSE saját öt képpontját jelentené, nem a kártyáét — a hó egy
+      //! ponton toporogna. A `cqh` viszont a szülő magasságához mér, ezért a
+      //! réteg méret-tárolóvá válik: a mérete amúgy is teljesen a `inset-0`-ból
+      //! következik, tartalomtól függetlenül. */
+  .dsg-sky {
+    container-type: size;
+  }
+  @keyframes dsg-fall {
+    from {
+      transform: translate3d(0, -10cqh, 0) rotate(0deg);
+    }
+    to {
+      transform: translate3d(var(--dsg-drift, 0), 115cqh, 0)
+        rotate(var(--dsg-spin, 0deg));
+    }
+  }
+  @keyframes dsg-rise {
+    from {
+      transform: translate3d(0, 115cqh, 0) rotate(0deg);
+    }
+    to {
+      transform: translate3d(var(--dsg-drift, 0), -10cqh, 0)
+        rotate(var(--dsg-spin, 0deg));
+    }
+  }
+  /*//! NINCS `will-change`. Szünethéten mind az öt nap lapja pihenőnap, és a
+      //! köteg mindet előre felépíti: egy `will-change: transform` ilyenkor
+      //! nyolcvan külön rétegre kényszerítené a böngészőt — telefonon ez
+      //! memória, nem simaság. A futó transzformáció amúgy is saját réteget
+      //! kap, csak épp addig, amíg tényleg fut. */
+  .dsg-fall,
+  .dsg-rise {
+    animation-duration: var(--dsg-dur, 16s);
+    animation-delay: var(--dsg-delay, 0s);
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+  .dsg-fall {
+    animation-name: dsg-fall;
+  }
+  .dsg-rise {
+    animation-name: dsg-rise;
+  }
+
+  /*//* A hó: kerek, hideg, lágy peremmel — nem pötty, hanem pehely. */
+  .dsg-grain-snow {
+    border-radius: 9999px;
+    background: radial-gradient(
+      circle,
+      oklch(0.99 0.01 250) 35%,
+      oklch(0.9 0.03 250 / 0.35) 70%,
+      transparent 72%
+    );
+  }
+  /*//* A levél: egyik végén hegyes, a másikon kerek — egy sarok elhagyása
+      //* elég hozzá, hogy ne korong legyen. */
+  .dsg-grain-leaf {
+    border-radius: 9999px 2px 9999px 2px;
+    background: linear-gradient(
+      140deg,
+      oklch(0.72 0.15 62),
+      oklch(0.56 0.16 38)
+    );
+  }
+  .dsg-grain-petal {
+    border-radius: 9999px 2px 9999px 2px;
+    background: linear-gradient(
+      140deg,
+      oklch(0.92 0.06 350),
+      oklch(0.82 0.09 20)
+    );
+  }
+  /*//* A nyári porszem: fény, nem tárgy — élesebb közepe nincs is. */
+  .dsg-grain-mote {
+    border-radius: 9999px;
+    background: radial-gradient(
+      circle,
+      oklch(0.95 0.11 85 / 0.9) 20%,
+      oklch(0.85 0.14 70 / 0.25) 60%,
+      transparent 72%
+    );
+  }
+
+  /*//! A SZÜNET ÉGBOLTJA. Nem a kártya kap más színt, hanem FÉNYT kap mögé: a
+      //! felület ugyanaz marad, csak megvilágítva. Ez a lap saját szótára —
+      //! ugyanaz, amivel a hero a címer fényterén ül. */
+  /*//! A TÉLI ÉG KÉT FÉNYBŐL ÁLL. Fent hideg kék — az éjszaka —, lent meleg
+      //! sárga, mintha a fák mögül ablakok világítanának. A kettő között marad
+      //! a kártya saját felülete: a szín a JELENETET rajzolja meg, nem a dobozt
+      //! festi át. */
+  .dsg-sky-christmas {
+    background:
+      radial-gradient(
+        130% 60% at 50% 118%,
+        oklch(0.75 0.15 68 / 0.34),
+        transparent 62%
+      ),
+      radial-gradient(
+        110% 85% at 20% -15%,
+        oklch(0.55 0.14 258 / 0.42),
+        transparent 68%
+      );
+  }
+  .dsg-sky-newyear {
+    background:
+      radial-gradient(
+        120% 80% at 50% 115%,
+        oklch(0.78 0.15 85 / 0.2),
+        transparent 60%
+      ),
+      radial-gradient(
+        90% 70% at 85% -10%,
+        oklch(0.55 0.16 300 / 0.26),
+        transparent 65%
+      );
+  }
+  .dsg-sky-autumn {
+    background: radial-gradient(
+      110% 90% at 30% 0%,
+      oklch(0.68 0.15 52 / 0.22),
+      transparent 62%
+    );
+  }
+  .dsg-sky-spring {
+    background: radial-gradient(
+      110% 90% at 70% 0%,
+      oklch(0.8 0.1 350 / 0.2),
+      transparent 62%
+    );
+  }
+  .dsg-sky-summer {
+    background: radial-gradient(
+      110% 90% at 50% 110%,
+      oklch(0.85 0.14 80 / 0.22),
+      transparent 62%
+    );
+  }
+
+  /*//! A CSILLAG LÉLEGZIK, NEM VILLOG. Nyolc másodperces ki-be úszás: a
+      //! villogás figyelmet KÖVETEL, a lélegzés csak jelen van. */
+  @keyframes dsg-twinkle {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: scale(0.9);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .dsg-twinkle {
+    animation: dsg-twinkle 8s ease-in-out infinite;
+  }
+
+  /*//! MOZGÁS NÉLKÜL A MEZŐ ÁLL — DE OTT MARAD. Az `animation: none` egy üres
+      //! dobozt hagyna, és aki kevesebb mozgást kért, az nem kevesebb szünetet
+      //! kért. A szemcse ezért a saját fázisában merevedik ki (`--dsg-rest`), a
+      //! mező szórása változatlan: ugyanaz a kép, csak megállítva. */
+  @media (prefers-reduced-motion: reduce) {
+    .dsg-fall,
+    .dsg-rise {
+      animation: none;
+      transform: translate3d(
+        calc(var(--dsg-drift, 0) * 0.5),
+        var(--dsg-rest, 50cqh),
+        0
+      );
+    }
+    .dsg-twinkle {
+      animation: none;
+      opacity: 0.8;
+    }
+  }
+  /*//! NYOMTATÁSBAN NINCS ÉVSZAK. A papírra az órarend megy, nem a hangulat —
+      //! és egy egész oldalt beterítő színátmenet nem stílushiba, hanem
+      //! festékpazarlás. A jelenet minden rétege (fény, fenyők, csillag, hó)
+      //! ugyanazt a jelölést viseli, és együtt marad le a lapról. */
+  @media print {
+    /*//* Kétszer írt osztály: elég fajsúly ahhoz, hogy a rétegen belüli
+        //* elrendezés-segédosztályokat (`absolute`, `block`) is felülírja —
+        //* `!important` nélkül, ami a kaszkádot fordítaná meg. */
+    .dsg-scene.dsg-scene {
+      display: none;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .animate-tt-drain {
       animation: none;
