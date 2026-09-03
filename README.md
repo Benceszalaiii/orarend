@@ -178,12 +178,16 @@ a `push-shared.ts`-ben leírt tűrés.
 Ez az 500-as keret **harmada** — marad hely kézi tesztre, egy harmadik sávra,
 és arra is, ha a suli később hosszabb napot csenget.
 
-> **Egy feltétel:** ha a csengetési rend percei 5-tel oszthatók (7:15, 8:10,
-> 9:05 …), akkor `start - 10` is az, vagyis a tick PONT az emlékeztető
-> percében fut, és a „10 perc múlva" szöveg igaz. Ha valamelyik óra ettől
-> eltérő percben kezdődik, a jelzés ugyanúgy kimegy, csak legfeljebb 4 perccel
-> később — a szöveg viszont továbbra is 10 percet mond. Ha ez zavar, `*/3`
-> (napi 300 hívás) legfeljebb 2 perc csúszást hagy, és szintén belefér.
+> **A csengetési rend ezt megengedi.** A Jedlik minden kezdése 5-tel osztható
+> perc (07:10, 08:00, 08:55, 09:50, 10:50, 11:45, 12:40, 13:35, 14:30 —
+> ellenőrizve több évfolyamon), tehát `start - 10` is az: a tick PONT az
+> emlékeztető percében fut, nulla csúszással, és a „10 perc múlva" szöveg
+> szó szerint igaz. Ráadásul minden ablakba KÉT tick esik (pl. 07:50 és
+> 07:55), így egy kiesett hívás sem némítja el a jelzést.
+>
+> Ha a suli valaha 5-ös rácson kívüli kezdésre vált, a jelzés akkor sem vész
+> el, csak legfeljebb 4 percet csúszik; `*/3` (napi 300 hívás) 2 percre
+> szorítja, és szintén belefér a keretbe.
 
 ```bash
 curl -X POST \
