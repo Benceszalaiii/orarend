@@ -1,4 +1,5 @@
 import { DEFAULT_PREFS, MAX_CLASSES, type PushPrefs } from "./push-shared";
+import { registerWorker } from "./sw-register";
 
 //* ---------------------------------------------------------------------------
 //* ÉRTESÍTÉSEK — A BÖNGÉSZŐ OLDALA
@@ -91,13 +92,19 @@ function isIos(): boolean {
 
 export function pushSupport(): PushSupport {
   if (typeof window === "undefined") return "unsupported";
-  if (!("serviceWorker" in navigator) || !("Notification" in window)) {
+  //* Service worker nélkül nincs miről beszélni: a push MINDEN ága rajta megy
+  //* keresztül. (Beágyazott nézetek — Instagram, Messenger — itt esnek ki.)
+  if (!("serviceWorker" in navigator)) return "unsupported";
+  //! AZ iOS-ES ÁG A JELLEMZŐK ELŐTT DÖNT, MERT A JELLEMZŐK OTT NEM IS
+  //! LÉTEZNEK. A Safari böngészőlapon nemcsak a `PushManager`-t, hanem magát a
+  //! `Notification`-t is elrejti — csak a kezdőképernyőre kitett lapnak adja
+  //! oda. A hiányukra alapozó ellenőrzés ezért iPhone-on „nem támogatott"-at
+  //! mondott, és a harang MEG SEM JELENT: a diák nem tudta meg, hogy egyetlen
+  //! elvégezhető lépés (kitenni az ikont) választja el az értesítésektől.
+  //! A telepítettség az ELSŐ kérdés, és csak utána jön a többi.
+  if (isIos() && !isStandalone()) return "needs-install";
+  if (!("Notification" in window) || !("PushManager" in window)) {
     return "unsupported";
-  }
-  if (!("PushManager" in window)) {
-    //* iOS-en a hiány oka ismert és orvosolható: ki kell tenni a
-    //* kezdőképernyőre. Máshol viszont tényleg nincs támogatás.
-    return isIos() && !isStandalone() ? "needs-install" : "unsupported";
   }
   if (Notification.permission === "denied") return "blocked";
   return "ready";
@@ -129,31 +136,61 @@ function serverKey(): Uint8Array | null {
 //! A `serviceWorker.ready` SOHA NEM UTASÍT EL — ez a csapda benne. Ha nincs
 //! (és nem is lesz) bejegyzett worker, a `Promise` egyszerűen nem dől el: nem
 //! hibázik, csak vár. A rá váró gomb ilyenkor ÖRÖKRE pörögne, és a diák azt
-//! látná, hogy a bekapcsolás „elakadt". Ez nem elméleti eset: fejlesztői módban
-//! SZÁNDÉKOSAN nincs worker (lásd `components/register-sw.tsx`), és élesben is
-//! előfordul, ha a bejegyzés elbukott (privát mód, kikapcsolt tárhely).
+//! látná, hogy a bekapcsolás „elakadt". Ez nem elméleti eset: a bejegyzés
+//! elbukhat (privát mód, kikapcsolt tárhely), és a lap első másodperceiben
+//! még el sem indult.
 //*
-//* Ezért a várakozásnak határa van. A `sw.js` bejegyzését a `RegisterSW` a lap
-//* betöltése után indítja, tehát pár másodperc bőven elég; ami ennyi alatt nem
-//* jött össze, az nem is fog.
+//* Ezért a várakozásnak határa van — ami ennyi alatt nem jött össze, arra nem
+//* várunk tovább, hanem MAGUNK jegyezzük be (lásd `readyWorker`).
 const WORKER_WAIT_MS = 5_000;
 
-async function readyWorker(): Promise<ServiceWorkerRegistration | null> {
-  try {
-    return await Promise.race([
-      navigator.serviceWorker.ready,
-      new Promise<null>((resolve) =>
-        window.setTimeout(() => resolve(null), WORKER_WAIT_MS),
-      ),
-    ]);
-  } catch {
-    return null;
-  }
+function raceReady(): Promise<ServiceWorkerRegistration | null> {
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((resolve) =>
+      window.setTimeout(() => resolve(null), WORKER_WAIT_MS),
+    ),
+  ]).catch(() => null);
 }
 
+async function readyWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (!("serviceWorker" in navigator)) return null;
+  const ready = await raceReady();
+  if (ready) return ready;
+  //! A KIFUTOTT IDŐ NEM BIZONYÍTÉK ARRA, HOGY NEM LESZ WORKER. A `RegisterSW`
+  //! a lap `load` eseménye UTÁN jegyez be; aki az első képernyőn azonnal a
+  //! harangra koppint, annak a bejegyzés még el sem indult, és `ready` csak
+  //! csendben várna. Ezért itt MI kérjük meg ugyanazt a workert — a hívás
+  //! ugyanarra a hatókörre ismételhető, meglévő bejegyzésre a böngésző azt
+  //! adja vissza. Ez az egyetlen hely, ahol a bejegyzés MEGVÁRHATÓ, mert a
+  //! diák épp erre a válaszra vár.
+  const registration = await registerWorker();
+  if (!registration) return null;
+  //* A frissen bejegyzett worker még „installing" lehet — a `pushManager` a
+  //* bejegyzésen viszont már most ott van, és mire az első push megérkezik, a
+  //* worker rég aktív. Ezért nem várunk rá tovább a kelleténél.
+  return (await raceReady()) ?? registration;
+}
+
+//! AZ OK NEM DÍSZ: EBBŐL LESZ AZ ÜZENET. Amíg minden bukás „unsupported" volt,
+//! a lap a hiányzó service workerre és a hiányzó szerverkulcsra IS azt írta ki,
+//! hogy „ez a böngésző nem tudja fogadni az értesítéseket" — vagyis a diákot
+//! (és a fejlesztőt) egy hazug mondattal küldte el olyankor is, amikor a
+//! böngészővel semmi baj nem volt, csak a worker nem indult el. Minden ok
+//! KÜLÖN nevet kap, mert mindegyikre más a teendő.
 export type SubscribeResult =
   | { ok: true }
-  | { ok: false; reason: "denied" | "unsupported" | "server" };
+  | {
+      ok: false;
+      reason:
+        | "denied"
+        | "unsupported"
+        /** Nincs (és nem is lett) bejegyzett service worker. */
+        | "no-worker"
+        /** Nincs VAPID kulcs a kiszolgálón — nem a böngésző hibája. */
+        | "misconfigured"
+        | "server";
+    };
 
 //! EZ A FÜGGVÉNY CSAK GOMBNYOMÁSBÓL HÍVHATÓ. A `Notification.requestPermission()`
 //! felhasználói mozdulathoz kötött — effektből vagy időzítőből egyes böngészők
@@ -168,13 +205,13 @@ export async function enablePush(prefs: PushPrefs): Promise<SubscribeResult> {
   //! kérdés meg sem jelenik. A kulcs ellenőrzése maradhat itt, mert az
   //! szinkron; a workerre várni viszont csak utána szabad.
   const key = serverKey();
-  if (!key) return { ok: false, reason: "unsupported" };
+  if (!key) return { ok: false, reason: "misconfigured" };
 
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return { ok: false, reason: "denied" };
 
   const registration = await readyWorker();
-  if (!registration) return { ok: false, reason: "unsupported" };
+  if (!registration) return { ok: false, reason: "no-worker" };
 
   let subscription: PushSubscription;
   try {

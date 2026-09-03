@@ -143,12 +143,21 @@ export function NotificationMenu({
       return;
     }
     const reason = "reason" in result ? result.reason : "server";
+    //! MINDEN OKRA A SAJÁT MONDATA. Eddig a hiányzó service worker és a
+    //! hiányzó szerverkulcs IS azt kapta, hogy „ez a böngésző nem tudja
+    //! fogadni az értesítéseket" — a diák tehát megadta az engedélyt, és
+    //! utána azt olvasta, hogy a böngészője alkalmatlan. Nem volt az: a
+    //! háttérszolgáltatás nem indult el, amin egy újratöltés segít.
     setError(
       reason === "denied"
         ? "A böngésző nem engedélyezte az értesítéseket. A lap beállításai közt (a címsor melletti ikon) lehet visszavonni a tiltást."
-        : reason === "unsupported"
-          ? "Ez a böngésző nem tudja fogadni az értesítéseket."
-          : "Az értesítések most nem kapcsolhatók be — próbáld újra később.",
+        : reason === "no-worker"
+          ? "Az engedély megvan, de az Órarend háttérszolgáltatása nem indult el — enélkül nincs mire megérkeznie az értesítésnek. Tölts újra a lapot, és próbáld újra."
+          : reason === "misconfigured"
+            ? "Az értesítések ezen a kiszolgálón nincsenek beállítva. Ez nem a te böngésződön múlik."
+            : reason === "unsupported"
+              ? "Ez a böngésző nem tudja fogadni az értesítéseket."
+              : "Az értesítések most nem kapcsolhatók be — próbáld újra később.",
     );
   };
 

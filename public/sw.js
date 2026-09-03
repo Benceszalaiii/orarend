@@ -11,11 +11,32 @@ const VERSION = "orarend-v2";
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
+//! FEJLESZTÉSBEN A WORKER FUT, DE NEM GYORSÍTÓTÁRAZ. Amíg `next dev` alatt
+//! EGYÁLTALÁN nem volt worker, az értesítéseket helyben LEHETETLEN volt
+//! kipróbálni: az engedélyt a böngésző megadta, aztán a feliratkozás
+//! némán elbukott, mert nincs mire feliratkozni — a lap pedig azt írta ki,
+//! hogy „ez a böngésző nem tudja fogadni az értesítéseket". Nem a böngésző
+//! volt a hibás, hanem a hiányzó worker.
+//*
+//* A tiltás oka viszont valós volt, és megmarad: a `/_next/static/` alatti
+//* fájlneveket a fejlesztői kiszolgáló ÚJRA MEG ÚJRA kiadja ugyanazon a néven,
+//* egy „előbb a gyorsítótárból" szabály tehát a tegnapi kódot szolgálná ki.
+//* Ezért fejlesztésben a `fetch` figyelő MEG SEM SZÓLAL — a worker ilyenkor
+//* kizárólag a push és a koppintás kedvéért él. A megkülönböztetés a bejegyzés
+//* címéből jön (`/sw.js?dev=1`, lásd `lib/sw-register.ts`), mert a workerben
+//* nincs `process.env`.
+const DEV = new URL(self.location.href).searchParams.get("dev") === "1";
+
 //* A két nézet, amit érdemes hidegen is megnyitni. Nem az összes útvonal: a
 //* `/adatvedelem`-et senki nem olvassa offline.
 const PRECACHE = ["/ma", "/orarend", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
+  //* Fejlesztésben nincs mit előre menteni — a váz úgyis percenként változik.
+  if (DEV) {
+    event.waitUntil(self.skipWaiting());
+    return;
+  }
   event.waitUntil(
     caches
       .open(SHELL)
@@ -39,8 +60,10 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((keys) =>
         Promise.all(
+          //* Fejlesztésben MINDET töröljük: ha a lap egy éles buildből jött
+          //* vissza, a régi váz nem lóghat itt tovább.
           keys
-            .filter((key) => !key.startsWith(VERSION))
+            .filter((key) => DEV || !key.startsWith(VERSION))
             .map((key) => caches.delete(key)),
         ),
       )
@@ -49,6 +72,12 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  //! A FEJLESZTŐI WORKER NEM SZÓL BELE A KÉRÉSEKBE. Lásd a `DEV` melletti
+  //! indoklást: itt a hash-elt fájlnevek nem állandóak, a gyorsítótár tehát a
+  //! LEGROSSZABB fajta hibát okozná — a lap működik, csak nem az a kód fut,
+  //! amit épp megírtál.
+  if (DEV) return;
+
   const request = event.request;
   if (request.method !== "GET") return;
 

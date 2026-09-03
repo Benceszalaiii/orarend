@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { registerWorker, supportsWorker } from "@/lib/sw-register";
 
 //! A SERVICE WORKER BEJEGYZÉSE. Egyetlen mellékhatás, saját komponensben: a
 //! gyökér-elrendezés így szerver-komponens maradhat.
@@ -10,28 +11,18 @@ import { useEffect } from "react";
 //* értékű, csak nem indul el hálózat nélkül.
 export function RegisterSW() {
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    //! FEJLESZTÉS ALATT NINCS SERVICE WORKER. A `/_next/static/` alatti fájlokat
-    //! a worker „előbb a gyorsítótárból" adja vissza — élesben ez helyes (a
-    //! nevek tartalom-hash-eltek, ami egyszer megvan, örökre érvényes),
-    //! fejlesztésben viszont ugyanazok az útvonalak MINDIG változnak, és a
-    //! worker a régi kódot szolgálná ki. A tünet a legrosszabb fajta: a lap
-    //! működik, csak nem az, amit épp megírtál.
-    if (process.env.NODE_ENV !== "production") {
-      //* A korábban már bejegyzett workert is takarítsuk el, különben egy
-      //* éles buildből visszatérve is ő szolgálna ki.
-      void navigator.serviceWorker.getRegistrations().then((regs) => {
-        for (const reg of regs) void reg.unregister();
-      });
-      return;
-    }
+    if (!supportsWorker()) return;
+    //! FEJLESZTÉSBEN IS BEJEGYEZZÜK, DE NEM UGYANAZT. Amíg dev alatt EGYÁLTALÁN
+    //! nem volt worker, az értesítéseket helyben nem lehetett kipróbálni: az
+    //! engedélyt a böngésző megadta, a feliratkozás viszont némán elbukott,
+    //! mert nem volt mire feliratkozni. A gyorsítótárazás elleni kifogás
+    //! ugyanakkor VÁLTOZATLANUL igaz — a dev kiszolgáló ugyanazon a néven adja
+    //! ki a folyton változó `/_next/static/` fájlokat —, ezért a dev worker a
+    //! `fetch`-be bele sem szól (lásd `public/sw.js` és `lib/sw-register.ts`).
+    //*
     //* Betöltés UTÁN: a bejegyzés sávszélessége ne a lap első képkockájától
     //* menjen el.
-    const register = () => {
-      void navigator.serviceWorker
-        .register("/sw.js", { scope: "/", updateViaCache: "none" })
-        .catch(() => undefined);
-    };
+    const register = () => void registerWorker();
     if (document.readyState === "complete") register();
     else window.addEventListener("load", register, { once: true });
   }, []);
