@@ -1,42 +1,26 @@
-//! ─── A PRISMA CLI KONFIGURÁCIÓJA ────────────────────────────────────────────
-//! A Prisma 7 óta a kapcsolati URL NEM állhat a sémafájlban (`url = env(...)`
-//! ott már hibát ad) — a CLI innen veszi. A FUTÁSIDEJŰ kliens ettől függetlenül
-//! a saját adapterén át kapcsolódik (`src/lib/prisma.ts`), ugyanabból a `DB_URL`
-//! változóból; a kettő szándékosan ugyanaz, hogy a `db push` sose egy másik
-//! adatbázisba írjon, mint amit az app olvas.
-//!
-//! A `DB_URL`-t a `.env.local` adja, amit a bun automatikusan betölt — ezért
-//! futnak a `db:*` szkriptek bunnal (lásd package.json).
-//!
-//! ─────────────────────────────────────────────────────────────────────────────
-//! MIÉRT NINCS ITT `defineConfig` IMPORT, HOLOTT A PRISMA DOKUMENTÁCIÓJA AZT ÍRJA:
-//! a projekt `devDependencies`-ében a `prisma` CLI a 8-as (Prisma Next) ág, az
-//! ORM viszont a 7-es (`@prisma/client`, `prisma-client` generátor). A
-//! `prisma/config` import ezért a 8-as csomagra oldódna fel, amiben nincs ilyen
-//! export — a config betöltése `defineConfig is not a function`-nel elszállna.
-//! A `defineConfig` amúgy is csak típussegéd (futásidőben azonossági függvény),
-//! tehát a sima objektum-export ugyanazt jelenti, és mindkét CLI-vel elfér.
-//! A séma szerkesztésekor a parancs `bun run db:generate` / `bun run db:push`,
-//! ezek pedig kifejezetten a 7-es CLI-t hívják (`prisma@7.10.0`).
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { defineConfig } from "prisma/config";
 
 //! ─── AZ ENV BETÖLTÉSE ───────────────────────────────────────────────────────
 //! A Next maga olvassa a `.env.local`-t, a Prisma CLI viszont NEM: az egy külön
-//! folyamat, és nem feltétlenül örökli a futtató shell által betöltött
-//! változókat (a `bunx` a CLI-t saját gyerekfolyamatban indítja). Enélkül a
-//! parancs „Connection url is empty" hibával áll meg, holott a változó ott van
-//! a fájlban.
+//! folyamat, és nem feltétlenül örökli a futtató által betöltött változókat.
+//! Enélkül a parancs „Connection url is empty" hibával áll meg, holott a
+//! változó ott van a fájlban.
 //!
 //! Szándékosan kézzel olvassuk, nem `dotenv`-vel: egyetlen fájlból egyetlen
 //! értéket kell kivenni, és nem éri meg egy futásidejű függőséget felvenni egy
 //! olyan eszközért, ami csak a fejlesztői gépen fut. A már beállított
 //! környezeti változót SOHA nem írjuk felül — élesben (Vercel, CI) nincs
 //! `.env.local`, ott a valódi env az igazság.
-import { readFileSync } from "node:fs";
-
 function loadEnvLocal(): void {
   let raw: string;
   try {
-    raw = readFileSync(new URL(".env.local", import.meta.url), "utf8");
+    //! `process.cwd()`, NEM `import.meta.url`. A Prisma CLI ezt a fájlt CJS-re
+    //! fordítva tölti be, ahol az `import.meta` nem létezik — a betöltés egy
+    //! értelmezhetetlen elemzési hibával állna meg. A CLI-t amúgy is mindig a
+    //! projekt gyökeréből futtatjuk (npm/bun szkript), tehát a `cwd` helyes.
+    raw = readFileSync(resolve(process.cwd(), ".env.local"), "utf8");
   } catch {
     //* Nincs fájl — élesben ez a normális eset.
     return;
@@ -61,15 +45,15 @@ loadEnvLocal();
 //!
 //! A SÉMAMÓDOSÍTÁS VISZONT NEM MEHET A POOLEREN. A `db push` session-szintű
 //! advisory lockot kér; tranzakciós módú poolerben ez a lock nem szerezhető meg,
-//! és a parancs nem hibázik, hanem VÉGTELENÜL VÁR. (Ugyanez a csapda a
-//! jedlik-szakkor `prisma.config.ts`-ében is ki van írva — ott egy egész
-//! bekezdés szól róla, mert órákat lehet vele elveszíteni.)
+//! és a parancs NEM HIBÁZIK, hanem végtelenül vár. (Ugyanez a csapda a
+//! jedlik-szakkor `prisma.config.ts`-ében is ki van írva — órákat lehet vele
+//! elveszíteni, mert semmi nem jelzi, hogy baj van.)
 //!
 //! Ezért: ha van `DB_DIRECT_URL`, a CLI azt használja. Ha nincs, marad a
 //! `DB_URL` — egy nem poololt adatbázisnál (helyi Postgres) ez helyes is.
-export default {
+export default defineConfig({
   schema: "prisma/schema.prisma",
   datasource: {
     url: process.env.DB_DIRECT_URL ?? process.env.DB_URL ?? "",
   },
-};
+});

@@ -31,9 +31,10 @@ export default function BelepesPage() {
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-strong">
           Az órarend megtekintéséhez <strong>nem kell belépni</strong> — enélkül
-          is minden működik. A belépés egyetlen dolgot ad: a beállításaid (a
-          kiválasztott osztály, az összevont csoportbontások, a duális beosztás)
-          átjönnek a telefonodról a gépedre és vissza.
+          is minden működik. A belépés két dolgot ad: az iskola megmondja,
+          melyik osztályba jársz (így nem kell kiválasztanod), és a beállításaid
+          (összevont csoportbontások, duális beosztás) átjönnek a telefonodról a
+          gépedre és vissza.
         </p>
 
         <div className="mt-8">
@@ -55,18 +56,35 @@ export default function BelepesPage() {
             Mi történik belépéskor
           </h2>
           <p>
-            A gomb a Microsoft saját bejelentkező oldalára visz. A jelszavadat{" "}
+            A felhasználóneved és a jelszavad ugyanaz, amivel a Jedlikinfóba
+            belépsz. A szerverünk ezeket{" "}
             <strong className="text-foreground">
-              ez az oldal soha nem látja
+              változtatás nélkül továbbadja az iskola rendszerének
+            </strong>
+            , és az mondja meg, hogy helyesek-e. A jelszavadat{" "}
+            <strong className="text-foreground">
+              nem tároljuk és nem naplózzuk
             </strong>{" "}
-            — nem is kérjük be, nem tároljuk és nem továbbítjuk. A belépés után
-            a Microsoft csak annyit ad át, hogy ki vagy: a neved, az iskolai
-            e-mail-címed, és egy azonosító.
+            — sem nyílt, sem titkosított formában: a belépés után nem marad
+            belőle nyoma nálunk.
           </p>
           <p>
-            Csak <strong className="text-foreground">iskolai fiókkal</strong>{" "}
-            lehet belépni. Más Microsoft-fiók (magáncím, másik iskola) már a
-            Microsoft oldalán elakad, nem jut el hozzánk.
+            Az iskola rendszere a sikeres belépéskor azt is megmondja, melyik{" "}
+            <strong className="text-foreground">osztályba</strong> jársz. Ez az
+            egyetlen ok, amiért egyáltalán az iskolai fiókot használjuk: így a
+            lap belépés után rögtön a te órarendedet mutatja, anélkül hogy
+            kézzel kellene kiválasztanod.
+          </p>
+          {/*//! EZT KI KELL MONDANI, MERT AZ OLDAL NEM AZ ISKOLÁÉ. Egy nem
+              //! hivatalos lap, ami iskolai jelszót kér, pontosan úgy néz ki,
+              //! mint egy adathalász oldal — a gyanakvás itt HELYES reakció. Ha
+              //! elhallgatnánk, azzal a gyanakvó diáknak adnánk igazat. Ehelyett
+              //! megmondjuk, mit ellenőrizzen: a címsort. */}
+          <p>
+            Mielőtt beírod: nézd meg a böngésző címsorát. Iskolai jelszót
+            kizárólag ezen az egy lapon kérünk, és soha nem kérjük e-mailben,
+            üzenetben vagy felugró ablakban. Ha bizonytalan vagy, ne írd be — az
+            órarend bejelentkezés nélkül is teljes egészében használható.
           </p>
           <p>
             Amit a belépés után tárolunk: a fenti azonosító adatok, és a saját

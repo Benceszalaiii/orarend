@@ -124,12 +124,20 @@ export function LessonBlock({
     ? ""
     : groupLabel(lesson.group, lesson.subject) || lesson.group;
 
+  //! A KÁRTYA MÁSODIK SORA NÉZETENKÉNT MÁST MOND. Az osztály órarendjén az a
+  //! kérdés, KI tartja az órát; a tanárén az, MELYIK OSZTÁLYHOZ kell menni. A
+  //! forrás mindkettőt ugyanabban a mezőpárban adja, és mindig pontosan az van
+  //! kitöltve, amelyik az adott nézetben új (lásd `timetable.ts`) — ezért itt
+  //! nincs `mode`, csak az, hogy melyik mező szólal meg.
+  const counterpart = lesson.classShort || lesson.teacherShort;
+  const counterpartLong = lesson.className || lesson.teacher;
+
   const title = [
     lesson.subject,
     group ? `${group} csoport` : null,
     span,
     lessonCount > 1 ? `${lessonCount} egymást követő óra` : null,
-    lesson.teacher || null,
+    counterpartLong || counterpart || null,
     rooms || null,
   ]
     .filter(Boolean)
@@ -244,14 +252,26 @@ export function LessonBlock({
           </time>
         )}
 
-        {density === "full" && (rooms || lesson.teacherShort) && (
+        {density === "full" && (rooms || counterpart) && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] leading-tight text-muted-strong">
             {/*//* Teljes nézetben a terem már a tantárgy mellett áll — itt csak
                 //* ismételné. Beágyazva marad a régi sor. */}
             {rooms && !roomFirst && (
               <span className="font-medium text-foreground/70">{rooms}</span>
             )}
-            {lesson.teacherShort && <span>{lesson.teacherShort}</span>}
+            {counterpart && (
+              <span
+                className={cn(
+                  //! AZ OSZTÁLY NEM MELLÉKES ADAT A TANÁRI RÁCSON. A tanár
+                  //! kártyáján ez az EGYETLEN dolog, ami megkülönbözteti a
+                  //! heti nyolc „mat" órát egymástól — ezért ott ugyanolyan
+                  //! súlyt kap, mint a terem, nem halványabbat.
+                  lesson.classShort && "font-medium text-foreground/70",
+                )}
+              >
+                {counterpart}
+              </span>
+            )}
           </div>
         )}
       </div>

@@ -65,6 +65,21 @@ export const auth = betterAuth({
   baseURL: BASE_URL,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
 
+  //! ─── MEGBÍZHATÓ EREDETEK ─────────────────────────────────────────────────
+  //! Élesben CSAK a `baseURL` eredete megbízható (ezt a Better Auth magától
+  //! hozzáadja), és ez így is helyes: a lista minden eleme egy hely, ahonnan
+  //! elfogadunk bejelentkezési kérést.
+  //!
+  //! FEJLESZTÉSKOR viszont a projekt SAJÁT indítói több porton futnak
+  //! (.claude/launch.json: 3000, 3001, 3005), és a `BETTER_AUTH_URL` csak az
+  //! egyiket nevezi meg — a többiről minden belépés „Invalid origin"-nal bukna
+  //! el. A helyettesítő karakter ezért kizárólag fejlesztői módban él;
+  //! élesben a lista üres marad, és a CSRF-védelem teljes szigorral áll.
+  trustedOrigins:
+    process.env.NODE_ENV === "development"
+      ? ["http://localhost:*", "http://127.0.0.1:*"]
+      : [],
+
   //! SAJÁT JELSZAVAS BELÉPÉS SOHA. Ez NEM az iskolai belépésre vonatkozik (az a
   //! `jedlikAd` bővítményé) — hanem arra, hogy mi magunk ne kezdjünk el
   //! jelszavakat tárolni. Ha ez az ág bekapcsolódna, egy MÁSODIK, gyengébb

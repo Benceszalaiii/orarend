@@ -8,17 +8,33 @@ export const MERGE_PREFS_STORAGE_KEY = "orarend:merge-prefs:v1";
 const FIELD_SEP = "|";
 const CLUSTER_SEP = "+";
 
+//! AZ AZONOSSÁG A KÁRTYA HÁROM (NÉGY) BESZÉLŐ MEZŐJE. Tantárgy + csoport +
+//! tanár: két óra akkor „ugyanaz", ha ezekben megegyezik — ez az, amire a
+//! csoportbontás-döntések épülnek, és ezért marad a mezők SORRENDJE is
+//! változatlan (a tárolt kulcsok különben mind érvénytelenné válnának).
+//*
+//! A TANÁRI NÉZETBEN a tanár mezője üres (ő nézi, magától értetődik), és a
+//! megkülönböztető adat az OSZTÁLY. Ezért kerül a negyedik mező a végére, és
+//! CSAK akkor, ha van — az osztály-nézetben így a kulcs betűre ugyanaz marad,
+//! mint eddig.
 export function lessonIdentity(lesson: LessonLike): string {
-  return [
+  const fields = [
     safe(lesson.subjectShort || lesson.subject),
     safe(lesson.group),
     safe(lesson.teacherShort || lesson.teacher),
-  ].join(FIELD_SEP);
+  ];
+  if (lesson.classShort) fields.push(safe(lesson.classShort));
+  return fields.join(FIELD_SEP);
 }
 
 export type LessonLike = Pick<
   TimetableLesson,
-  "subject" | "subjectShort" | "teacher" | "teacherShort" | "group"
+  | "subject"
+  | "subjectShort"
+  | "teacher"
+  | "teacherShort"
+  | "group"
+  | "classShort"
 >;
 
 function safe(value: string | null | undefined): string {

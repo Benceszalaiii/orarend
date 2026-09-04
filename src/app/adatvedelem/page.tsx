@@ -152,35 +152,49 @@ export default function AdatvedelemPage() {
             </p>
           </section>
 
-          {/*//! A BEJELENTKEZÉS AZ EGYETLEN OLYAN FUNKCIÓ, AMI NEVET ÉS
-            //! E-MAIL-CÍMET TÁROL — ezért nem elég egy mondattal elintézni.
-            //! Külön hangsúllyal szerepel, hogy a jelszó soha nem jut el
-            //! hozzánk: az oldal NEM az iskoláé, és egy nem hivatalos lap
-            //! iskolai belépéssel pontosan az a minta, amire gyanakodni kell.
-            //! Ha ezt elhallgatnánk, a gyanakvó diáknak lenne igaza. */}
+          {/*//! A BEJELENTKEZÉS AZ EGYETLEN OLYAN FUNKCIÓ, AMI SZEMÉLYHEZ KÖTHETŐ
+            //! ADATOT TÁROL — ezért nem elég egy mondattal elintézni.
+            //! Külön ki van mondva, mi történik a JELSZÓVAL, mert ez az oldal
+            //! NEM az iskoláé: egy nem hivatalos lap, ami iskolai jelszót kér,
+            //! pontosan az a minta, amire gyanakodni kell. Ha ezt elhallgatnánk
+            //! vagy szépítenénk, a gyanakvó diáknak lenne igaza. */}
           <section className="flex flex-col gap-2">
             <h2 className="text-base font-semibold text-foreground">
               Belépés az iskolai fiókkal (opcionális)
             </h2>
             <p>
-              A belépés kizárólag arra való, hogy a beállításaid átjöjjenek az
-              egyik eszközödről a másikra. Az órarend enélkül is teljes
-              egészében használható, és az oldal soha nem kéri, hogy
+              A belépés két dolgot ad: az iskola rendszere megmondja, melyik
+              osztályba jársz (így nem kell kiválasztanod), és a beállításaid
+              átjönnek az egyik eszközödről a másikra. Az órarend enélkül is
+              teljes egészében használható, és az oldal soha nem kéri, hogy
               bejelentkezz.
             </p>
             <p>
-              A bejelentkezés a Microsoft (Entra ID) saját bejelentkező oldalán
-              történik, az iskola címtárában.{" "}
+              A belépéshez az iskolai (Jedlikinfo) felhasználóneved és jelszavad
+              kell. A szerverünk ezeket változtatás nélkül továbbadja az iskola
+              rendszerének, és az dönti el, hogy helyesek-e.{" "}
               <span className="font-medium text-foreground">
-                A jelszavadat ez az oldal nem látja
-              </span>
-              : nem kérjük be, nem továbbítjuk és nem tároljuk. A sikeres
-              belépés után a Microsoft csak a neved, az iskolai e-mail-címed és
-              egy állandó fiókazonosító átadásáról értesít minket; ezt a hármat
-              tároljuk, valamint a bejelentkezett állapotot fenntartó
-              munkamenetet (egy süti a böngésződben és egy sor az
+                A jelszavadat nem tároljuk és nem naplózzuk
+              </span>{" "}
+              — sem nyílt, sem titkosított, sem kivonatolt formában: a belépés
+              után nem marad belőle nyoma nálunk. Iskolai jelszót kizárólag a
+              belépő oldalon kérünk, és soha nem kérünk e-mailben, üzenetben
+              vagy felugró ablakban.
+            </p>
+            <p>
+              Amit a sikeres belépés után eltárolunk: az iskolai
+              felhasználóneved, az iskola rendszere által megadott{" "}
+              <span className="font-medium text-foreground">osztályod</span> (és
+              hogy tanár vagy-e), valamint a bejelentkezett állapotot fenntartó
+              munkamenet — egy süti a böngésződben és egy sor az
               adatbázisunkban, IP-címmel és böngészőazonosítóval, hogy a saját
-              munkameneteidet fel tudd ismerni).
+              munkameneteidet fel tudd ismerni. E-mail-címet nem tárolunk: a
+              fiókodhoz egy technikai, nem létező című helykitöltő tartozik,
+              amelyre levelet küldeni nem lehet.
+            </p>
+            <p>
+              Az osztályodat minden belépéskor újra megkérdezzük az iskola
+              rendszerétől, hogy egy átsorolás után se maradjon rajtad a régi.
             </p>
             <p>
               Belépés után a saját órarend-beállításaid (osztály, összevont

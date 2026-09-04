@@ -46,34 +46,38 @@ type PrefsState = { cls: string; prefs: MergePreference[] };
 const EMPTY: PrefsState = { cls: "", prefs: [] };
 
 export function useMergePreferences({
-  classShort,
+  //! A TÁROLÓ KULCSA, NEM AZ OSZTÁLY NEVE. Amíg egyetlen nézet volt, a kettő
+  //! ugyanaz volt; a tanári rács óta a kulcs névteres (`tanar:AA`, lásd
+  //! `subjectStoreKey`). A hook nem is akarja tudni, KI az alany — csak azt,
+  //! hogy a döntések ne folyjanak át egyik alanyról a másikra.
+  storeKey,
 }: {
-  classShort: string;
+  storeKey: string;
 }): MergePreferencesApi {
   const [state, setState] = useState<PrefsState>(EMPTY);
 
   useEffect(() => {
-    if (!classShort) return;
-    setState({ cls: classShort, prefs: loadLocalPreferences(classShort) });
-  }, [classShort]);
+    if (!storeKey) return;
+    setState({ cls: storeKey, prefs: loadLocalPreferences(storeKey) });
+  }, [storeKey]);
 
   useEffect(() => {
-    //* Amíg a betöltés meg nem történt (vagy más osztályé az állapot), NEM írunk.
-    if (!classShort || state.cls !== classShort) return;
-    saveLocalPreferences(classShort, state.prefs);
-  }, [classShort, state]);
+    //* Amíg a betöltés meg nem történt (vagy más alanyé az állapot), NEM írunk.
+    if (!storeKey || state.cls !== storeKey) return;
+    saveLocalPreferences(storeKey, state.prefs);
+  }, [storeKey, state]);
 
-  //* Minden módosítás ezen az egy kapun megy át: a saját osztályán kívül nem ír.
+  //* Minden módosítás ezen az egy kapun megy át: a saját alanyán kívül nem ír.
   const update = useCallback(
     (next: (current: MergePreference[]) => MergePreference[]) => {
-      if (!classShort) return;
+      if (!storeKey) return;
       setState((current) =>
-        current.cls === classShort
+        current.cls === storeKey
           ? { cls: current.cls, prefs: next(current.prefs) }
           : current,
       );
     },
-    [classShort],
+    [storeKey],
   );
 
   const choose = useCallback(
@@ -110,7 +114,7 @@ export function useMergePreferences({
     update(() => []);
   }, [update]);
 
-  const prefs = state.cls === classShort ? state.prefs : EMPTY.prefs;
+  const prefs = state.cls === storeKey ? state.prefs : EMPTY.prefs;
 
   return { prefs, choose, hide, undo, undoMany, reset, count: prefs.length };
 }

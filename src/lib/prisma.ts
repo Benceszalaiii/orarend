@@ -24,8 +24,7 @@ const globalForPrisma = globalThis as unknown as {
 //! bejelentkezés láncán ül (`prisma.ts` → `auth.ts` → `/api/auth/*`), és egy
 //! importáláskor dobott hiba nemcsak a belépést vinné magával, hanem az egész
 //! alkalmazást — beleértve az órarendet, amihez semmi köze az adatbázisnak. Az
-//! opcionális funkció hiánya nem némíthatja el a lényeget (ugyanez a szabály áll
-//! az Entra azonosítókra, lásd `auth.ts`).
+//! opcionális funkció hiánya nem némíthatja el a lényeget.
 //!
 //! Az adapter nem kapcsolódik a példányosításkor, csak az első lekérésnél —
 //! üres sztringgel tehát az app elindul, és kizárólag a fiókos végpontok

@@ -26,6 +26,28 @@ export function looksLikeClass(value: unknown): value is string {
   );
 }
 
+//! ─── A TANÁR RÖVID JELE ────────────────────────────────────────────────────
+//! Ugyanaz a szerep, mint az osztálynévnél: ez a HATÁR, ameddig szabad szöveg
+//! kulccsá válhat. A tanári jel a suli listájában két-három nagybetű (`AA`,
+//! `BNM`, `GÉ`) — az ékezetes nagybetűk is előfordulnak, a számjegy soha. A
+//! felső határ ezért nagyvonalúbb a mértnél: egy negyedik betűs jel nem hiba,
+//! egy húsz karakteres „jel" viszont már nem jel.
+//*
+//* ALAKRA NEM ÜTKÖZIK az osztálynévvel (az számjeggyel kezdődik) — a kettő
+//* ugyanabban a kulcstérben elfér, és a `tanar:` előtag (lásd
+//* `subjectStoreKey`) ezen felül még névteret is ad.
+const TEACHER_SHAPE = /^[A-ZÁÉÍÓÖŐÚÜŰ]{1,6}$/;
+
+export const TEACHER_MAX_LENGTH = 6;
+
+export function looksLikeTeacher(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= TEACHER_MAX_LENGTH &&
+    TEACHER_SHAPE.test(value)
+  );
+}
+
 export async function isKnownClass(short: string): Promise<boolean> {
   if (typeof short !== "string" || short.length > CLASS_MAX_LENGTH) {
     return false;

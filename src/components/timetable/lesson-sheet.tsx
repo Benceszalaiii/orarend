@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { accentStyle } from "@/lib/accent";
+import type { TimetableSubjectKind } from "@/lib/timetable";
 import { groupLabel, type LessonRun } from "@/lib/timetable-merge";
 import { cn } from "@/lib/utils";
 import { durationLabel, rangeLabel } from "./shared";
@@ -56,12 +57,16 @@ const MORPH_NAME = "tt-focus";
 
 export function LessonSheet({
   target,
+  mode = "class",
   morph,
   onClose,
   onUndoMerge,
   onHide,
 }: {
   target: FocusTarget;
+  //* Kinek az órarendjéből nyílt ki — ettől függ, van-e értelme a
+  //* „nem járok rá" ajánlatnak (lásd `LessonBody`).
+  mode?: TimetableSubjectKind;
   //* Fut-e view transition — ilyenkor a Radix saját be-/kifutása nem kell.
   morph: boolean;
   onClose: () => void;
@@ -104,6 +109,7 @@ export function LessonSheet({
         {target.kind === "lesson" ? (
           <LessonBody
             run={target.run}
+            mode={mode}
             dayLabel={target.dayLabel}
             onUndoMerge={onUndoMerge}
             onHide={onHide}
@@ -176,12 +182,14 @@ function Row({
 
 function LessonBody({
   run,
+  mode,
   dayLabel,
   onUndoMerge,
   onHide,
   onClose,
 }: {
   run: LessonRun;
+  mode: TimetableSubjectKind;
   dayLabel: string;
   onUndoMerge: (identities: string[]) => void;
   onHide: (identity: string) => void;
@@ -194,7 +202,13 @@ function LessonBody({
   //! lenne: arra mindenki jár, az elrejtése nem „nem az én csoportom", hanem a
   //! saját órarend meghamisítása. A forrás megmondja a különbséget
   //! (`wholeClass`), tehát nem kell találgatni.
-  const groupOnly = !lesson.wholeClass;
+  //!
+  //! A TANÁRI NÉZETBEN NINCS ILYEN KÉRDÉS. „Nem járok rá" egy tanár számára
+  //! értelmetlen: ha a csoport órája ott van a rácsán, ő tartja. A csoport
+  //! NEVÉT továbbra is kiírjuk (az mondja meg, kikkel), az elrejtés ajánlatát
+  //! viszont nem — egy gomb, ami a saját óráját tünteti el, csak kárt tud
+  //! okozni.
+  const groupOnly = mode === "class" && !lesson.wholeClass;
   const group = groupLabel(lesson.group, lesson.subject) || lesson.group;
   return (
     <>
@@ -255,6 +269,16 @@ function LessonBody({
           )}
         </Row>
 
+        {/*//! A TANÁRI LAPON AZ OSZTÁLY A VÁLASZ, NEM A TANÁR. Ugyanaz a sor,
+            //! ugyanaz a helye — csak az szerepel benne, ami az adott nézetben
+            //! ÚJ információ: a diáknak a tanár, a tanárnak az osztály. A
+            //! forrás mindkettőt ugyanabban a kártyában adja (lásd
+            //! `timetable.ts`), a nézet dönti el, melyik számít. */}
+        {lesson.classShort && (
+          <Row icon={Users} label="Osztály">
+            {lesson.className || lesson.classShort}
+          </Row>
+        )}
         {lesson.teacher && (
           <Row icon={User} label="Tanár">
             {lesson.teacher}

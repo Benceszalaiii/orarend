@@ -5,6 +5,11 @@ import { Analytics } from "@vercel/analytics/next";
 import { PrefsSync } from "@/components/prefs-sync";
 import { AddToHomeScreen } from "@/components/pwa/add-to-home-screen";
 import { RegisterSW } from "@/components/register-sw";
+import { Geist } from "next/font/google";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+
 
 //* A DEKORÁCIÓS BETŰ. Csak ott szólal meg, ahol a `font-script` osztály
 //* kimondja — a törzsszöveg marad a rendszerbetűn.
@@ -63,7 +68,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="hu"
-      className={`dark h-full antialiased ${petitFormalScript.variable} ${jakartaSans.variable}`}
+      className={cn("dark", "h-full", "antialiased", petitFormalScript.variable, jakartaSans.variable, "font-sans", geist.variable)}
       style={{ colorScheme: "dark" }}
     >
       <head>
@@ -91,8 +96,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             //! (`/api/auth/get-session`) a be nem jelentkezett látogatónál is
             //! lefut egyszer. A fiókgombbal KÖZÖS ez az egy kérés (a Better Auth
             //! kliense összevonja őket), és pár száz bájt — ezért fér bele.
-            //! Ha a bejelentkezés nincs beállítva, a gomb és a szinkron is
-            //! néma marad (lásd `auth-config.ts`). */}
+            //! Aki nincs bejelentkezve, annál ezen az egy kérésen túl semmi nem
+            //! történik: se szinkron, se további hálózati forgalom. */}
         <PrefsSync />
         {/*//* A telepítés tippje csak iOS-en, csak egyszer — a döntést maga a
             //* komponens hozza meg (lásd `lib/a2hs.ts`). */}

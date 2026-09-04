@@ -1,7 +1,12 @@
 import { loadAllDualSchedules, saveDualSchedule } from "./dual-schedule";
 import { loadLastView, saveLastView } from "./last-view";
 import { type SyncedPrefs, sanitizePrefs } from "./prefs-shared";
-import { loadCachedClass, saveCachedClass } from "./timetable";
+import {
+  loadCachedClass,
+  loadCachedTeacher,
+  saveCachedClass,
+  saveCachedTeacher,
+} from "./timetable";
 import {
   loadAllLocalPreferences,
   saveLocalPreferences,
@@ -33,6 +38,7 @@ export function collectLocalPrefs(): SyncedPrefs {
   //! szerver úgyis eldobna — a kliens ilyenkor azt hinné, sikerült.
   return sanitizePrefs({
     class: loadCachedClass(),
+    teacher: loadCachedTeacher(),
     lastView: loadLastView(),
     merge: loadAllLocalPreferences(),
     dual: loadAllDualSchedules(),
@@ -49,14 +55,17 @@ export function applyLocalPrefs(prefs: SyncedPrefs): void {
   if (typeof window === "undefined") return;
 
   if (prefs.class) saveCachedClass(prefs.class);
+  if (prefs.teacher) saveCachedTeacher(prefs.teacher);
   if (prefs.lastView) saveLastView(prefs.lastView);
 
-  for (const [classShort, list] of Object.entries(prefs.merge)) {
-    saveLocalPreferences(classShort, list);
+  //* A kulcs itt már NÉVTERES lehet (`tanar:AA`) — a tárolók ezt nem
+  //* értelmezik, csak azonosítóként viszik tovább (lásd `subjectStoreKey`).
+  for (const [storeKey, list] of Object.entries(prefs.merge)) {
+    saveLocalPreferences(storeKey, list);
   }
 
-  for (const [classShort, schedule] of Object.entries(prefs.dual)) {
-    saveDualSchedule(classShort, schedule);
+  for (const [storeKey, schedule] of Object.entries(prefs.dual)) {
+    saveDualSchedule(storeKey, schedule);
   }
 }
 
@@ -88,6 +97,7 @@ export function mergePrefs(
 
   return {
     class: winner.class ?? loser.class,
+    teacher: winner.teacher ?? loser.teacher,
     lastView: winner.lastView ?? loser.lastView,
     //* A vesztes oldal bejegyzései alapként; a győztesé fölé írva.
     merge: { ...loser.merge, ...winner.merge },

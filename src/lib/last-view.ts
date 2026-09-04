@@ -15,7 +15,12 @@
 
 import { notifyPrefsChanged } from "./prefs-events";
 
-export const VIEW_ROUTES = ["/orarend", "/ma"] as const;
+//! A TANÁRI RÁCS IS NÉZET, CSAK NEM MINDENKIÉ. Az emlék attól ér valamit,
+//! hogy a `/` oda visz vissza, ahol legutóbb jártak — egy tanárnak ez a
+//! `/tanari`, és fölösleges lenne minden megnyitáskor újra odanavigálnia. A
+//! VÁLTÓ pirulái között viszont nem szerepel automatikusan (lásd
+//! `site-nav.tsx`): a diákok többségének nem nézet, csak zaj lenne.
+export const VIEW_ROUTES = ["/orarend", "/ma", "/tanari"] as const;
 
 export type ViewRoute = (typeof VIEW_ROUTES)[number];
 

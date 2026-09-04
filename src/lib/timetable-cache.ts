@@ -1,6 +1,7 @@
 import type {
   TimetableDay,
   TimetableErrorKind,
+  TimetableSubject,
   TimetableView,
 } from "./timetable";
 
@@ -27,8 +28,11 @@ export type CachedWeek = {
 
 type Store = Record<string, CachedWeek>;
 
-function entryKey(classShort: string, weekStart: string): string {
-  return `${classShort}|${weekStart}`;
+//! A KULCS AZ ALANY TÁROLÓKULCSA, NEM AZ OSZTÁLY NEVE. A tanári hetek
+//! `tanar:` előtaggal ülnek ugyanebben a tárolóban (lásd `subjectStoreKey`) —
+//! a hívó adja át már névterezve, ez a modul csak azonosítóként kezeli.
+function entryKey(storeKey: string, weekStart: string): string {
+  return `${storeKey}|${weekStart}`;
 }
 
 function readStore(): Store {
@@ -53,8 +57,18 @@ function readStore(): Store {
 //! órarendből. Ezért kiegészítjük: ami hiányzik, az „nem tudjuk" — a nézet
 //! ilyenkor ugyanaz, mint a bővítés előtt volt.
 function withDayDefaults(view: TimetableView): TimetableView {
+  //! A MEZŐ NEVE MEGVÁLTOZOTT, A MENTETT HÉT NEM. A tanári rács bevezetésekor
+  //! a `resolvedClass` `subject` lett (mert tanárt is jelölhet) — a
+  //! készüléken viszont ott áll a RÉGI alakú pillanatkép, és az a példány
+  //! pontosan akkor kellene, amikor nincs hálózat. Egy kulcs-emeléssel ezt a
+  //! tartalékot vennénk el; a régi név átvétele viszont senkitől nem vesz el
+  //! semmit.
+  const legacy = (view as { resolvedClass?: TimetableSubject | null })
+    .resolvedClass;
   return {
     ...view,
+    kind: view.kind ?? "class",
+    subject: view.subject ?? legacy ?? null,
     days: view.days.map((day) => {
       const stored = day as Partial<TimetableDay>;
       return {

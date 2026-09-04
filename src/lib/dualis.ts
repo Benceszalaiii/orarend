@@ -61,6 +61,9 @@ export function dualBlockLesson(day: {
     subjectShort: "Duális",
     teacher: "",
     teacherShort: "",
+    //* A duális nap nem egy osztály órája — se tanára, se osztálya nincs.
+    classShort: "",
+    className: "",
     room: "",
     group: "",
     groupColumn: 0,

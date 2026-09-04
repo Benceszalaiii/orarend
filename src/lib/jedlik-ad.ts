@@ -73,6 +73,21 @@ function pickString(
     const value = obj[key];
     if (typeof value === "string" && value.trim()) return value.trim();
     if (typeof value === "number") return String(value);
+    //! A MEZŐ NEM BIZTOS, HOGY SZÖVEG. Az osztálylista végpontja
+    //! (`known-class.ts`) `{ short: "13C" }` alakú objektumokat ad vissza, és
+    //! semmi nem garantálja, hogy a bejelentkezés válaszában az osztály ne
+    //! ugyanilyen objektumként érkezzen. Ha csak szövegre néznénk, egy ilyen
+    //! válaszból NÉMÁN `null` osztály kerülne az adatbázisba — a belépés
+    //! sikeres lenne, csak épp pont az az adat veszne el, amiért az egész
+    //! iskolai belépés létezik.
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const inner = pickString(value as Record<string, unknown>, [
+        "short",
+        "name",
+        "value",
+      ]);
+      if (inner) return inner;
+    }
   }
   return null;
 }
@@ -152,15 +167,42 @@ export async function adLogin(
     (json.user as Record<string, unknown> | undefined) ??
     (json.data as Record<string, unknown> | undefined);
 
+  //! ─── FEJLESZTŐI DIAGNOSZTIKA — CSAK KULCSNEVEK, SOHA ÉRTÉKEK ──────────────
+  //! Enélkül az alábbi kulcslista örökre találgatás marad: ha egyik név sem
+  //! talál, a belépés attól még sikeres, és semmi nem árulja el, hogy az
+  //! osztály némán elveszett. Egyetlen valódi belépés fejlesztői módban
+  //! megmutatja a válasz tényleges alakját, és a listát utána tényre lehet
+  //! cserélni.
+  //!
+  //! CSAK A KULCSOK NEVE MEGY NAPLÓBA, AZ ÉRTÉKEK SOHA. A válasz a diák
+  //! személyes adatait hordozza (név, osztály, esetleg azonosító); ezek
+  //! naplóba írása fejlesztői módban is fölösleges kitettség. A jelszó a KÉRÉS
+  //! törzsében utazik, ide be sem kerül.
+  if (process.env.NODE_ENV === "development") {
+    console.info(
+      "[jedlik-ad] A válasz mezői:",
+      Object.keys(json).join(", "),
+      nested ? `| beágyazva: ${Object.keys(nested).join(", ")}` : "",
+    );
+  }
+
+  //! A KULCSNEVEK LISTÁJA, ÉS AMIÉRT TÖBB VAN BELŐLÜK. A válasz alakja nem
+  //! dokumentált, tehát nem tudjuk BIZTOSAN, melyik néven jön az osztály. Egy
+  //! rossz találgatás itt nem törést okoz, hanem CSENDES ADATVESZTÉST: a
+  //! belépés sikerül, csak `null` osztály kerül az adatbázisba. Ezért nézünk
+  //! meg több szokásos alakot (angol és magyar kulcsnév egyaránt) — ez nem
+  //! kerül semmibe, viszont egy átnevezés nem viszi el némán az egyetlen
+  //! adatot, amiért az iskolai belépés egyáltalán megéri.
+  const CLASS_KEYS = ["class", "className", "class_name", "osztaly", "osztály"];
+  const TEACHER_KEYS = ["isTeacher", "teacher", "is_teacher", "tanar", "tanár"];
+  const NAME_KEYS = ["name", "fullName", "displayName"];
+
   return {
     displayName: loginName.trim(),
-    class: pickString(json, ["class"]) ?? pickString(nested, ["class"]),
+    class: pickString(json, CLASS_KEYS) ?? pickString(nested, CLASS_KEYS),
     isTeacher:
-      pickBoolean(json, ["isTeacher", "teacher"]) ??
-      pickBoolean(nested, ["isTeacher", "teacher"]),
-    fullName:
-      pickString(json, ["name", "fullName", "displayName"]) ??
-      pickString(nested, ["name", "fullName", "displayName"]),
+      pickBoolean(json, TEACHER_KEYS) ?? pickBoolean(nested, TEACHER_KEYS),
+    fullName: pickString(json, NAME_KEYS) ?? pickString(nested, NAME_KEYS),
   };
 }
 

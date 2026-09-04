@@ -96,7 +96,15 @@ export function NowBar({
             type="button"
             onClick={onReturn}
             className={cn(
-              "relative flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-xl px-2 py-1.5 text-left",
+              //! A SOR ALATTI HÉZAG A GOMBÉ, NEM AZ ANIMÁLT DOBOZÉ. A külső
+              //! elem magassága nullára fut, amikor a sor becsukódik — de a
+              //! `border-box` miatt a rajta ülő belső margó ALÁ nem tud menni,
+              //! így egy pár képpontos csonk maradna a fejléc alatt akkor is,
+              //! amikor nincs mit mutatni. Margóként a gombon viszont a
+              //! becsukott alak tényleg nulla magas, a nyitott mérése pedig
+              //! változatlan: az elmosás-doboz (`overflow-hidden`) saját
+              //! szövegkörnyezetet nyit, tehát a margó belül marad.
+              "relative mb-1.5 flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-xl px-2 py-1.5 text-left",
               "transition-colors hover:bg-foreground/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
             )}
           >

@@ -1,14 +1,18 @@
 import "server-only";
 
 import { createLocalAccountIssuer } from "@better-auth/core/db";
-import { APIError, createAuthEndpoint, formCsrfMiddleware } from "better-auth/api";
+import {
+  APIError,
+  createAuthEndpoint,
+  formCsrfMiddleware,
+} from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import { parseSessionOutput, parseUserOutput } from "better-auth/db";
 import type { BetterAuthPlugin } from "better-auth/types";
 import * as z from "zod";
 import {
-  adLogin,
   AdLoginError,
+  adLogin,
   LOGIN_NAME_MAX_LENGTH,
   normalizeLoginName,
   syntheticEmail,
@@ -119,7 +123,8 @@ export const jedlikAd = () =>
           metadata: {
             openapi: {
               operationId: "signInWithJedlikAd",
-              description: "Bejelentkezés iskolai felhasználónévvel és jelszóval",
+              description:
+                "Bejelentkezés iskolai felhasználónévvel és jelszóval",
             },
           },
         },
@@ -159,10 +164,12 @@ export const jedlikAd = () =>
             throw error;
           }
 
-          const owner = await ctx.context.internalAdapter.findAccountOwnerByKey({
-            issuer: ISSUER,
-            accountId: username,
-          });
+          const owner = await ctx.context.internalAdapter.findAccountOwnerByKey(
+            {
+              issuer: ISSUER,
+              accountId: username,
+            },
+          );
 
           //* Amit MINDEN belépéskor frissítünk az iskolai válaszból. A
           //* `isTeacher` csak akkor kerül bele, ha az iskola nyilatkozott róla

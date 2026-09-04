@@ -125,6 +125,14 @@ const REFETCH_MIN_MS = 60_000;
 //* váltás PILLANATÁT tolja el pár képponttal, nem a réteg helyét.
 const CHROME_H = 92;
 
+//! A HOLTSÁV — KÜLÖN HATÁR A MEGJELENÉSNEK ÉS AZ ELTŰNÉSNEK. Egyetlen határral
+//! a sor a küszöb KÉT OLDALÁN áll: a hero alja néhány képpontos remegésre —
+//! görgetéslendület, cím­sor-behúzás, a képernyő-billentyűzet — oda-vissza
+//! lépi át a vonalat, és a sor be-ki villog. A megjelenés a `CHROME_H`-nál
+//! történik, a visszahúzás viszont csak `CHROME_H + NOW_BAR_HYST`-nél: a két
+//! érték közti sávban semmi nem vált, akármerre mozdul pár képpontot a lap.
+const NOW_BAR_HYST = 28;
+
 //! A NAP KEZDETE, NEM A NAP KÖZEPE. A `dateFromKey` szándékosan DÉLRE horgonyoz
 //! (`12:00`): az órarend napokat hasonlít, és délben egyetlen óraátállítás sem
 //! tolja át a dátumot a szomszéd napra. Aki viszont IDŐTARTAMOT mér — hány óra
@@ -217,13 +225,13 @@ export function MaPage() {
     return () => document.removeEventListener("visibilitychange", onShow);
   }, [focusKey, selectedClass, load]);
 
-  const classShort = view?.resolvedClass?.short ?? selectedClass;
-  const resolvedShort = view?.resolvedClass?.short;
+  const classShort = view?.subject?.short ?? selectedClass;
+  const resolvedShort = view?.subject?.short;
   useEffect(() => {
     reportClassUse(resolvedShort);
   }, [resolvedShort]);
 
-  const { prefs, choose } = useMergePreferences({ classShort });
+  const { prefs, choose } = useMergePreferences({ storeKey: classShort });
 
   const [dualSchedule, setDualSchedule] = useState<DualSchedule | null>(null);
   useEffect(() => {
@@ -402,7 +410,7 @@ export function MaPage() {
   //! „most" sor előbukkan, ha visszajön, eltűnik. Két ugyanolyan érték soha nem
   //! áll egyszerre a képen.
   const [heroGone, setHeroGone] = useState(false);
-  const heroWatchRef = useRef<IntersectionObserver | null>(null);
+  const heroWatchRef = useRef<IntersectionObserver[]>([]);
   //! A SZÜNET HETE ÜRES HÉT — ÉS EDDIG ÖRÖKÖS PÖRGŐ KARIKA VOLT. A
   //! `timetable/cards` egy egész szünetre nem küld NAPOKAT sem, csak egy üres
   //! választ; a `buildTimetableView` ezt nevesített hibaként adja tovább, a
@@ -437,16 +445,33 @@ export function MaPage() {
   //! kikövetkeztetni, és egy rossz sorrendű futásnál a figyelő némán elmarad.
   //! A visszahívásos `ref` viszont PONTOSAN a csatolás és a leválás
   //! pillanatában fut le: a figyelő így nem tud lemaradni az elemétől.
+  //! KÉT FIGYELŐ, MERT KÉT HATÁR VAN. Egy `IntersectionObserver` csak a SAJÁT
+  //! vonalának átlépését jelenti — a holtsáv másik széléről nem tudna. A
+  //! `show` a `CHROME_H`-nál álló vonalat őrzi és csak BEKAPCSOL, a `hide` a
+  //! `CHROME_H + NOW_BAR_HYST`-nél állót és csak KIKAPCSOL. A két vonal közt
+  //! egyik sem mond semmit: ott az marad, ami volt.
   const watchHero = useCallback((el: HTMLDivElement | null) => {
-    heroWatchRef.current?.disconnect();
-    heroWatchRef.current = null;
+    for (const observer of heroWatchRef.current) observer.disconnect();
+    heroWatchRef.current = [];
     if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setHeroGone(!entry.isIntersecting),
+    const show = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) setHeroGone(true);
+      },
       { rootMargin: `-${CHROME_H}px 0px 0px 0px`, threshold: 0 },
     );
-    observer.observe(el);
-    heroWatchRef.current = observer;
+    const hide = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setHeroGone(false);
+      },
+      {
+        rootMargin: `-${CHROME_H + NOW_BAR_HYST}px 0px 0px 0px`,
+        threshold: 0,
+      },
+    );
+    show.observe(el);
+    hide.observe(el);
+    heroWatchRef.current = [show, hide];
   }, []);
 
   //! ÜRES HÉT: A LAP NEM PÖRÖG TOVÁBB, HANEM VÁLASZOL. A napköteg itt nem
@@ -555,25 +580,48 @@ export function MaPage() {
               todayDateKey={today ?? ""}
               onPick={pickIndex}
             />
-            <NowBar
-              visible={heroGone}
-              state={state}
-              clock={clock}
-              epoch={epoch}
-              day={active?.day ?? null}
-              isToday={isToday}
-              dayName={active?.day?.dayName ?? ""}
-              onReturn={() =>
-                window.scrollTo({
-                  top: 0,
-                  behavior: window.matchMedia(
-                    "(prefers-reduced-motion: reduce)",
-                  ).matches
-                    ? "auto"
-                    : "smooth",
-                })
-              }
-            />
+          </div>
+        </div>
+
+        {/*//! A „MOST" SOR A FEJLÉC ALÁ LÓG, NEM BELE. Amíg a sor a fejléc
+            //! TARTALMA volt, a megjelenése megnövelte a fejléc magasságát —
+            //! a fejléc pedig a lap folyamának a tetején áll, tehát alatta
+            //! MINDEN lejjebb csúszott a sor magasságával. Ezzel a hero alja
+            //! is: az őrszem, ami a sort egyáltalán előhívta. A sor lelökte
+            //! magáról az őrszemet a küszöb túloldalára, az visszakapcsolta a
+            //! herót, a sor eltűnt, az őrszem visszaugrott — és a lap
+            //! másodpercenként többször rándult, miközben a görgetés is
+            //! elcsúszott a talp alatt.
+            //!
+            //! EZÉRT A SOR KIKERÜL A FOLYAMBÓL. `absolute`-ként a fejléc alsó
+            //! élére akasztva pontosan ott jelenik meg, ahol eddig — de nem
+            //! mozdít el semmit: a fejléc magassága, a lap magassága és az
+            //! őrszem helye végig változatlan. Ami alatta van, az alatta fut
+            //! tovább, ugyanúgy, ahogy a fejléc alatt. */}
+        <div className="ma-chrome-tail absolute inset-x-0 top-full">
+          <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-8">
+            <div className="min-w-0">
+              <NowBar
+                className="ma-now-bar"
+                visible={heroGone}
+                state={state}
+                clock={clock}
+                epoch={epoch}
+                day={active?.day ?? null}
+                isToday={isToday}
+                dayName={active?.day?.dayName ?? ""}
+                onReturn={() =>
+                  window.scrollTo({
+                    top: 0,
+                    behavior: window.matchMedia(
+                      "(prefers-reduced-motion: reduce)",
+                    ).matches
+                      ? "auto"
+                      : "smooth",
+                  })
+                }
+              />
+            </div>
           </div>
         </div>
       </div>

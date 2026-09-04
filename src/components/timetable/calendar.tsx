@@ -45,10 +45,11 @@ import { Spinner } from "@/components/ui/spinner";
 import { DUAL_LABEL, type DualStatus, dualBlockLesson } from "@/lib/dualis";
 import type {
   CalendarEvent,
-  TimetableClass,
   TimetableError as TimetableErrorInfo,
   TimetableLesson,
   TimetablePeriod,
+  TimetableSubject,
+  TimetableSubjectKind,
   TimetableView,
 } from "@/lib/timetable";
 import {
@@ -56,7 +57,9 @@ import {
   describeTimetableFailure,
   groupHalf,
   periodsOfDay,
-  saveCachedClass,
+  saveCachedSubject,
+  SUBJECT_WORDS,
+  subjectStoreKey,
 } from "@/lib/timetable";
 import {
   type CachedWeek,
@@ -578,8 +581,9 @@ function DayHeadCell({
 
 export function TimetableCalendar({
   initialView,
-  classes,
-  classesError,
+  mode = "class",
+  subjects,
+  subjectsError,
   variant = "embedded",
   heading,
   trailing,
@@ -589,10 +593,17 @@ export function TimetableCalendar({
   initialStale = null,
 }: {
   initialView: TimetableView;
-  classes: TimetableClass[];
-  //* Ha az osztálylista sem jött meg, a választó üres — a „válassz osztályt”
+  //! UGYANAZ A RÁCS KÉT KÉRDÉSRE. „Melyik osztály hol van" és „a tanárnak hol
+  //! kell lennie" ugyanabból az adatból, ugyanazzal a rajzolással válaszolható
+  //! meg — a különbség a FELIRATOKBAN, a VÁLASZTÓ listájában és abban van,
+  //! melyik tárolóhoz tartoznak a beállítások. Ezért nincs második naptár:
+  //! egy másolat előbb-utóbb máshogy rajzolná ugyanazt a hetet.
+  mode?: TimetableSubjectKind;
+  /** A választó listája: osztályok vagy tanárok, a `mode`-nak megfelelően. */
+  subjects: TimetableSubject[];
+  //* Ha a lista sem jött meg, a választó üres — a „válassz osztályt/tanárt”
   //* felszólítás ilyenkor félrevezető, ezért a lista hibáját is átvesszük.
-  classesError?: TimetableErrorInfo;
+  subjectsError?: TimetableErrorInfo;
   //* `fullscreen` a /orarend lapé: a rács kitölti a képernyőt, mobilon
   //* naponként lapozható. `embedded` az /event kártyáé.
   variant?: "embedded" | "fullscreen";
@@ -612,7 +623,7 @@ export function TimetableCalendar({
   dualStatusForDay?: (day: {
     dayOfWeek: number;
     weekLetter: string;
-    classShort: string;
+    subjectShort: string;
   }) => DualStatus | undefined;
   //! A BEÁLLÍTÓ IS A SÁVBAN LAKIK, DE NEM A RÁCS TALÁLJA KI. Ugyanaz a határ,
   //! mint a `dualStatusForDay`-nél: a rács csak azt tudja, MELYIK osztály
@@ -620,7 +631,7 @@ export function TimetableCalendar({
   //! Ezért nem komponenst kap, hanem egy hívást, amit a nézett osztállyal és
   //! héttel kérdez meg; ami nem ad vissza semmit, annál a sáv változatlan.
   dualSetup?: (ctx: {
-    classShort: string;
+    subjectShort: string;
     weekLetter: string;
   }) => React.ReactNode;
   //! AZ ÉRTESÍTÉS-HARANG UGYANEZEN A HATÁRON ÁLL. A rács azt tudja, MELYIK
@@ -628,7 +639,7 @@ export function TimetableCalendar({
   //! párbeszéd viszont a lapé (`components/pwa/notification-menu.tsx`). Ezért
   //! itt is hívás, nem komponens; ami nem ad vissza semmit, annál a sáv
   //! változatlan.
-  notifySetup?: (ctx: { classShort: string }) => React.ReactNode;
+  notifySetup?: (ctx: { subjectShort: string }) => React.ReactNode;
   //! AZ ELSŐ HÉT IS JÖHET A MENTETT PÉLDÁNYBÓL. Az `initialView`-t a lap tölti
   //! be (`/orarend`), tehát csak Ő tudja, hálózatból jött-e vagy a készülékről
   //! — a rács enélkül elhallgatná a legelső, hidegen megnyitott hét korát.
@@ -639,8 +650,8 @@ export function TimetableCalendar({
   //! példányból, mert a forrás nem volt elérhető. A rács ezt KIÍRJA: egy régi
   //! órarendet igazként mutatni rosszabb, mint hibát mutatni.
   const [stale, setStale] = useState<CachedWeek | null>(initialStale);
-  const [selectedClass, setSelectedClass] = useState<string>(
-    initialView.resolvedClass?.short ?? "",
+  const [selectedSubject, setSelectedSubject] = useState<string>(
+    initialView.subject?.short ?? "",
   );
   //! A betöltés jelzése SAJÁT állapot, nem `useTransition`: a nézet cseréjét a
   //! View Transition visszahívásában, `flushSync`-kel kell elkötni (különben a
@@ -674,16 +685,29 @@ export function TimetableCalendar({
     else cardRefs.current.delete(key);
   }, []);
 
-  const classShort = view.resolvedClass?.short ?? "";
+  const subjectShort = view.subject?.short ?? "";
+  const words = SUBJECT_WORDS[mode];
+  //! A HELYI TÁROLÓK KULCSA NEM AZ ALANY JELE, HANEM A NÉVTERES VÁLTOZATA. A
+  //! heti pillanatkép, az összevonási döntések és (a lapon át) a duális
+  //! beosztás mind egy szöveges kulcson ülnek — ha a tanári lap a puszta `AA`
+  //! jelet írná be, egy jövőbeli, azonos nevű alany ráírna. Lásd
+  //! `subjectStoreKey`.
+  const storeKey = subjectStoreKey(mode, subjectShort);
 
   //! MELYIK OSZTÁLYT NÉZIK — ÉS SEMMI MÁST. Osztályonként és naponta egyszer
   //! eszközönként (a deduplikáció a `reportClassUse`-ban van).
+  //*
+  //! A TANÁRT NEM MÉRJÜK. A használati statisztika arra a kérdésre válaszol,
+  //! hány diák nézi egy OSZTÁLY órarendjét (`/statisztika`); egy 88 fős tanári
+  //! kar rövid jelei ott nem adatok, hanem személyek — és a végpont sem
+  //! fogadná el őket (lásd `known-class.ts`).
   useEffect(() => {
-    reportClassUse(classShort);
-  }, [classShort]);
+    if (mode !== "class") return;
+    reportClassUse(subjectShort);
+  }, [mode, subjectShort]);
 
   const prefsApi = useMergePreferences({
-    classShort,
+    storeKey,
   });
   const { prefs, choose, hide, undo, undoMany, reset } = prefsApi;
 
@@ -709,7 +733,7 @@ export function TimetableCalendar({
   );
   const requestWeek = useCallback(
     (cls: string, week: string): Promise<WeekLoad> => {
-      const key = `${cls}|${week}`;
+      const key = `${mode}|${cls}|${week}`;
       const cached = weekCache.current.get(key);
       if (cached && Date.now() - cached.at < WEEK_PREFETCH_TTL) {
         return cached.view;
@@ -719,8 +743,9 @@ export function TimetableCalendar({
       //! lehet ugyanennek a hétnek a legutóbbi példánya — a `/ma` mindig is
       //! abból rajzolt, a rács pedig hibát mutatott. A döntést a
       //! `loadWeekOrCached` hozza (lásd `lib/timetable-cache.ts`).
-      const view = loadWeekOrCached(cls, week, () =>
+      const view = loadWeekOrCached(subjectStoreKey(mode, cls), week, () =>
         buildTimetableView({
+          kind: mode,
           userClass: cls || null,
           weekStart: week,
           classOverride: cls || undefined,
@@ -746,7 +771,7 @@ export function TimetableCalendar({
       }
       return view;
     },
-    [],
+    [mode],
   );
 
   //* A héthatáron átérkező hét igazítása (lásd `landRef.current` lentebb, a
@@ -767,17 +792,17 @@ export function TimetableCalendar({
     //! HÉTFŐJE jön, nem az öt nappal odébb eső péntekje.
     land: "start" | "end" | null = null,
   ) => {
-    const cls = classOverride ?? selectedClass;
+    const cls = classOverride ?? selectedSubject;
     setAnimateGrid(true);
     setPending(true);
     try {
       const { view: res, cached } = await requestWeek(cls, nextWeek);
-      const next = res.resolvedClass?.short ?? cls;
+      const next = res.subject?.short ?? cls;
       weekTransition(
         () => {
           setView(res);
           setStale(cached);
-          setSelectedClass(next);
+          setSelectedSubject(next);
         },
         {
           enabled: canMorph,
@@ -787,7 +812,7 @@ export function TimetableCalendar({
       );
       //* A választást csak SIKERES betöltés után jegyezzük meg, hogy a
       //* következő megnyitás ne a `PUBLIC_DEFAULT_CLASS`-ra essen vissza.
-      if (next) saveCachedClass(next);
+      if (next) saveCachedSubject(mode, next);
     } catch (err) {
       //! Ide csak akkor jutunk, ha maga a betöltés dobott (a hálózati hibákat
       //! a `buildTimetableView` már nevesítve adja vissza) — a kivétel fajtáját
@@ -872,9 +897,9 @@ export function TimetableCalendar({
       dualStatusForDay?.({
         dayOfWeek,
         weekLetter: abWeek ?? "",
-        classShort,
+        subjectShort,
       }),
-    [dualStatusForDay, abWeek, classShort],
+    [dualStatusForDay, abWeek, subjectShort],
   );
 
   //! ─── A DUÁLIS NAP HELYÉN EGY BLOKK ÁLL ───────────────────────────────────
@@ -1569,7 +1594,7 @@ export function TimetableCalendar({
     //* Lapozás közben a szélső nap átmenetileg is „aktív" lehet — a késleltetés
     //* miatt csak az kér elő, aki tényleg ott állt meg.
     const id = window.setTimeout(() => {
-      requestWeek(selectedClass, addDaysKey(weekStart, dir * 7)).catch(
+      requestWeek(selectedSubject, addDaysKey(weekStart, dir * 7)).catch(
         () => undefined,
       );
     }, 300);
@@ -1580,7 +1605,7 @@ export function TimetableCalendar({
     pending,
     activeDay,
     gridDays.length,
-    selectedClass,
+    selectedSubject,
     weekStart,
     requestWeek,
   ]);
@@ -1590,13 +1615,13 @@ export function TimetableCalendar({
   //* helyzete a betöltés utáni első görgetésig a rossz pozícióban tétlenkedjen.
   //* (Az idősáv natívan ragad, azzal itt nincs teendő.)
   useEffect(() => {
-    //* `weekStart`/`selectedClass` csak azért kell a függőségben, mert ezek
+    //* `weekStart`/`selectedSubject` csak azért kell a függőségben, mert ezek
     //* cserélik a rács kulcsát (keret-remount); a remount után itt tűzzük
     //* vissza a sínt, ha a görgetés pozíciója megmaradt.
     void weekStart;
-    void selectedClass;
+    void selectedSubject;
     pinLeft();
-  }, [pinLeft, weekStart, selectedClass]);
+  }, [pinLeft, weekStart, selectedSubject]);
 
   //* A „ma" csak akkor kérdés, ha a mai nap a nézett hétben van; a bizonytalan
   //* („unknown", jelöletlen hét) állapotról pedig nem írunk ki jelvényt.
@@ -1605,7 +1630,7 @@ export function TimetableCalendar({
   const todayDual =
     todayStatus === "dual" || todayStatus === "school" ? todayStatus : null;
 
-  const hasClass = Boolean(view.resolvedClass);
+  const hasSubject = Boolean(view.subject);
   //* A NYERS órákból: a duális blokkokat mi tettük a rácsra, azoktól a hét még
   //* ugyanolyan üres marad — a „nincs adat" jegyzet nem hazudhat róla.
   const noData = view.ok && view.lessons.length === 0 && events.length === 0;
@@ -1756,7 +1781,7 @@ export function TimetableCalendar({
   //* nézet), az nem is foglal helyet: üres csoportra a „…" gomb sem jelenik meg.
   const moreControls = [
     fullscreen && <LegendMenu key="legend" />,
-    hasClass && (
+    hasSubject && (
       <PreferencesMenu
         key="prefs"
         rows={rows}
@@ -1765,13 +1790,13 @@ export function TimetableCalendar({
         className="touch-target"
       />
     ),
-    fullscreen && hasClass && dualSetup ? (
+    fullscreen && hasSubject && dualSetup ? (
       <Fragment key="dual">
-        {dualSetup({ classShort, weekLetter: abWeek ?? "" })}
+        {dualSetup({ subjectShort, weekLetter: abWeek ?? "" })}
       </Fragment>
     ) : null,
-    fullscreen && hasClass && notifySetup ? (
-      <Fragment key="notify">{notifySetup({ classShort })}</Fragment>
+    fullscreen && hasSubject && notifySetup ? (
+      <Fragment key="notify">{notifySetup({ subjectShort })}</Fragment>
     ) : null,
   ].filter(Boolean);
 
@@ -1809,7 +1834,7 @@ export function TimetableCalendar({
           //! sor csak nyomtatásban jelenik meg, és pontosan ezt mondja meg. */}
       {fullscreen && (
         <p className="hidden pb-2 text-[15px] font-bold text-foreground print:block">
-          {view.resolvedClass?.name ?? view.resolvedClass?.short ?? "Órarend"}
+          {view.subject?.name ?? view.subject?.short ?? "Órarend"}
           <span className="ml-2 font-medium text-muted-strong">
             {weekLabel(weekStart)}
           </span>
@@ -1918,28 +1943,35 @@ export function TimetableCalendar({
               //! a betűre ugrást és a natív keresést — ezt egy egyedi lista sem
               //! adja vissza. A megjelenést a `appearance-none` + saját nyíl
               //! tartja a többi eszköztár-gombbal egy sorban. */}
-            {classes.length > 0 && (
+            {subjects.length > 0 && (
               <div className="relative shrink-0">
                 <select
-                  aria-label="Osztály"
-                  value={selectedClass || ""}
+                  aria-label={words.oneCapital}
+                  value={selectedSubject || ""}
                   disabled={pending}
                   onChange={(event) => load(weekStart, event.target.value)}
                   className={cn(
-                    "h-9 w-[104px] touch-target appearance-none rounded-full border border-input bg-transparent py-1 pr-7 pl-3 text-sm transition-colors outline-none",
+                    "h-9 touch-target appearance-none rounded-full border border-input bg-transparent py-1 pr-7 pl-3 text-sm transition-colors outline-none",
+                    //! AZ OSZTÁLYNÉV HÁROM BETŰ, A TANÁRÉ EGY EGÉSZ NÉV. Fix
+                    //! szélességen a „Baranyainé Beck Gabriella" a nyíl alá
+                    //! csúszna — a tanári választó ezért szélesebb, de nem
+                    //! korlátlan: a sáv többi vezérlője nem szorulhat ki.
+                    mode === "teacher"
+                      ? "w-[150px] max-w-[42vw] sm:w-[190px]"
+                      : "w-[104px]",
                     "hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
                     "disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
-                    //* Placeholder-állapot: a „Osztály" felirat halványabb, mint egy
-                    //* valódi választás — különben kiválasztottnak látszana.
-                    !selectedClass && "text-muted-foreground",
+                    //* Placeholder-állapot: a „Osztály"/„Tanár" felirat halványabb,
+                    //* mint egy valódi választás — különben kiválasztottnak látszana.
+                    !selectedSubject && "text-muted-foreground",
                   )}
                 >
-                  {!selectedClass && (
+                  {!selectedSubject && (
                     <option value="" disabled>
-                      Osztály
+                      {words.oneCapital}
                     </option>
                   )}
-                  {classes.map((c) => (
+                  {subjects.map((c) => (
                     <option key={c.short} value={c.short}>
                       {c.name}
                     </option>
@@ -2122,7 +2154,7 @@ export function TimetableCalendar({
       {/* Rács / állapotok */}
       {/*//! A SORREND SZÁMÍT. Az osztály hiánya a leggyakoribb ok, de NEM az
           //! egyetlen: ha a mentett osztály közben megszűnt, vagy a forrás áll,
-          //! akkor a `resolvedClass` is üres marad — a semleges „válassz
+          //! akkor a `subject` is üres marad — a semleges „válassz
           //! osztályt” felirat ilyenkor elhallgatná a valódi okot. Ezért előbb
           //! a nevesített hiba jön, és csak utána a felszólítás. */}
       {!view.ok && view.error && view.error.kind !== "no-class" ? (
@@ -2131,15 +2163,15 @@ export function TimetableCalendar({
           pending={pending}
           onRetry={() => load(weekStart)}
         />
-      ) : !hasClass && classes.length === 0 && classesError ? (
+      ) : !hasSubject && subjects.length === 0 && subjectsError ? (
         //* Nincs mit választani, mert a lista sem jött meg — a forrás hibája.
         <CalendarError
-          error={classesError}
+          error={subjectsError}
           pending={pending}
           onRetry={() => load(weekStart)}
         />
-      ) : !hasClass ? (
-        <ChoosePrompt hasClasses={classes.length > 0} />
+      ) : !hasSubject ? (
+        <ChoosePrompt mode={mode} hasSubjects={subjects.length > 0} />
       ) : !view.ok ? (
         <CalendarError
           error={view.error}
@@ -2409,7 +2441,7 @@ export function TimetableCalendar({
               )}
             >
               <motion.div
-                key={`${weekStart}-${selectedClass}`}
+                key={`${weekStart}-${selectedSubject}`}
                 //! Ahol view transition fut, ott EZ NEM: két belépő mozdulat
                 //! egymáson zajos. A Motion marad a tartalék (Firefox, beágyazott
                 //! nézet), a morf pedig az elsődleges.
@@ -2773,6 +2805,7 @@ export function TimetableCalendar({
       {focus && (
         <LessonSheet
           target={focus}
+          mode={mode}
           morph={canMorph}
           onClose={closeFocus}
           onUndoMerge={undoByIdentity}
@@ -2904,14 +2937,24 @@ function max(values: number[]): number | null {
   return values.length ? Math.max(...values) : null;
 }
 
-function ChoosePrompt({ hasClasses }: { hasClasses: boolean }) {
+function ChoosePrompt({
+  mode,
+  hasSubjects,
+}: {
+  mode: TimetableSubjectKind;
+  hasSubjects: boolean;
+}) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-16 text-center">
       <CalendarDays className="size-8 text-muted-foreground" aria-hidden />
       <p className="max-w-sm text-pretty text-sm text-muted-strong">
-        {hasClasses
-          ? "Válaszd ki az osztályod a jobb felső sarokban, és megjelenik az órarend."
-          : "Nincs beállítva az osztályod, és az osztálylista sem érhető el most."}
+        {mode === "teacher"
+          ? hasSubjects
+            ? "Válaszd ki a nevedet a jobb felső sarokban, és megjelenik az órarended."
+            : "Nincs kiválasztva tanár, és a tanárlista sem érhető el most."
+          : hasSubjects
+            ? "Válaszd ki az osztályod a jobb felső sarokban, és megjelenik az órarend."
+            : "Nincs beállítva az osztályod, és az osztálylista sem érhető el most."}
       </p>
     </div>
   );

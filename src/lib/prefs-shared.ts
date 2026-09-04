@@ -1,4 +1,9 @@
-import { CLASS_MAX_LENGTH, looksLikeClass } from "./known-class";
+import {
+  CLASS_MAX_LENGTH,
+  looksLikeClass,
+  looksLikeTeacher,
+  TEACHER_MAX_LENGTH,
+} from "./known-class";
 import { VIEW_ROUTES, type ViewRoute } from "./last-view";
 
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -27,11 +32,17 @@ import { VIEW_ROUTES, type ViewRoute } from "./last-view";
 export type SyncedPrefs = {
   /** A legutóbb választott osztály. */
   class: string | null;
-  /** Melyik nézetben járt utoljára (`/orarend` vagy `/ma`). */
+  //! A TANÁRI VÁLASZTÁS KÜLÖN MEZŐ, NEM AZ OSZTÁLY HELYÉN. Egy tanár is
+  //! megnézhet osztály-órarendet (és meg is fogja: a saját osztályáét), tehát
+  //! a két emlék nem zárja ki egymást — egy közös mezőben az utolsó megnyitás
+  //! törölné a másikat.
+  /** A legutóbb választott tanár rövid jele (`/tanari`). */
+  teacher: string | null;
+  /** Melyik nézetben járt utoljára (`/orarend`, `/ma` vagy `/tanari`). */
   lastView: ViewRoute | null;
-  /** Összevont csoportbontások osztályonként (`orarend:merge-prefs:v1`). */
+  /** Összevont csoportbontások alanyonként (`orarend:merge-prefs:v1`). */
   merge: Record<string, MergePrefEntry[]>;
-  /** Duális beosztás osztályonként (`orarend:dual-schedule:v1`). */
+  /** Duális beosztás alanyonként (`orarend:dual-schedule:v1`). */
   dual: Record<string, DualScheduleEntry>;
 };
 
@@ -54,6 +65,7 @@ export type DualScheduleEntry = {
 
 export const EMPTY_PREFS: SyncedPrefs = {
   class: null,
+  teacher: null,
   lastView: null,
   merge: {},
   dual: {},
@@ -65,9 +77,9 @@ export const EMPTY_PREFS: SyncedPrefs = {
 //! kérés meg tudná tölteni az adatbázist. A számok bőven a valós használat
 //! fölött vannak: aki tíz osztályt nézeget, észre sem veszi őket.
 
-/** Hány osztályhoz tartozhat mentett beállítás. */
+/** Hány alanyhoz (osztály + tanár) tartozhat mentett beállítás. */
 const MAX_CLASSES = 24;
-/** Hány összevonási döntés lehet egy osztályon belül. */
+/** Hány összevonási döntés lehet egy alanyon belül. */
 const MAX_MERGE_PER_CLASS = 80;
 /** Egy azonosító legnagyobb hossza. A valódiak jóval 200 alattiak. */
 const MAX_IDENTITY_LENGTH = 512;
@@ -92,6 +104,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 //! ilyenkor a diák saját, korábban érvényes beállítását dobná el.
 function isClassKey(value: string): boolean {
   return value.length <= CLASS_MAX_LENGTH && looksLikeClass(value);
+}
+
+//! ─── A KULCSTÉR MÁSODIK FELE ───────────────────────────────────────────────
+//! A `/tanari` óta ugyanezekben a tárolókban tanári bejegyzések is állnak,
+//! `tanar:` előtaggal (lásd `subjectStoreKey`). Az előtag nem díszítés: ez az,
+//! ami miatt itt nem kell „vagy osztálynak, vagy tanárnak látszik" alapon
+//! dönteni — a kulcs MEGMONDJA, melyik névtérbe tartozik, és mindkét felére
+//! ugyanolyan szigorú alak-ellenőrzés jár, mint eddig az osztálynévre.
+const TEACHER_KEY_PREFIX = "tanar:";
+
+function isSubjectKey(value: string): boolean {
+  if (value.startsWith(TEACHER_KEY_PREFIX)) {
+    return looksLikeTeacher(value.slice(TEACHER_KEY_PREFIX.length));
+  }
+  return isClassKey(value);
 }
 
 function sanitizeIdentity(value: unknown): string | null {
@@ -143,6 +170,15 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
       ? input.class
       : null;
 
+  //* A tanári emlék a NYERS rövid jel (előtag nélkül) — a `tanar:` névtér a
+  //* tárolók kulcsaié, nem ezé a mezőé.
+  const teacher =
+    typeof input.teacher === "string" &&
+    input.teacher.length <= TEACHER_MAX_LENGTH &&
+    looksLikeTeacher(input.teacher)
+      ? input.teacher
+      : null;
+
   const lastView = VIEW_ROUTES.includes(input.lastView as ViewRoute)
     ? (input.lastView as ViewRoute)
     : null;
@@ -151,7 +187,7 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
   if (isRecord(input.merge)) {
     for (const [key, value] of Object.entries(input.merge)) {
       if (Object.keys(merge).length >= MAX_CLASSES) break;
-      if (!isClassKey(key)) continue;
+      if (!isSubjectKey(key)) continue;
       const list = sanitizeMergeList(value);
       //* Üres listát nem tárolunk: az „nincs beállítás", nem „beállítás, ami
       //* üres" — a különbség a `timetable-merge.ts` oldalán számít.
@@ -163,7 +199,7 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
   if (isRecord(input.dual)) {
     for (const [key, value] of Object.entries(input.dual)) {
       if (Object.keys(dual).length >= MAX_CLASSES) break;
-      if (!isClassKey(key)) continue;
+      if (!isSubjectKey(key)) continue;
       const schedule = sanitizeDual(value);
       //! AZ ÜRES BEOSZTÁS ÉRVÉNYES ÉRTÉK, és ezért marad meg. „Nincs duális
       //! napom" nem ugyanaz, mint „még nem állítottam be": az elsőnél a rács
@@ -172,13 +208,14 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
     }
   }
 
-  return { class: cls, lastView, merge, dual };
+  return { class: cls, teacher, lastView, merge, dual };
 }
 
 /** Van-e egyáltalán mit szinkronizálni. Üres beállítást nem töltünk fel. */
 export function hasAnyPrefs(prefs: SyncedPrefs): boolean {
   return (
     prefs.class !== null ||
+    prefs.teacher !== null ||
     prefs.lastView !== null ||
     Object.keys(prefs.merge).length > 0 ||
     Object.keys(prefs.dual).length > 0

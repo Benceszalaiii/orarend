@@ -18,6 +18,7 @@ import {
   EMPTY_DUAL_SCHEDULE,
   hasAnyDualDay,
 } from "@/lib/dual-schedule";
+import type { TimetableSubjectKind } from "@/lib/timetable";
 import { cn } from "@/lib/utils";
 
 //* ---------------------------------------------------------------------------
@@ -35,17 +36,22 @@ import { cn } from "@/lib/utils";
 //! színt kapja: a rácson látható duális blokkoknak legyen egy megnevezett oka
 //! a sávban is — különben úgy néz ki, mintha az órarend találná ki őket.
 export function DualSetupButton({
+  mode = "class",
   schedule,
   weekLetter,
-  classShort,
+  subjectShort,
   onChange,
   className,
 }: {
-  /** `null` = ez az osztály még nincs beállítva. */
+  //* Kinek a beosztása — ettől függ, mit MOND a párbeszéd; a rács és a
+  //* tárolás mindkét ágon ugyanaz.
+  mode?: TimetableSubjectKind;
+  /** `null` = ez az alany még nincs beállítva. */
   schedule: DualSchedule | null;
   /** A NÉZETT hét jelölése a forrásból (`"A"` / `"B"`), vagy üres. */
   weekLetter: string;
-  classShort: string;
+  /** Az ÉPPEN nézett osztály vagy tanár jele. */
+  subjectShort: string;
   onChange: (next: DualSchedule) => void;
   className?: string;
 }) {
@@ -96,19 +102,22 @@ export function DualSetupButton({
           <DialogHeader>
             <DialogTitle>Mikor vagy duálison?</DialogTitle>
             <DialogDescription className="text-pretty">
-              Koppints azokra a napokra, amelyeket a munkahelyen töltesz — azok
-              a napok nem az osztály órarendjét mutatják. A duális blokk
-              kéthetente ismétlődik, ezért az A és a B hetet külön kell megadni;
-              hogy melyik hét van éppen, azt a suli rendszeréből tudjuk.
-              {classShort && (
-                //* A beosztás osztályonként külön áll (lásd `dual-schedule.ts`) —
-                //* az osztályváltó pedig itt, ugyanebben a sávban ül: ki kell
-                //* mondani, MELYIK osztályra vonatkozik, amit most beállít.
+              {mode === "teacher"
+                ? //! A TANÁRNÁL A KÉRDÉS UGYANAZ, A KÖVETKEZMÉNY MÁS. A duális
+                  //! nap nem „az osztály órarendje helyett" áll: azon a napon a
+                  //! tanárnak nincs órája a rácson, mert a képzés a
+                  //! munkahelyen folyik.
+                  "Koppints azokra a napokra, amelyeken nem az iskolai órarended szerint dolgozol — azokra a napokra a rács nem tanórákat mutat. A duális blokk kéthetente ismétlődik, ezért az A és a B hetet külön kell megadni; hogy melyik hét van éppen, azt a suli rendszeréből tudjuk."
+                : "Koppints azokra a napokra, amelyeket a munkahelyen töltesz — azok a napok nem az osztály órarendjét mutatják. A duális blokk kéthetente ismétlődik, ezért az A és a B hetet külön kell megadni; hogy melyik hét van éppen, azt a suli rendszeréből tudjuk."}
+              {subjectShort && (
+                //* A beosztás alanyonként külön áll (lásd `dual-schedule.ts`) —
+                //* a választó pedig itt, ugyanebben a sávban ül: ki kell
+                //* mondani, MIRE vonatkozik, amit most beállít.
                 <>
                   {" "}
                   A beállítás a(z){" "}
                   <span className="font-medium text-foreground">
-                    {classShort}
+                    {subjectShort}
                   </span>{" "}
                   órarendjére vonatkozik.
                 </>

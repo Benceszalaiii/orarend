@@ -32,6 +32,19 @@
   --spacing: 0.25rem;
   --brand: oklch(0.565 0.22 27.5);
   --brand-foreground: oklch(1 0 0);
+  /*//! A KOBALT FELÜLET SZÖVEGE SÖTÉT — MÉRVE, NEM ÉRZÉSRE. A `--primary`
+      //! (#1C9CF0) FEHÉRREL mindössze 2,97:1-et ad; a WCAG a törzsszöveghez
+      //! 4,5:1-et, a nagy szöveghez 3:1-et kér. Vagyis egy egész kobalt sávon
+      //! a fehér szöveg megbukik, és 78%-os fehérrel (a szokásos „halványabb
+      //! másodlagos sor") már 2,36:1-nél tart.
+      //! Ez a token az ELLENKEZŐ irányt választja: a kobalt marad, a szöveg
+      //! sötétedik. Teljes erővel 6,2:1, 85%-on 5,0:1 — mindkettő átmegy.
+      //*
+      //! MIÉRT NEM A `--primary-foreground`-OT ÍRJUK ÁT? Mert az a GOMBOK
+      //! szövege az egész alkalmazásban; egy globális csere minden lapot
+      //! átfestene. Ez a token kizárólag azt mondja ki, mi kerül egy kobalt
+      //! FELÜLETRE — a nyitólap sávjára és a kobalt kitöltésű gombokra. */
+  --ink-on-primary: oklch(0.19 0.055 250);
   /*! A HERO-FELÜLET. Ugyanaz a szótár, mint a jedlik-szakkor kezdőlapján: a
      hero nem külön festett sáv, hanem a lap alapja EGY megvilágított jelenettel
      — a címer fénytere. A piros (`--brand`) kizárólag élő és cselekvő
@@ -66,6 +79,7 @@
   --ring: oklch(0.6818 0.1584 243.354);
   --brand: oklch(0.5856 0.228 27.56);
   --brand-foreground: oklch(1 0 0);
+  --ink-on-primary: oklch(0.19 0.055 250);
   --hero: var(--background);
   --hero-foreground: var(--foreground);
   --hero-crest-glow: oklch(0.45 0.16 258 / 0.55);
@@ -91,6 +105,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+  --color-ink-on-primary: var(--ink-on-primary);
   --color-hero: var(--hero);
   --color-hero-foreground: var(--hero-foreground);
   --color-border: var(--border);
@@ -152,6 +167,32 @@
 @layer utilities {
   .text-muted-strong {
     color: color-mix(in oklab, var(--foreground) 70%, transparent);
+  }
+
+  /*//! ─── A LEBEGŐ VÁLTÓ SAJÁT SZÍNVILÁGA ────────────────────────────────
+      //! A lap `colorScheme: "dark"`-kal fut, tehát a felület MINDEN vezérlője
+      //! abból indul ki, hogy sötét alapon áll. A nyitólap viszont meleg
+      //! papírral nyit: ott a majdnem fehér `--foreground` és a sötétkék
+      //! `--input` keret pontosan a hiba, amit a `/home` váltóján lehetett
+      //! látni — a két nézetpirula és a „Belépés" beleolvadt a háttérbe.
+      //*
+      //! EZ NEM EGY MÁSODIK TÉMA, HANEM EGY ZÁRT DOBOZ. Nem a `.dark`
+      //! változatot bolygatjuk meg (az az egész alkalmazásé), hanem
+      //! újraértelmezzük azt a néhány tokent A VÁLTÓ BELSEJÉBEN, amiből a
+      //! benne álló vezérlők élnek: így a `site-nav`, az `AccountMenu` és a
+      //! `Button` kódja változatlan marad, a váltó mégis helyes marad
+      //! papíron, kobalton és éjszakai felületen is.
+      //! A `--background` az AKTÍV pirula BETŰJE (`bg-foreground
+      //! text-background`), ezért kell sötétnek maradnia. */
+  .nav-glass {
+    --foreground: oklch(0.985 0 0);
+    --background: oklch(0.18 0.014 250);
+    --muted: oklch(1 0 0 / 0.16);
+    --muted-foreground: oklch(1 0 0 / 0.7);
+    --border: oklch(1 0 0 / 0.18);
+    --input: oklch(1 0 0 / 0.24);
+    --ring: oklch(0.78 0.14 244);
+    color: var(--foreground);
   }
 
   .pt-header {
@@ -466,7 +507,8 @@
       //! is ott állna, amikor nincs alatta semmi — a lap tetején egy üres
       //! vonalat húzva. Ehelyett a réteg alsó pereme egy rövid, halványuló
       //! sávban olvad a tartalomba: pontosan ott van jelen, ahol takar. */
-  .ma-chrome::after {
+  .ma-chrome::after,
+  .ma-chrome-tail:has(.ma-now-bar)::after {
     content: "";
     position: absolute;
     inset-inline: 0;
@@ -480,32 +522,73 @@
     );
   }
 
+  /*//! A „MOST" SOR A FEJLÉC KILÓGÓ PEREME — UGYANAZ AZ ANYAG, KÜLÖN DOBOZ.
+      //! A sor a fejléc alá van akasztva (`absolute`), hogy a megjelenése ne
+      //! rendezze át a lapot; ettől viszont kikerül a fejléc HÁTTERE alól is,
+      //! és a saját anyagát kell hordoznia — különben a szöveg csupaszon
+      //! feküdne a mögötte gördülő órákon.
+      //*
+      //* Amíg nincs sor, ez a doboz nulla magas: nincs mit befestenie. */
+  .ma-chrome-tail {
+    background-color: color-mix(in oklab, var(--background) 68%, transparent);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  /*//! EGY ÉL, NEM KETTŐ. A halványuló perem a lebegő réteg ALJÁN van a helyén.
+      //! Amikor a sor kinyílik, a réteg alja lejjebb kerül: a fejléc pereme
+      //! ilyenkor átadja a helyét a soréinak, különben egy második halvány
+      //! sáv húzódna végig a napsáv és a sor KÖZÖTT. */
+  .ma-chrome:has(.ma-now-bar)::after {
+    display: none;
+  }
+
   /*//! ÁTTETSZŐSÉG NÉLKÜL: TÖMÖR, NEM ELMOSOTT. Akinek a rendszere kevesebb
       //! áttetszőséget kér, annak a homályos réteg nem finomabb, hanem
       //! olvashatatlanabb — ilyenkor a fejléc egyszerűen tömör felület lesz,
       //! és megkapja azt a vonalat, amit az él helyett hordozott. */
   @media (prefers-reduced-transparency: reduce) {
-    .ma-chrome {
+    .ma-chrome,
+    .ma-chrome-tail {
       background-color: var(--background);
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
+    }
+    .ma-chrome {
       border-bottom-color: var(--border);
     }
     .ma-chrome::after {
       display: none;
     }
+    /*//* Tömör alakban a perem VONAL — és abból is egy kell: a réteg alján.
+        //* Nyitott sornál a fejléc vonala a soré alá kerül. */
+    .ma-chrome:has(.ma-now-bar) {
+      border-bottom-color: transparent;
+    }
+    .ma-chrome-tail:has(.ma-now-bar) {
+      border-bottom: 1px solid var(--border);
+    }
   }
   /*//* Nagy kontraszt: tömör alap, kimondott keret — a lebegés itt nem ér
       //* annyit, mint az elhatárolás. */
   @media (prefers-contrast: more) {
-    .ma-chrome {
+    .ma-chrome,
+    .ma-chrome-tail {
       background-color: var(--background);
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
+    }
+    .ma-chrome {
       border-bottom-color: var(--foreground);
     }
     .ma-chrome::after {
       display: none;
+    }
+    .ma-chrome:has(.ma-now-bar) {
+      border-bottom-color: transparent;
+    }
+    .ma-chrome-tail:has(.ma-now-bar) {
+      border-bottom: 1px solid var(--foreground);
     }
   }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Fingerprint, LogOut, RefreshCw, User } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -9,12 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  authClient,
-  signInWithSchool,
-  signOut,
-  useSession,
-} from "@/lib/auth-client";
+import { authClient, signOut, useSession } from "@/lib/auth-client";
 import { forgetSyncState } from "@/lib/prefs-sync";
 import { cn } from "@/lib/utils";
 
@@ -57,43 +53,33 @@ export function AccountMenu({ className }: { className?: string }) {
       setBusy={setBusy}
     />
   ) : (
-    <SignedOut
-      className={className}
-      busy={busy}
-      onSignIn={() => {
-        setBusy(true);
-        //! ODA TÉRÜNK VISSZA, AHONNAN ELINDULT. A belépés nem egy külön
-        //! „állomás", amin át kell menni — a diák ugyanazt a lapot kapja
-        //! vissza, amit nézett, csak már a saját beállításaival.
-        void signInWithSchool(pathname || "/orarend").finally(() =>
-          setBusy(false),
-        );
-      }}
-    />
+    //! ODA TÉRÜNK VISSZA, AHONNAN ELINDULT. A belépés nem egy külön „állomás",
+    //! amin át kell menni — a diák ugyanazt a lapot kapja vissza, amit nézett,
+    //! csak már a saját beállításaival.
+    <SignedOut className={className} next={pathname || "/orarend"} />
   );
 }
 
-function SignedOut({
-  className,
-  busy,
-  onSignIn,
-}: {
-  className?: string;
-  busy: boolean;
-  onSignIn: () => void;
-}) {
+//! A SÁVBAN LÉVŐ GOMB NEM KÉR JELSZÓT — ÁTVISZ ODA, AHOL KÉRÜNK. Ez tudatos:
+//! iskolai jelszót kizárólag a `/belepes` lapon gépel be a diák, egy saját
+//! címen, ahol a böngésző címsora és a jelszókezelője is látszik. Egy sávból
+//! kinyíló, jelszót kérő buborék pont azt a szokást alakítaná ki, amire az
+//! adathalászat épül — és a jelszókezelő sem ismerné fel megbízhatóan.
+function SignedOut({ className, next }: { className?: string; next: string }) {
   return (
     <Button
-      type="button"
+      asChild
       variant="ghost"
       size="sm"
-      disabled={busy}
-      onClick={onSignIn}
       className={cn("h-9 shrink-0 touch-target gap-1.5 px-2.5", className)}
-      title="Belépés az iskolai fiókkal — a beállításaid átjönnek a többi eszközödre"
     >
-      <User className="size-4" aria-hidden />
-      <span className="text-xs font-medium max-sm:sr-only">Belépés</span>
+      <Link
+        href={`/belepes?tovabb=${encodeURIComponent(next)}`}
+        title="Belépés az iskolai fiókkal — a beállításaid átjönnek a többi eszközödre"
+      >
+        <User className="size-4" aria-hidden />
+        <span className="text-xs font-medium max-sm:sr-only">Belépés</span>
+      </Link>
     </Button>
   );
 }
@@ -186,8 +172,10 @@ function SignedIn({
 //! ─── PASSKEY FELVÉTELE ──────────────────────────────────────────────────────
 //! A passkey NEM a bejárat, hanem a rövidebb út: csak bejelentkezett
 //! felhasználó veheti fel, tehát az iskolai fiók marad az egyetlen módja annak,
-//! hogy valaki egyáltalán bekerüljön. Cserébe legközelebb nem kell végigmennie
-//! a Microsoft-átirányításon — egy ujjlenyomat elég.
+//! hogy valaki egyáltalán bekerüljön. Cserébe legközelebb nem kell begépelnie
+//! az iskolai jelszavát — egy ujjlenyomat elég. Ez nem csak kényelem: minden
+//! passkey-s belépés EGGYEL KEVESEBB alkalom, amikor az iskolai jelszó
+//! egyáltalán előkerül.
 function PasskeyRow({
   busy,
   setBusy,

@@ -197,13 +197,13 @@ export function DesignPage() {
     return () => document.removeEventListener("visibilitychange", onShow);
   }, [focusKey, selectedClass, load]);
 
-  const classShort = view?.resolvedClass?.short ?? selectedClass;
+  const classShort = view?.subject?.short ?? selectedClass;
 
   //! MELYIK OSZTÁLYT NÉZIK — ÉS SEMMI MÁST. Csak a FELOLDOTT osztályt jelezzük:
   //! a `selectedClass` még lehet elgépelt vagy ismeretlen, azt nincs értelme
   //! beleszámolni. A deduplikáció (osztályonként naponta egyszer eszközönként) a
   //! `reportClassUse`-ban van.
-  const resolvedShort = view?.resolvedClass?.short;
+  const resolvedShort = view?.subject?.short;
   useEffect(() => {
     reportClassUse(resolvedShort);
   }, [resolvedShort]);
@@ -212,7 +212,7 @@ export function DesignPage() {
   //! „Tantárgyak" panel sorából kiválasztható, melyik csoportra jár a diák.
   //! Ugyanaz a horog, mint a heti rácson — így a két nézet ugyanabból a
   //! tárolóból dolgozik, és egy itt hozott döntés ott is látszik.
-  const { prefs, choose } = useMergePreferences({ classShort });
+  const { prefs, choose } = useMergePreferences({ storeKey: classShort });
 
   //! A DUÁLIS BEOSZTÁS A DIÁKÉ, NEM SZABÁLYÉ. Amíg nincs beállítva (`null`), a
   //! lap egyetlen napot sem nyilvánít duálissá — inkább mutasson egy fölösleges
