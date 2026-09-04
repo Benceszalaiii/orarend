@@ -14,19 +14,12 @@ import { forgetSyncState, syncPrefs } from "@/lib/prefs-sync";
 //!
 //! MIKOR FUT:
 //!   1. amikor kiderül, hogy be vagyunk jelentkezve (belépés vagy oldalnyitás),
-//!   2. amikor egy beállítás megváltozik ezen a lapon vagy egy másik fülön,
-//!   3. amikor a lap újra láthatóvá válik (közben másik készüléken állíthattak).
+//!   2. amikor a lap inaktívvá válik, ha előtte beállítás változott,
+//!   3. amikor egy beállítás inaktív lap mellett változik.
 //!
 //! AKI NINCS BEJELENTKEZVE, ANNÁL EGYETLEN SORA SEM FUT LE a hálózat felé —
 //! a lap a fiók nélküli látogatónak pontosan annyiba kerül, mint eddig.
 //! ═══════════════════════════════════════════════════════════════════════════
-
-//! KÉT MÁSODPERC KÉSLELTETÉS. Az osztályválasztó, a csoportbontás-menü és a
-//! duális rács gyors egymásutánban több változást is ír (egy-egy koppintás
-//! mindegyik) — ezekből egyetlen feltöltés legyen, ne öt. Ennél hosszabb
-//! késleltetéssel viszont a „beállítom és becsukom a telefont" eset már
-//! kicsúszna, ezért nem húzzuk tovább.
-const DEBOUNCE_MS = 2000;
 
 export function PrefsSync() {
   const { data: session } = useSession();
@@ -56,9 +49,13 @@ export function PrefsSync() {
 
     let timer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
+    let dirty = false;
+    let syncing = false;
 
     const run = () => {
-      if (disposed) return;
+      if (disposed || syncing || !dirty) return;
+      dirty = false;
+      syncing = true;
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -66,33 +63,39 @@ export function PrefsSync() {
       //! bajt (hálózat, lejárt munkamenet, szerverhiba) állapotként ad vissza,
       //! és egyik sem olyan, amiről a diákot értesíteni kellene: a lap tőle
       //! függetlenül működik. Riasztás helyett a következő kör próbálkozik újra.
-      void syncPrefs(userId, controller.signal);
+      void syncPrefs(userId, controller.signal).finally(() => {
+        syncing = false;
+      });
     };
 
     const schedule = () => {
+      if (syncing) return;
+      dirty = true;
+      if (document.visibilityState !== "hidden") return;
       if (timer) clearTimeout(timer);
-      timer = setTimeout(run, DEBOUNCE_MS);
+      timer = setTimeout(run, 0);
     };
 
     //* Az első kör azonnal fut: ez hozza le a másik készüléken beállítottakat.
+    dirty = true;
     run();
 
     const unsubscribe = onPrefsChanged(schedule);
 
-    //! A LAP ÚJRANYITÁSA IS SZINKRONPONT. A telefonon a PWA napokig a háttérben
-    //! áll; visszatéréskor a legvalószínűbb, hogy közben a gépen állítottak
-    //! valamit. Csak a láthatóvá VÁLÁST figyeljük, az elrejtést nem — kimenet
-    //! nélküli körökkel nem terheljük az akkumulátort.
-    const onVisible = () => {
-      if (document.visibilityState === "visible") schedule();
+    //! A LAP INAKTÍVVÁ VÁLÁSA A KIMENTÉSI PONT. Amíg a diák nézi az oldalt,
+    //! a beállítások csak helyben változnak; amikor háttérbe küldi vagy elhagyja
+    //! a lapot, egyetlen kör feltölti az addig történt változásokat. Utána nincs
+    //! újabb kérés, amíg valamelyik beállítás ismét meg nem változik.
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden" && dirty) run();
     };
-    document.addEventListener("visibilitychange", onVisible);
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       disposed = true;
       if (timer) clearTimeout(timer);
       unsubscribe();
-      document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       abortRef.current?.abort();
       abortRef.current = null;
     };

@@ -1894,7 +1894,12 @@ export function TimetableCalendar({
         {/*//! A NÉZET hasábja. Ugyanaz a mértan, mint a `/ma` sávjának jobb
             //! oldalán (lásd `SITE_BAR_CLUSTER`): a lapváltó a két lapon
             //! ugyanabban a magasságban és ugyanannál az x-nél áll. */}
-        <div className={cn(SITE_BAR_CLUSTER, "lg:order-2")}>
+        <div
+          className={cn(
+            SITE_BAR_CLUSTER,
+            "lg:order-2 max-sm:flex-wrap max-sm:gap-y-2",
+          )}
+        >
           {/*//! A LAPVÁLTÓ MELLETTI VEZÉRLŐK TÖRDELHETNEK, A VÁLTÓ NEM. Az
               //! azóta megszűnt `/dualis` egy 132 px-es tervválasztót és egy
               //! súgógombot is betett ide: 375 px-en ez a csoport 424 px-re hízott, és eddig
@@ -1937,54 +1942,55 @@ export function TimetableCalendar({
             <ExternalLink className="size-3 shrink-0" aria-hidden />
           </a>
           */}
-            {/*//! NATÍV `<select>`, nem buborékos lista. Az osztályválasztó az
+            {trailing}
+          </div>
+          {/*//! NATÍV `<select>`, nem buborékos lista. Az osztályválasztó az
               //! egyetlen vezérlő, amit MINDEN eszközön, sokszor, gyorsan
               //! használnak: mobilon a rendszer saját kerekét kapja, billentyűvel
               //! a betűre ugrást és a natív keresést — ezt egy egyedi lista sem
-              //! adja vissza. A megjelenést a `appearance-none` + saját nyíl
-              //! tartja a többi eszköztár-gombbal egy sorban. */}
-            {subjects.length > 0 && (
-              <div className="relative shrink-0">
-                <select
-                  aria-label={words.oneCapital}
-                  value={selectedSubject || ""}
-                  disabled={pending}
-                  onChange={(event) => load(weekStart, event.target.value)}
-                  className={cn(
-                    "h-9 touch-target appearance-none rounded-full border border-input bg-transparent py-1 pr-7 pl-3 text-sm transition-colors outline-none",
-                    //! AZ OSZTÁLYNÉV HÁROM BETŰ, A TANÁRÉ EGY EGÉSZ NÉV. Fix
-                    //! szélességen a „Baranyainé Beck Gabriella" a nyíl alá
-                    //! csúszna — a tanári választó ezért szélesebb, de nem
-                    //! korlátlan: a sáv többi vezérlője nem szorulhat ki.
-                    mode === "teacher"
-                      ? "w-[150px] max-w-[42vw] sm:w-[190px]"
-                      : "w-[104px]",
-                    "hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                    "disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
-                    //* Placeholder-állapot: a „Osztály"/„Tanár" felirat halványabb,
-                    //* mint egy valódi választás — különben kiválasztottnak látszana.
-                    !selectedSubject && "text-muted-foreground",
-                  )}
-                >
-                  {!selectedSubject && (
-                    <option value="" disabled>
-                      {words.oneCapital}
-                    </option>
-                  )}
-                  {subjects.map((c) => (
-                    <option key={c.short} value={c.short}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden
-                />
-              </div>
-            )}
-            {trailing}
-          </div>
+              //! adja vissza. Asztali nézetben a felső vezérlősorban marad;
+              //! telefonon teljes szélességű második sorba kerül, a site-nav
+              //! alá és jobbra igazítva. */}
+          {subjects.length > 0 && (
+            <div className="relative shrink-0 max-sm:flex max-sm:basis-full max-sm:justify-end max-sm:order-3">
+              <select
+                aria-label={words.oneCapital}
+                value={selectedSubject || ""}
+                disabled={pending}
+                onChange={(event) => load(weekStart, event.target.value)}
+                className={cn(
+                  "h-9 touch-target appearance-none rounded-full border border-input bg-transparent py-1 pr-7 pl-3 text-sm transition-colors outline-none",
+                  //! AZ OSZTÁLYNÉV HÁROM BETŰ, A TANÁRÉ EGY EGÉSZ NÉV. Fix
+                  //! szélességen a „Baranyainé Beck Gabriella" a nyíl alá
+                  //! csúszna — a tanári választó ezért szélesebb, de nem
+                  //! korlátlan: a sáv többi vezérlője nem szorulhat ki.
+                  mode === "teacher"
+                    ? "w-[150px] max-w-[42vw] sm:w-[190px]"
+                    : "w-[104px]",
+                  "hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                  "disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
+                  //* Placeholder-állapot: a „Osztály"/„Tanár" felirat halványabb,
+                  //* mint egy valódi választás — különben kiválasztottnak látszana.
+                  !selectedSubject && "text-muted-foreground",
+                )}
+              >
+                {!selectedSubject && (
+                  <option value="" disabled>
+                    {words.oneCapital}
+                  </option>
+                )}
+                {subjects.map((c) => (
+                  <option key={c.short} value={c.short}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+            </div>
+          )}
           {/*//! A VÁLTÓ A SÁVÉ, NEM A HÍVÓÉ. Amíg a lapok a `trailing`-ben adták
               //! be, a helye a mellé csomagolt tartalomtól függött — az azóta
               //! megszűnt `/dualis` tervválasztója például elé került, és vele
