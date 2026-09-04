@@ -565,7 +565,7 @@ export function GridFilm() {
             //! ér bele a szöveg sávjába. Ugyanaz a fogás, amit a széles
             //! elrendezés is használ, csak ott vízszintesen. */}
         <div className="film-camera absolute inset-0" inert>
-          <div className="film-lens">
+          <div className="film-lens antialiased ">
             <WeekGrid />
           </div>
         </div>
@@ -580,7 +580,7 @@ export function GridFilm() {
           <div className="film-ink absolute inset-0 bg-card" />
         </div>
 
-        <div className="film-vignette pointer-events-none absolute inset-x-0 top-0 h-[100lvh]" />
+        <div className="film-vignette  pointer-events-none absolute inset-x-0 top-0 h-[100lvh]" />
       </div>
 
       {/*//! A SZÖVEG A SZÍNPAD FÖLÉ KERÜL, NEM ALÁ. A ragadós színpad a
