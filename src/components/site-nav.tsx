@@ -64,25 +64,14 @@ const ROUTES: readonly NavRoute[] = [
     short: "Progresszív",
     title: "Progresszív mód — a mai nap egy képernyőn",
   },
+  {
+    href: "/tanari",
+    label: "Tanári",
+    short: "Tanári",
+    title: "Tanári órarend",
+  }
 ];
 
-//! ─── A TANÁRI NÉZET NEM MINDENKINEK NÉZET ──────────────────────────────────
-//! A `/tanari` ugyanaz a rács, más alannyal: a tanárnak azt mondja meg, hova
-//! kell mennie. A diáknak viszont SEMMIT nem mond — egy állandó harmadik
-//! pirula neki csak egy zsákutca, amit egyszer megnyom, és soha többé.
-//!
-//! Ezért a váltó ezt a pirulát CSAK ott mutatja, ahol tényleg nézet:
-//!   • aki iskolai belépéssel jött, és az iskola rendszere tanárnak mondja;
-//!   • aki éppen a `/tanari` lapon áll (különben a váltó eltakarná előle,
-//!     hogy hol van, és nem lenne mivel visszalépni).
-//* A tanári lap ettől függetlenül közvetlen címmel is elérhető: a pirula
-//* megjelenése kényelem, nem jogosultság — órarendet amúgy is bárki megnéz.
-const TEACHER_ROUTE: NavRoute = {
-  href: "/tanari",
-  label: "Tanári",
-  short: "Tanári",
-  title: "Tanári órarend — kinek hol kell lennie",
-};
 
 //! ─── A VÁLTÓ KÉT FELÜLETEN ÉL ──────────────────────────────────────────────
 //! `bar`: a váltó egy MÁR SÖTÉT eszköztárban ül (`/orarend`, `/ma`, `/design`).
@@ -113,9 +102,7 @@ export function SiteNav({
   //* A munkamenetet a sáv fiókgombja (`AccountMenu`) úgyis lekéri — ez ugyanaz
   //* a megosztott állapot, nem egy második kérés.
   const { data: session } = useSession();
-  const showTeacher =
-    pathname === TEACHER_ROUTE.href || session?.user.isTeacher === true;
-  const routes = showTeacher ? [...ROUTES, TEACHER_ROUTE] : ROUTES;
+  const routes = ROUTES;
 
   //! A VÁLTÓ AZ EGYETLEN HELY, AHOL MINDEN NÉZET ÁTMEGY — ezért itt jegyezzük
   //! meg, melyiket nézte utoljára a diák, hogy a `/` oda vigyen vissza. Csak a
