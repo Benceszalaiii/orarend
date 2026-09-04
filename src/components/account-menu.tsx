@@ -137,7 +137,6 @@ function SignedIn({
       <PopoverContent align="end" className="w-64 p-0">
         <div className="flex flex-col gap-0.5 border-b border-border px-3 py-2.5">
           <p className="truncate text-sm font-medium text-foreground">{name}</p>
-          <p className="truncate text-xs text-muted-foreground">{email}</p>
         </div>
 
         <div className="flex flex-col p-1">
