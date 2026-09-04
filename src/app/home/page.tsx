@@ -28,7 +28,7 @@ export default async function Page() {
         className="fixed top-[calc(env(safe-area-inset-top)+0.75rem)] right-[calc(env(safe-area-inset-right)+0.75rem)] z-50 sm:top-4 sm:right-4"
       />
       <GridFilm />
-{/* <Latest/> */}
+      <Latest />
       <Cta />
       <SiteFooter />
     </main>

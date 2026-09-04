@@ -125,6 +125,15 @@
       //* megszólalni, nem a törzsbetű. */
   --font-script: var(--font-petit-formal-script), cursive;
 
+  /*//! A KIJELZŐBETŰ BE VOLT TÖLTVE, DE NEM VOLT BEJELENTVE. A `next/font`
+      //! feltette a Lexendet a `<html>`-re, a nyitólap kobalt sávja pedig egy
+      //! `font-jakarta-sans` osztályt írt ki rá — csakhogy a Tailwind v4 a
+      //! betűcsalád-osztályokat EBBŐL a blokkból generálja, és itt nem volt
+      //! ilyen kulcs. Az osztály tehát nem létezett, a cím némán a rendszer
+      //! sans-jével jelent meg: a 166 kB-os betűt letöltöttük és nem
+      //! használtuk. Ez a kulcs köti össze a kettőt. */
+  --font-display: var(--font-lexend), sans-serif;
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { AccountMenu } from "@/components/account-menu";
-import { useSession } from "@/lib/auth-client";
 import { isViewRoute, saveLastView, type ViewRoute } from "@/lib/last-view";
 import { cn } from "@/lib/utils";
 
@@ -64,14 +63,17 @@ const ROUTES: readonly NavRoute[] = [
     short: "Progresszív",
     title: "Progresszív mód — a mai nap egy képernyőn",
   },
+  //! A TANÁRI RÁCS IS NÉZET. Ugyanaz az adat, harmadik kérdésre: nem az, hogy
+  //! egy osztály hol van, hanem hogy a TANÁRNAK hol kell lennie. Bejelentkezés
+  //! nem feltétele — az órarend amúgy is nyilvános —, ezért a pirula
+  //! mindenkinek ott áll, ahogy a másik kettő is.
   {
     href: "/tanari",
     label: "Tanári",
     short: "Tanári",
-    title: "Tanári órarend",
-  }
+    title: "Tanári órarend — kinek hol kell lennie",
+  },
 ];
-
 
 //! ─── A VÁLTÓ KÉT FELÜLETEN ÉL ──────────────────────────────────────────────
 //! `bar`: a váltó egy MÁR SÖTÉT eszköztárban ül (`/orarend`, `/ma`, `/design`).
@@ -99,10 +101,6 @@ export function SiteNav({
 }) {
   const pathname = usePathname();
   const floating = surface === "floating";
-  //* A munkamenetet a sáv fiókgombja (`AccountMenu`) úgyis lekéri — ez ugyanaz
-  //* a megosztott állapot, nem egy második kérés.
-  const { data: session } = useSession();
-  const routes = ROUTES;
 
   //! A VÁLTÓ AZ EGYETLEN HELY, AHOL MINDEN NÉZET ÁTMEGY — ezért itt jegyezzük
   //! meg, melyiket nézte utoljára a diák, hogy a `/` oda vigyen vissza. Csak a
@@ -163,7 +161,7 @@ export function SiteNav({
           //! designlapé) egyformán kirajzol — ha a gomb a lapokon külön-külön
           //! kerülne be, ugyanaz a néhány pixelnyi elcsúszás állna elő, amit a
           //! váltónál egyszer már megmértünk és kijavítottunk (lásd fentebb). */}
-      {routes.length > 1 ? (
+      {ROUTES.length > 1 ? (
         <nav
           aria-label="Nézetek"
           className={cn(
@@ -173,7 +171,7 @@ export function SiteNav({
             floating ? "p-0" : "border border-input p-0.5 dark:bg-input/30",
           )}
         >
-          {routes.map((route) => {
+          {ROUTES.map((route) => {
             const active = pathname === route.href;
             return (
               <Link

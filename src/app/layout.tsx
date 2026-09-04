@@ -33,7 +33,7 @@ const jakartaSans = localFont({
   display: "swap",
   preload: false,
   fallback: ["sans-serif"],
-  variable: "--font-jakarta-sans",
+  variable: "--font-lexend",
 });
 
 export const metadata: Metadata = {
