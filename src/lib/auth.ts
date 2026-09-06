@@ -240,7 +240,7 @@ export const auth = betterAuth({
       //* tehát sémamódosítást (`bun run db:push`) igényelne, és minden
       //* kérésnél írna az adatbázisba. Kikapcsolva marad: az órarendhez semmit
       //* nem ad, viszont új adatot gyűjtene arról, ki mikor használja a lapot.
-      activityTracking: { enabled: false },
+      activityTracking: { enabled: true },
     }),
   ],
 });
