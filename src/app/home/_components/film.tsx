@@ -11,11 +11,15 @@ import {
   COL_W,
   colCenter,
   colLeft,
+  DAY_END_MIN,
+  DAY_START_MIN,
   DUAL_END_MIN,
   DUAL_START_MIN,
   heightOf,
   NEXT_EVENT,
   NOW_EVENT,
+  NOW_MIN,
+  PERIODS,
   SPLIT_MINE,
   SPLIT_OTHER,
   topOf,
@@ -750,6 +754,47 @@ function Panel({
   );
 }
 
+//! ─── A GÖRGETÉSJELZŐ A CSENGETÉSI REND ──────────────────────────
+//! A jel nem ÚJ tárgy a lapon, hanem a TÁBLA IDŐSÁVJA, elforgatva a hasáb
+//! aljára. A sín a nap ábrázolt sávja (`DAY_START_MIN`–`DAY_END_MIN`), a
+//! rovátkák pedig a `PERIODS` VALÓDI percei — ugyanaz a tömb, amiből a rács az
+//! óravonalait húzza (`week-grid.tsx`). Ezért nem egyenletesek: a 3. és a 4.
+//! óra után tizenöt perc szünet van, a többi után tíz. A sín alján pedig
+//! marad egy szakasz rovátka nélkül: az az utolsó óra hossza — a nap nem az
+//! utolsó becsengetéssel ér véget. Egy szabályos létra ezt nem tudná
+//! kimondani.
+//*
+//! ÉS EZÉRT NINCS RAJTA SZÁM. Nyolc sorszám nyolcvan képponton nyolc olvashatatlan
+//! pöttyöt adna, a kontrasztszabályt pedig megbukná. A jelentést a rovátkák
+//! RITMUSA hordozza, nem egy felirat.
+const DAY_SPAN = DAY_END_MIN - DAY_START_MIN;
+
+//* Egy perc helye a sínen, arányosan — pontosan az a számítás, amit a tábla a
+//* `topOf()`-fal képpontban végez.
+const railAt = (min: number) => (min - DAY_START_MIN) / DAY_SPAN;
+
+//! A JELÖLŐ A RÁCS „MOST" VONALA, NEM EGY ÚJ JEL. Egy pont, mellette egy
+//! hajszálvonal — szó szerint az, amit a `week-grid.tsx` húz az aktuális
+//! percnél. A különbség a SZÍNE: a rácson az a vonal `--brand` piros, mert ott
+//! egy VALÓDI perc áll alatta; itt egy nyitóképi díszjel, és a piros ebben a
+//! lapban kizárólag élő és cselekvő szerepben szólal meg (lásd
+//! `globals.css`: `--brand`). A jelölő ezért a lap MÁSIK színét viseli, a
+//! kobaltot — azt, amivé a film a következő mozdulatnál amúgy is válik.
+function BellRail() {
+  return (
+    <span className="film-scroll-day">
+      <span className="film-scroll-spine" />
+      {PERIODS.map((p) => (
+        <span
+          key={p.n}
+          className="film-scroll-bell"
+          style={{ top: `${railAt(p.start) * 100}%` }}
+        />
+      ))}
+    </span>
+  );
+}
+
 export function GridFilm() {
   const { filmRef } = useCamera();
 
@@ -863,19 +908,38 @@ export function GridFilm() {
                   //! elolvasása maga is döntés — a jelnek előbb kell ott
                   //! lennie, mint a mondatnak.
                   //*
-                  //! ÉS NEM NYÍL, HANEM HAJSZÁLVONAL. A lefelé mutató pipa a
+                  //! ÉS NEM NYÍL, HANEM A NAP. A lefelé mutató pipa a
                   //! kategória alapértelmezése, és semmit nem mond arról,
                   //! hogy ez a lap hol tart. A rács SAJÁT jelrendszere
-                  //! viszont épp egy hajszálvonal: az órarend így húzza meg
-                  //! az aktuális percet (lásd a „most" vonalat a
-                  //! `week-grid.tsx`-ben). Ugyanaz a vonal itt lefelé fut
-                  //! végig — a lap a saját nyelvén mondja meg, merre megy.
+                  //! viszont készen áll: egy idősáv, rajta a csengetés
+                  //! rovátkáival, és egy pont, ami az aktuális percet jelöli
+                  //! (lásd a „most" vonalat a `week-grid.tsx`-ben). A jelző
+                  //! ugyanez a sáv, a hasáb aljára forgatva: a pont VÉGIGMEGY
+                  //! a tanítási napon, és amit maga mögött hagy, az kiszínesedik.
+                  //! A lap a saját nyelvén mondja meg, merre megy — és
+                  //! ugyanazzal a mozdulattal azt is, hogy MI van odalent.
+                  //*
+                  //! A KÉT RÉTEG UGYANAZ A SÁV, KÉTSZER. Alul a halvány, meg
+                  //! nem történt nap; fölötte ugyanaz kobalt színben,
+                  //! `clip-path`-tal levágva a jelölő MAGASSÁGÁIG. Így a
+                  //! rovátkák egyesével gyulladnak ki, ahogy a pont elhalad
+                  //! fölöttük — egyetlen elem vágásából, képkockánkénti
+                  //! JavaScript nélkül.
                   //*
                   //* Díszjel: a mondanivalót a bekezdés hordozza, ez csak az
                   //* irányt adja. */}
-              <div className="film-scroll" aria-hidden>
+              <div
+                className="film-scroll"
+                aria-hidden
+                //* A csökkentett mozgás állóképe is mért adat: lásd lentebb.
+                style={{ "--now-f": railAt(NOW_MIN) } as React.CSSProperties}
+              >
                 <span className="film-scroll-rail">
-                  <span className="film-scroll-run" />
+                  <BellRail />
+                  <span className="film-scroll-lit">
+                    <BellRail />
+                  </span>
+                  <span className="film-scroll-now" />
                 </span>
               </div>
             </div>
@@ -1151,7 +1215,7 @@ export function GridFilm() {
             //! csoportbontás közelijéből — a lap legfontosabb képéből — a
             //! 375x812-es kijelzőn semmi nem látszott, mert a műszerlap a
             //! képernyő 65%-át elfoglalta. Az ablak szűkítése ugyanaz a fogás,
-            //! amit a széles elrendezés használ („left: 36%”), csak itt
+            //! amit a széles elrendezés használ („left: 36%"), csak itt
             //! vízszintes osztás helyett vízszintes VÁGÁS.
             //*
             //! ÉS A VÁGÁS LÁGY. Egy éles alsó él úgy nézne ki, mintha a táblát
@@ -1264,55 +1328,162 @@ export function GridFilm() {
           left: 0;
           top: 100%;
           margin-top: 2.5rem;
-          /*//! A SÍN HOSSZA ÉS A FUTÁS HOSSZA EGY SZÁM. A töréspontokon a sín
-              //! rövidül; ha a mozgás útja beírt érték maradna, a fény a rövid
-              //! sínről a ciklus harmadánál kifutna, és onnantól csak a szünet
-              //! menne — ugyanaz a jel máshol MÁS ütemben szólna. Egyetlen
-              //! változó, és a ritmus mindenhol ugyanaz. */
-          --rail-h: 4.5rem;
-          --run-h: 1.35rem;
+          /*//! A SÍN HOSSZA EGYETLEN SZÁM, ÉS MINDEN EBBŐL KÖVETKEZIK. A
+              //! rovátkák arányos helyen ülnek, a jelölő útja a sín magassága,
+              //! az állókép helye pedig ennek a „--now-f"-szerese — a
+              //! töréspontokon tehát elég EZT átírni, a csengetési rend
+              //! ritmusa és az ütem magától követi. Beírt képpontok mellett a
+              //! rövidebb sínen a nap más ütemben telne, mint a hosszabbon. */
+          --rail-h: 5.25rem;
+          /*//* A rovátka hossza és a jelölő szélessége. A rovátka rövid (a
+              //* tábla óravonala is csak megjelöli a percet), a jelölő
+              //* hosszabb: az MUTAT valamerre. */
+          --bell-w: 0.3125rem;
+          --now-w: 0.9375rem;
+          /*//! A MEG NEM TÖRTÉNT NAP ÉS A MEGTÖRTÉNT. A halvány a nyitókép
+              //! saját tintája (ugyanaz a szín, amivel a bekezdés is íródik,
+              //! csak töredék erővel); a kobalt a lap „--primary"-je egy
+              //! árnyalattal mélyítve. Az eredeti kobalt a meleg papíron
+              //! 2,5:1-et ad, ami egy hajszálvonalnak kevés — 0,52-es
+              //! világossággal 4,1:1, és még mindig ugyanaz a kék, ami a
+              //! cím második sorát és a gombot is festi. */
+          --bell-dim: oklch(0.26 0.05 248 / 0.22);
+          --bell-lit: oklch(0.52 0.155 245);
         }
 
-        /*//* A sín maga is halványul lefelé — még mielőtt a futó fény
-            //* elindulna rajta, a vonal már megmondja, melyik vége a cél. */
+        /*//* A sín doboza a jelölő teljes szélessége: a „most" hajszálvonal a
+            //* rovátkákon TÚL nyúlik, tehát nem vághatja le semmi. */
         .film-scroll-rail {
           position: relative;
           display: block;
-          width: 1px;
+          width: var(--now-w);
           height: var(--rail-h);
-          overflow: hidden;
-          background: linear-gradient(
-            180deg,
-            oklch(0.26 0.05 248 / 0.24),
-            oklch(0.26 0.05 248 / 0.05)
-          );
+          /*//! AZ ALAPSZÍN A SÍNEN ÜL, NEM A SÁVON. A kigyúlt réteg a SAJÁT
+              //! sávpéldányát tartalmazza; ha a szín a sávon lenne, az a
+              //! belső példányon visszaírná magát a halványra, és a kobalt
+              //! soha nem jutna el a rovátkákig — a jel némán elveszítené
+              //! a felét. Így a sáv csak OLVASSA a színt, a réteg meg
+              //! felülírja. */
+          --bell-ink: var(--bell-dim);
         }
 
-        /*//! A FUTÓ FÉNY KÉT VÉGE ELHAL. Egy tömör szakasz elindulva-megállva
-            //! kapcsolónak látszik; az elhalványuló végek miatt viszont nem
-            //! egy TÁRGY megy végig a vonalon, hanem a vonal maga világít
-            //! végig — ugyanaz a mozdulat, amit a lap a kamerától kér. */
-        .film-scroll-run {
+        /*//* A sáv két példánya azonos elemekből áll; a színt a szülő adja,
+            //* ezért ugyanaz a jelölés szolgálja a halvány és a kigyúlt
+            //* réteget is. */
+        .film-scroll-day {
+          position: absolute;
+          inset: 0;
+        }
+
+        .film-scroll-spine {
           position: absolute;
           left: 0;
           top: 0;
+          bottom: 0;
           width: 1px;
-          height: var(--run-h);
-          background: linear-gradient(
-            180deg,
-            transparent,
-            oklch(0.26 0.05 248 / 0.8),
-            transparent
-          );
-          /*//* A ciklus nagyobbik fele a futás, a maradék a szünet: enélkül a
-              //* jel nem hívogat, hanem villog. */
-          animation: film-scroll-run 2.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+          background: var(--bell-ink);
         }
 
-        @keyframes film-scroll-run {
-          0% { transform: translateY(calc(var(--run-h) * -1)); }
-          62% { transform: translateY(var(--rail-h)); }
-          100% { transform: translateY(var(--rail-h)); }
+        .film-scroll-bell {
+          position: absolute;
+          left: 0;
+          height: 1px;
+          width: var(--bell-w);
+          background: var(--bell-ink);
+        }
+
+        /*//! A KIGYÚLT RÉTEG NEM MÉRETET VÁLTOZTAT, HANEM VÁGÓDIK. Egy nyúló
+            //! elem a benne ülő rovátkákat is nyújtaná (a nap ritmusa
+            //! menet közben torzulna), és magasságot animálni elrendezést
+            //! számoltat képkockánként. A „clip-path" ugyanezt rajzolásban
+            //! intézi el: a rovátkák a helyükön maradnak, csak láthatóvá
+            //! válnak. */
+        .film-scroll-lit {
+          position: absolute;
+          inset: 0;
+          --bell-ink: var(--bell-lit);
+          clip-path: inset(0 0 100% 0);
+          /*//! EZ AZ EGYETLEN MOZGÁS A LAPON, AMI NEM KAMERA — ÉS EZÉRT NEM IS
+              //! ÚGY LASSUL. Az ease-out-quart (a film saját görbéje) az út
+              //! háromnegyedét az idő első harmadában teszi meg: a pont ESIK,
+              //! aztán megáll. Egy nap viszont TELIK. A lágy indulás-érkezés
+              //! közötti egyenletes szakasz az, ami órákat ábrázol, nem
+              //! zuhanást. */
+          animation: film-scroll-day 2.6s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+        }
+
+        /*//* A jelölő maga: pont + hajszálvonal, ugyanabban a sorrendben, ahogy
+            //* a rács a „most" vonalát rajzolja. A vonal jobbra elhal — a rácson
+            //* egy oszlopot ér át, itt nincs mit átérnie, tehát a lap felé
+            //* mutat és ott ér véget. */
+        .film-scroll-now {
+          position: absolute;
+          left: -1.5px;
+          top: -2px;
+          display: block;
+          width: var(--now-w);
+          height: 4px;
+          /*//! KÉT ANIMÁCIÓ, MERT KÉT KÜLÖN DOLGOT CSINÁLNAK. Ha az
+              //! áttetszőség kulcsképei ugyanabban a menetben ülnének, a
+              //! MOZGÁS lassítási szakaszait is felszabdalnák — a jelölő
+              //! máshogy lassulna, mint amennyire a réteg kigyúl, és a kettő
+              //! menet közben szétcsúszna. Külön menetben a haladás
+              //! kulcsképei pontosan egybeesnek a vágáséval. */
+          animation:
+            film-scroll-mark 2.6s cubic-bezier(0.5, 0, 0.5, 1) infinite,
+            film-scroll-mark-fade 2.6s linear infinite;
+        }
+
+        .film-scroll-now::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 4px;
+          height: 4px;
+          border-radius: 999px;
+          background: var(--bell-lit);
+        }
+
+        .film-scroll-now::after {
+          content: "";
+          position: absolute;
+          left: 4px;
+          right: 0;
+          top: 50%;
+          height: 1px;
+          /*//* A vonal a hosszának kétharmadán tömör, és csak a végén hal el:
+              //* egy végig halványuló csík csonknak látszott a pont mellett,
+              //* nem vonalnak. */
+          background: linear-gradient(
+            90deg,
+            var(--bell-lit) 0%,
+            var(--bell-lit) 62%,
+            oklch(0.52 0.155 245 / 0) 100%
+          );
+        }
+
+        /*//! A NAP LETELIK, MEGÁLL EGY PILLANATRA, MAJD LEHÚZÓDIK. Nem
+            //! visszaugrik: a vágás felső éle megy tovább lefelé, tehát a
+            //! ciklus vége is LEFELÉ mutat — ugyanaz a mozdulat, amit a jel
+            //! kér. Egy nullára visszaugró kitöltés kapcsolónak látszana. */
+        @keyframes film-scroll-day {
+          0% { clip-path: inset(0 0 100% 0); }
+          58%, 72% { clip-path: inset(0 0 0 0); }
+          100% { clip-path: inset(100% 0 0 0); }
+        }
+
+        @keyframes film-scroll-mark {
+          0% { transform: translateY(0); }
+          58%, 100% { transform: translateY(var(--rail-h)); }
+        }
+
+        /*//* A jelölő a sín két végén nem villan, hanem beúszik és elhal: a
+            //* ciklus varrata így nem látszik. */
+        @keyframes film-scroll-mark-fade {
+          0% { opacity: 0; }
+          9%, 72% { opacity: 1; }
+          88%, 100% { opacity: 0; }
         }
 
         /*//* Telefonon a tábla a kép felső sávjában ül, a szöveg pedig alul —
@@ -1335,7 +1506,7 @@ export function GridFilm() {
             //! maradjon: 528 képpontról ~350-re.
             //*
             //! ÉS EZ SZÉLESSÉG HELYETT A KAMERA FELTÉTELÉHEZ KÖTŐDIK. Fekvő
-            //! telefonon a kijelző SZÉLES, de alacsony — a Tailwind „md:”
+            //! telefonon a kijelző SZÉLES, de alacsony — a Tailwind „md:"
             //! szerint ott a nagy betűk jönnének, és a műszerlap kilógna a
             //! képernyőből. Ugyanaz a lekérdezés vezérli, mint a kamerasort. */
         @media (min-width: 23rem) { .film { --cam-fit: 0.27; } }
@@ -1365,16 +1536,23 @@ export function GridFilm() {
           .film-intro a { margin-top: 1.75rem; }
           /*//! A NYITÓKÉPNEK A SAJÁT SÁVJÁBAN KELL MARADNIA (lásd fentebb): a
               //! jelző itt nem elhagyható, de nem is kérhet annyi helyet, mint
-              //! táblán — a sín rövidül, a futás hossza vele. */
+              //! táblán — a sín rövidül, a nap ütemével együtt.
+              //*
+              //! ÉS A ROVÁTKA RÖVIDÜL VELE. Nyolc bell egy 3,25rem-es sínen
+              //! ~6 képpontonként ül; a táblai hosszal ezek egy tömör
+              //! fésűvé állnának össze, és a csengetési rend ritmusából
+              //! textúra lenne. Rövidebb rovátka mellett a köz marad a
+              //! hangsúlyos — a nap ott is OLVASHATÓ, nem csak látszik. */
           .film-scroll {
             margin-top: 1.25rem;
-            --rail-h: 2.75rem;
-            --run-h: 0.9rem;
+            --rail-h: 3.25rem;
+            --bell-w: 0.25rem;
+            --now-w: 0.8125rem;
           }
 
           .film-panel {
             padding: 1.25rem;
-            /*//! HÁTTÉRELMOSÁS NÉLKÜL. A „backdrop-filter” a mögötte MOZGÓ
+            /*//! HÁTTÉRELMOSÁS NÉLKÜL. A „backdrop-filter" a mögötte MOZGÓ
                 //! rácsot minden képkockán újramintázza; telefonon ez pont a
                 //! görgetés alatt esik szét. A lemez helyette tömörebb lesz —
                 //! a szöveg kontrasztja nő, a költség eltűnik. */
@@ -1492,8 +1670,9 @@ export function GridFilm() {
           .film-readout > div { padding: 0.4375rem 0.625rem; }
           .film-scroll {
             margin-top: 0.875rem;
-            --rail-h: 2.25rem;
-            --run-h: 0.8rem;
+            --rail-h: 2.5rem;
+            --bell-w: 0.1875rem;
+            --now-w: 0.75rem;
           }
         }
 
@@ -1542,11 +1721,23 @@ export function GridFilm() {
               //! előjön. A film utolsó képe ugyanaz marad: egy telefon a
               //! valódi nappal, csak nem mozdul érte semmi. */
           .film-camera { opacity: calc(1 - var(--cam-shot)); }
-          /*//* A görgetésjelző nem tűnik el, csak megáll: az irányt a sín
-              //* saját halványulása így is kimondja. */
-          .film-scroll-run {
+          /*//! A GÖRGETÉSJELZŐ NEM TŰNIK EL, CSAK MEGÁLL — ÉS OTT ÁLL MEG,
+              //! AHOL A TÁBLÁN IS ÁLL. A jelölő a „NOW_MIN" percére parkol le:
+              //! pontosan arra, amit a rács „most" vonala jelöl a hétfői első
+              //! blokkban, néhány centivel odébb ugyanezen a képernyőn (lásd
+              //! „week.ts"). A „--now-f" ezt az arányt hozza a JSX-ből, tehát
+              //! a két jel akkor sem csúszhat szét, ha a hét adata változik.
+              //*
+              //! A KITÖLTÉS PEDIG MEGMARAD ODÁIG. Egy üres sín mellett a
+              //! parkoló pont csak egy pötty lenne; a mögötte kigyúlt szakasz
+              //! mozgás nélkül is kimondja, hogy van hova tovább. */
+          .film-scroll-lit {
             animation: none;
-            transform: translateY(calc(var(--rail-h) * 0.22));
+            clip-path: inset(0 0 calc(100% - var(--now-f) * 100%) 0);
+          }
+          .film-scroll-now {
+            animation: none;
+            transform: translateY(calc(var(--rail-h) * var(--now-f)));
           }
         }
       `}</style>
