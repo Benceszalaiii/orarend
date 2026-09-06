@@ -105,7 +105,15 @@ export function WeekGrid() {
           //* A negatív `inset` szándékos: a lemez NEM nyúlik bele a tábla
           //* koordináta-rendszerébe, így a kameraállások képpontjai érvényben
           //* maradnak. */}
-      <div className="absolute -inset-5 rounded-[20px] border border-white/10 bg-card shadow-[0_50px_90px_-45px_oklch(0_0_0/0.55),0_12px_30px_-16px_oklch(0_0_0/0.45)]" />
+      {/*//! A LEMEZ PEREME MINDKÉT TÉMÁBAN LÁTSZIK. Amíg az alkalmazás csak
+          //! sötét volt, egy `border-white/10` pontosan az volt, ami kellett: a
+          //! sötét lemez fölött egy halvány fénytörés. Világos módban viszont a
+          //! lemez maga is majdnem fehér (`bg-card`), és fehér a peremen is —
+          //! a tábla ilyenkor perem nélkül, pusztán az árnyékán lógott a meleg
+          //! papíron. Ugyanaz a gondolat, ellenkező előjellel: a perem a lemez
+          //! ÉS a papír közötti különbséget mondja ki, tehát a lemezhez képest
+          //! kell sötétnek vagy világosnak lennie. */}
+      <div className="absolute -inset-5 rounded-[20px] border border-black/10 bg-card shadow-[0_50px_90px_-45px_oklch(0_0_0/0.55),0_12px_30px_-16px_oklch(0_0_0/0.45)] dark:border-white/10" />
 
       {/*//* Az óravonalak. Nem dísz: a rács ettől lesz idő-arányos felület, nem
           //* kártyák halmaza — a duális blokk magassága csak ezekhez képest

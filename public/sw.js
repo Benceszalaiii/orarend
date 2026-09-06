@@ -58,6 +58,23 @@ const PRECACHE = [
 //* megnyitás után vált offline-képessé, amiről a felhasználó mit sem tudott.
 const ASSET_PATTERN = /\/_next\/static\/[A-Za-z0-9._\-/]+/g;
 
+//! ÁTIRÁNYÍTOTT VÁLASZT A CACHE API NEM VESZ ÁT. A `Cache.put` `TypeError`-t
+//! dob, ha a válasz `redirected` — és a `/` MOST MÁR ÁTIRÁNYÍT annak, aki járt
+//! már valamelyik nézetben (lásd `src/proxy.ts`). Enélkül a nyitócím némán
+//! kimaradt volna a vázból: hálózat nélkül az „nincs kapcsolat" lap jött volna
+//! a saját órarendje helyett.
+//*
+//* Az átcsomagolás ugyanazt a törzset és fejlécet viszi tovább, csak a
+//* „követett átirányítás" jelölés vész el vele — pontosan az, ami zavar.
+function storable(response) {
+  if (!response.redirected) return response;
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
 async function precache() {
   const shell = await caches.open(SHELL);
   const assets = new Set();
@@ -75,7 +92,7 @@ async function precache() {
         const res = await fetch(new Request(url, { cache: "reload" }));
         if (!res.ok) return;
         const copy = res.clone();
-        await shell.put(url, res);
+        await shell.put(url, storable(res));
         if (!(copy.headers.get("content-type") || "").includes("text/html")) {
           return;
         }
@@ -154,8 +171,11 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(SHELL).then((cache) => cache.put(request, copy));
+          const copy = storable(response.clone());
+          caches
+            .open(SHELL)
+            .then((cache) => cache.put(request, copy))
+            .catch(() => undefined);
           return response;
         })
         .catch(async () => {

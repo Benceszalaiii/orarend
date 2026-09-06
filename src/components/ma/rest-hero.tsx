@@ -3,9 +3,15 @@
 import { CalendarDays, Star } from "lucide-react";
 import Link from "next/link";
 import { PineRidge, SeasonalSky } from "@/components/ma/seasonal-sky";
-import { countdownLabel } from "@/components/timetable/now";
+import { longCountdownLabel } from "@/components/timetable/now";
 import { minLabel } from "@/components/timetable/shared";
-import type { RestDay, RestSeason } from "@/lib/rest-day";
+import { accentStyle } from "@/lib/accent";
+import {
+  nightsUntil,
+  type RestDay,
+  type RestSeason,
+  weekendVoice,
+} from "@/lib/rest-day";
 import { cn } from "@/lib/utils";
 
 //* ---------------------------------------------------------------------------
@@ -56,6 +62,18 @@ export type RestNext = {
   startMin: number;
   /** „Holnap", ha az; egyébként `null` — a nap nevét a `dayName` viszi. */
   relative: string | null;
+  //! AMI A VISSZASZÁMLÁLÁS TÚLSÓ VÉGÉN ÁLL. A sáv jobb felirata eddig egy
+  //! IDŐPONTOT mondott („H 08:00") — a hétvége tehát egy falig tartott, aminek
+  //! nem volt neve. Ez az óra a diák SAJÁT, csoportbontás-feloldott órarendjéből
+  //! jön; `null`, ha a bontás eldöntetlen, mert ott két óra állítaná ugyanazt a
+  //! percet, és egyiket kimondani találgatás lenne.
+  lesson: {
+    title: string;
+    room: string;
+    accentSeed: string;
+    /** A diák lapján a tanár, a tanárén az osztály — az adat dönti el. */
+    who: { kind: "teacher" | "class"; label: string } | null;
+  } | null;
 };
 
 export function RestHero({
@@ -83,8 +101,15 @@ export function RestHero({
   //! a vonalzót; ha ez a rövidebb alak megjelenne egy képkockára, a lap fele
   //! megugrana, amikor az órajel megérkezik. Ez a helykitöltő ugyanakkora.
   if (rest.kind === "weekend" && (nowMs === null || span === null)) {
-    //* 192 képpont: a kész hétvége-kártya lemért magassága telefonon.
-    return <div className={cn(block, "h-48", className)} aria-hidden />;
+    //* A kész hétvége-kártya lemért magassága: 282 képpont telefonon (375),
+    //* 255 a szélesebb hasábon, ahol az ív mondata és a hétfői óra sora is
+    //* egyetlen sorba fér. Ha a kártya tartalma változik, ezt ÚJRA KELL MÉRNI.
+    return (
+      <div
+        className={cn(block, "h-[282px] sm:h-[255px]", className)}
+        aria-hidden
+      />
+    );
   }
 
   //* Csak akkor számolunk vissza, ha van MIRE: a következő óra ideje és a mai
@@ -93,7 +118,10 @@ export function RestHero({
     nowMs !== null && span !== null && span.toMs > nowMs
       ? (span.toMs - nowMs) / 1000
       : null;
-  const countdown = remainingSec !== null ? countdownLabel(remainingSec) : null;
+  //! A HÉTVÉGE SAJÁT EGYSÉGE — lásd `longCountdownLabel`. A `span` csak
+  //! hétvégén valódi, tehát ez a formátum sehol máshol nem tud megjelenni.
+  const countdown =
+    remainingSec !== null ? longCountdownLabel(remainingSec) : null;
   const fraction =
     nowMs !== null && span !== null && span.toMs > span.fromMs
       ? Math.min(
@@ -106,6 +134,13 @@ export function RestHero({
   //! végét nem látjuk, egy visszaszámláló helyére kitalált dátum kerülne; ha
   //! látjuk, akkor viszont a köszöntés melletti számot senki nem olvasná el.
   const counting = countdown !== null && rest.kind === "weekend";
+
+  //! HÁNY ÉJFÉL VAN MÉG. A hétvége nem órákban telik, hanem alvásokban; a
+  //! kártya mondata ebből az egyetlen számból dolgozik. Ugyanaz a léptetés,
+  //! mint a vonalzó osztásánál — a `setHours(24, …)` a nyári időszámítás
+  //! átállását is helyesen viszi át.
+  const nights =
+    nowMs !== null && span !== null ? nightsUntil(nowMs, span.toMs) : 0;
 
   //! A CÍMKE CSAK AKKOR ÁLL OTT, HA MOND VALAMIT. A szünetek egy részén a nap
   //! neve maga a nagy sor („Nyári szünet"), és fölé írva ugyanaz vagy annak egy
@@ -179,8 +214,14 @@ export function RestHero({
         </h2>
       )}
 
+      {/*//! A MONDAT KÖVETI AZ ÍVET. Eddig szombat reggel és vasárnap este
+          //! ugyanaz a négy szó állt itt, egy másodpercenként mozduló szám
+          //! alatt. A hétvége szövege mostantól ugyanabból a két végpontból
+          //! jön, mint a szám — csak a másik egységben (lásd `weekendVoice`). */}
       <p className="mt-2 max-w-md text-sm text-pretty text-hero-foreground/70">
-        {rest.note}
+        {counting && remainingSec !== null
+          ? weekendVoice({ nights, remainingSec })
+          : rest.note}
       </p>
 
       {/*//! A KÖVETKEZŐ ÓRA — DE VISSZASZÁMLÁLÁS NÉLKÜL, ha a nagy elem már
@@ -211,6 +252,52 @@ export function RestHero({
           //! ott inkább nincs. */}
       {fraction !== null && rest.kind === "weekend" && (
         <RestRail fraction={fraction} span={span} next={next} />
+      )}
+
+      {/*//! A TÚLSÓ VÉGNEK NEVE VAN. A vonalzó jobb széle egy időpontnál ér
+          //! véget, és a visszaszámlálás addig tart — de attól, hogy tudom,
+          //! MIKOR csengetnek, még nem tudom, MIVEL kezdem. Ez az egyetlen
+          //! adat, amiért egy vasárnap esti diák amúgy is legörgetne; a hero
+          //! feladata pedig épp az, hogy ne kelljen.
+          //!
+          //! NEM ISMÉTLÉS: a nap és az óra fentebb kétszer is elhangzik, a
+          //! TANTÁRGY viszont egyszer sem. */}
+      {counting && next?.lesson && (
+        <p className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-hero-foreground/10 pt-3 text-sm text-hero-foreground/70">
+          <span className="text-hero-foreground/55">Ezzel indul a hét:</span>
+          {/*//! AZ ÓRA EGY DARABBAN TÖR. A pötty, a név és a terem EGY
+              //! becsomagolt elem: külön `flex` testvérekként a „102" a
+              //! „Node.js altantárgy" után egy saját sorba esett, a bal
+              //! margóhoz tapadva, mintha egy másik adat lenne. A terem ezért
+              //! a névvel EGY szövegfolyamban ül — a hosszú tantárgynév (~40
+              //! karakter) így is tördelhet, de a terem mindig az utolsó
+              //! szava mellett marad. */}
+          <span className="flex min-w-0 items-start gap-2">
+            {/*//! A PÖTTY A TANTÁRGYÉ, ÉS CSAK AZÉ. A tanár lapján ebben a
+                //! sorban az OSZTÁLY a hír („10E · 208") — a tizenkét hue
+                //! viszont a tantárgyat azonosítja, és az osztály mellé húzva
+                //! ugyanaz a szín két különböző dolgot jelölne. Ugyanez a
+                //! szabály áll a `now-block.tsx`-ben; ott a tantárgy külön
+                //! sort kap, ide viszont egy sor jut, tehát a pötty marad el. */}
+            {next.lesson.who?.kind !== "class" && (
+              <span
+                className="mt-[0.45em] size-2 shrink-0 rounded-full acc-dot"
+                style={accentStyle(next.lesson.accentSeed)}
+                aria-hidden
+              />
+            )}
+            <span className="min-w-0 font-semibold text-hero-foreground">
+              {next.lesson.who?.kind === "class"
+                ? next.lesson.who.label
+                : next.lesson.title}
+              {next.lesson.room && (
+                <span className="ml-2 inline-block rounded-[4px] bg-hero-foreground/12 px-1.5 py-px text-xs font-bold tabular-nums">
+                  {next.lesson.room}
+                </span>
+              )}
+            </span>
+          </span>
+        </p>
       )}
 
       {rest.kind !== "weekend" && (

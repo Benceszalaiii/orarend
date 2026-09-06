@@ -123,6 +123,17 @@ export function NowBar({
               )
             )}
 
+            {/*//! A TANÁRNAK AZ OSZTÁLY A CÍM, ÉS ITT IS ELŐRE KERÜL. A sor a
+                //! hero KICSINYÍTETT alakja, nem egy másik mondat: ha a hero
+                //! „13C · 214"-gyel kezd, a sor nem kezdhet a tantárggyal.
+                //! Nem `shrink-0`: hosszú osztálynévnél is a sor csonkul,
+                //! nem a fejléc nő. */}
+            {content.klass && (
+              <span className="max-w-[6rem] shrink-0 truncate text-sm font-bold text-foreground">
+                {content.klass}
+              </span>
+            )}
+
             <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
               {content.title}
             </span>
@@ -179,6 +190,8 @@ function summarize(
 ): {
   title: string;
   room: string;
+  /** Az OSZTÁLY, ha a lekérés tanári — a diák sorába szándékosan nem kerül. */
+  klass: string;
   tail: string;
   accentSeed: string;
   running: boolean;
@@ -193,7 +206,8 @@ function summarize(
     if (!first) return null;
     return {
       title: `${dayName} · ${first.fullTitle}`,
-      room: first.meta[0] ?? "",
+      room: first.room,
+      klass: first.who?.kind === "class" ? first.who.label : "",
       tail: minLabel(first.startMin),
       accentSeed: first.accentSeed,
       running: false,
@@ -213,7 +227,8 @@ function summarize(
 
   return {
     title: primary.fullTitle,
-    room: primary.meta[0] ?? "",
+    room: primary.room,
+    klass: primary.who?.kind === "class" ? primary.who.label : "",
     //* „33 p", nem „33 perc van hátra": a sor a hero rövidítése, nem a
     //* mondata. A teljes mondat egy koppintásra ott van.
     tail: countdown

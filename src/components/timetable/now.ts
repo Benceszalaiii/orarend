@@ -8,7 +8,20 @@ export type AgendaItem = {
   endMin: number;
   title: string;
   fullTitle: string;
+  //! A LAPOS LISTA A FUTÓ SZÖVEGÉ (képernyőolvasó-mondat, a heti rács sorának
+  //! „· "-tel fűzött vége). Ami RAJZOLÓDIK, az a két nevesített mező alatta:
+  //! ezek eddig ugyanennek a tömbnek a 0. és 1. eleme voltak, pozíció szerint
+  //! olvasva — a tanári lapon viszont a tömb más hosszú, mert ott nincs tanár.
+  //! Egy `meta[1]`-et olvasó doboz ott némán az OSZTÁLYT írta volna ki
+  //! „tanár" ikonnal. Nevesítve ez a hiba nem tud létrejönni.
   meta: string[];
+  /** A terem, ha van. Blokkon belüli teremváltásnál „102 · 303". */
+  room: string;
+  //! A SZEMKÖZTI FÉL. A diák lapján a TANÁR, a tanárén az OSZTÁLY — mindkettő
+  //! ugyanabban a szerepben áll: „kivel". Melyik, azt nem `mode` dönti el,
+  //! hanem az adat: a `teacherLessons` a tanár mezőit szándékosan üresen
+  //! hagyja, és az osztályét tölti ki (lásd `lib/timetable.ts`).
+  who: { kind: "teacher" | "class"; label: string } | null;
   accentSeed: string;
 };
 
@@ -100,6 +113,34 @@ export function spanFraction(span: NowSpan, nowMin: number): number {
   const length = span.toMin - span.fromMin;
   if (length <= 0) return 1;
   return Math.min(1, Math.max(0, (nowMin - span.fromMin) / length));
+}
+
+//! A HÉTVÉGE NEM PERCEKBEN MÉRHETŐ. A `countdownLabel` a KÖVETKEZŐ CSENGŐIG
+//! számol — ott a perc a tét, és „5:30" pontosan az az egység, amiben egy
+//! szünet gondolkodik. Egy ötvenhat órás hétvégére ráengedve viszont
+//! „39 ó 55 p"-et ír, amit senki nem mond ki: a hétvégét NAPOKBAN élik, és csak
+//! a végén válik órákká.
+//!
+//! EZÉRT A FELBONTÁS A CSENGŐ KÖZELEDTÉVEL ÉLESEDIK. Szombaton „1 nap 22 óra" —
+//! semmi nem mozdul, mert nem is kell; vasárnap „16 óra 55 perc", és a perc már
+//! fogy a szem előtt. Ugyanaz a szám, három közelségben — a kártya ettől lesz
+//! nyugodt az elején és sürgető a végén, dísz nélkül.
+export function longCountdownLabel(remainingSec: number): {
+  value: string;
+  unit: string;
+} {
+  const sec = Math.max(0, Math.ceil(remainingSec));
+  if (sec >= 86400) {
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    return { value: `${d} nap`, unit: h > 0 ? `${h} óra` : "" };
+  }
+  if (sec >= 3600) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    return { value: `${h} óra`, unit: m > 0 ? `${m} perc` : "" };
+  }
+  return { value: String(Math.max(1, Math.ceil(sec / 60))), unit: "perc" };
 }
 
 export function countdownLabel(remainingSec: number): {

@@ -1,8 +1,14 @@
 "use client";
 
-import { ChevronDown, Merge, RotateCw } from "lucide-react";
+import { ChevronDown, Merge, RotateCw, Users } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  SheetDivider,
+  SheetRow,
+  SheetSection,
+} from "@/components/chrome/chrome-sheet";
+import { SITE_BAR_MAX, StandingLine } from "@/components/chrome/standing-line";
 import {
   buildDayModel,
   daySummary,
@@ -25,12 +31,6 @@ import {
   WeekPulse,
 } from "@/components/ma/week-panels";
 import { NotificationMenu } from "@/components/pwa/notification-menu";
-import {
-  SITE_BAR_CLUSTER,
-  SITE_BAR_MAX,
-  SITE_BAR_METRICS,
-  SiteNav,
-} from "@/components/site-nav";
 import { nowState } from "@/components/timetable/now";
 import { dateFromKey, minLabel, todayKey } from "@/components/timetable/shared";
 import { useClock, useVisibilityEpoch } from "@/components/timetable/use-clock";
@@ -346,55 +346,47 @@ export function DesignPage() {
             //! szélességű eszköztárában 1264-nél: 141 px ugrás egyetlen
             //! koppintásra. A sáv ezért kilép a hasábból, és ugyanazt a
             //! legnagyobb szélességet, margót és térközt kapja, mint a másik
-            //! lap eszköztára (`SITE_BAR_*`, lásd `site-nav.tsx`). A sáv két
+            //! lap eszköztára (`SITE_BAR_MAX`, lásd `chrome/standing-line.tsx`). A sáv két
             //! vége az ablak két széléhez tapad; a hasáb alatta kezdődik. */}
-        <div
-          className={cn(
-            "relative z-10 mx-auto flex w-full items-center",
-            SITE_BAR_MAX,
-            SITE_BAR_METRICS,
-          )}
-        >
-          {/*//* A terméknév ugyanaz a bal horgony, mint az `/orarend` sávjában —
-              //* és ugyanúgy elrejtőzik telefonon, ahol a hely a vezérlőké. A
-              //* lap CÍME a dátum, az alatta lévő hasáb tetején. */}
-          <span className="shrink-0 text-base font-bold tracking-tight max-sm:sr-only">
-            Órarend
-          </span>
-          <div className={cn("ml-auto", SITE_BAR_CLUSTER)}>
-            {/*//* Ha nem a mai napot nézzük, az út vissza mindig egy koppintás. */}
-            {pickedKey && pickedKey !== today && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPickedKey(null)}
-                className="h-8 shrink-0 touch-target rounded-full border-hero-foreground/25 bg-transparent px-3 text-xs"
-              >
-                Ma
-              </Button>
-            )}
-            {/*//! A HARANG ITT VAN A LEGINKÁBB A HELYÉN. Ez a lap arra felel,
-                //! hogy „mi megy most, mi jön utána" — az óra előtti
-                //! emlékeztető pontosan ugyanez a kérdés, csak akkor, amikor a
-                //! lap nincs nyitva. A vezérlő az OSZTÁLYVÁLASZTÓ mellé kerül,
-                //! mert az értesítés a kiválasztott osztályról szól: a kettő
-                //! ugyanazt az alanyt osztja. */}
-            <NotificationMenu classes={classes} currentClass={selectedClass} />
-            <ClassPicker
-              classes={classes}
-              value={selectedClass}
-              disabled={pending}
-              onChange={(next) => {
-                setSelectedClass(next);
-                saveCachedClass(next);
-                setPreviewKey(null);
-                setPickedKey(null);
-                setView(null);
-                void load(next, shownKey, { showPending: true });
-              }}
-            />
-            <SiteNav />
-          </div>
+        <div className={cn("relative z-10 mx-auto w-full", SITE_BAR_MAX)}>
+          <StandingLine
+            line={{
+              subject: selectedClass || "Osztály",
+              offCurrent: Boolean(pickedKey && pickedKey !== today),
+              onReturn: () => setPickedKey(null),
+            }}
+            sheet={
+              <>
+                <SheetSection title="Kit nézel">
+                  <SheetRow icon={<Users className="size-4" />} label="Osztály">
+                    <ClassPicker
+                      classes={classes}
+                      value={selectedClass}
+                      disabled={pending}
+                      onChange={(next) => {
+                        setSelectedClass(next);
+                        saveCachedClass(next);
+                        setPreviewKey(null);
+                        setPickedKey(null);
+                        setView(null);
+                        void load(next, shownKey, { showPending: true });
+                      }}
+                    />
+                  </SheetRow>
+                </SheetSection>
+                <SheetDivider />
+                <SheetSection title="Beállítások">
+                  {/*//! A VEZÉRLŐ MAGA A SOR — nincs köré csomagolt `SheetRow`.
+                      //! Amíg volt, a felirat KÉTSZER jelent meg: egyszer a
+                      //! csomagolón, egyszer a gombon belül. Lásd `sheetItem`. */}
+                  <NotificationMenu
+                    subjects={classes}
+                    currentSubject={selectedClass}
+                  />
+                </SheetSection>
+              </>
+            }
+          />
         </div>
 
         <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pt-3 pb-8 sm:px-6 sm:pt-4">

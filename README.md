@@ -131,6 +131,16 @@ ajánlunk, melyik osztályra) → és csak az igenlő gombból a böngésző ké
 A feliratkozás **osztályonkénti**, legfeljebb ötre; alapértelmezésben a nézett
 osztály van kijelölve.
 
+**Tanárra is lehet feliratkozni** (`/ma` tanári nézete és `/tanari`), legfeljebb
+kettőre. Ugyanaz a két jelzés, más első mondattal: a tanárnak nem a tantárgy a
+hír, hanem az **osztály és a terem** — az emlékeztető azzal kezd. Ez az egyetlen
+ág, amit igazolni kell: tanári feliratkozást csak iskolai belépéssel, tanárként
+igazolt fiók (`isTeacher`) hozhat létre vagy módosíthat, és ezt a `POST
+/api/ertesites` végpont ellenőrzi — a felület csak megmutatja a válaszát. A már
+tárolt lista **megújításához** viszont nincs szükség munkamenetre: a
+feliratkozás 400 napig él, a belépés 30-ig, és egy lejárt munkamenet nem
+kapcsolhatja ki némán valakinek az értesítéseit.
+
 iOS-en a web push csak a **kezdőképernyőre kitett** appnál működik — a
 párbeszéd ilyenkor nem hibát mutat, hanem a két telepítési lépést.
 

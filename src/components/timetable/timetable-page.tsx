@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { NotificationMenu } from "@/components/pwa/notification-menu";
 import { TimetableCalendar } from "@/components/timetable/calendar";
 import { DualSetupButton } from "@/components/timetable/dual-menu";
+import { focusMondayKey } from "@/components/timetable/shared";
 import { MorphingInfinity } from "@/components/ui/morphing-infinity";
 import { useSession } from "@/lib/auth-client";
 import {
@@ -18,7 +19,6 @@ import {
   describeTimetableFailure,
   fetchTimetableSubjects,
   loadCachedSubject,
-  mondayOf,
   PUBLIC_DEFAULT_CLASS,
   subjectStoreKey,
   type TimetableError,
@@ -174,16 +174,25 @@ export function TimetablePage({
   //! UGYANAZ A HATÁR, MINT A DUÁLIS BEÁLLÍTÓNÁL: a rács csak azt tudja, melyik
   //! alanyt nézik — hogy szóljunk-e róla és mikor, az a harangé.
   //*
-  //! ÉRTESÍTÉS CSAK OSZTÁLYRA. A feliratkozás a szerveren OSZTÁLYRA szól (lásd
-  //! `push-store.ts` és `known-class.ts`): a napi órarend-emlékeztetőt egy
-  //! osztály órarendjéből számolja a háttérfeladat. Egy tanári feliratkozás
-  //! némán elveszne — ezért a harang a tanári lapon nem is jelenik meg,
-  //! ahelyett hogy egy nem működő gombot kínálnánk.
+  //! A TANÁRI HARANG BELÉPÉSHEZ KÖTÖTT, ÉS EZ NEM ÓVATOSSÁG. A tanári
+  //! feliratkozás egy KONKRÉT EMBER munkanapját küldi percre pontosan egy
+  //! készülékre; a végpont ezért csak iskolai belépéssel, tanárként igazolt
+  //! fióktól fogadja el (lásd `/api/ertesites`). A felület ugyanezt a határt
+  //! húzza meg — belépés nélkül a harang meg sem jelenik a tanári lapon,
+  //! ahelyett hogy egy gombot kínálnánk, ami utána elutasítást kap.
+  //*
+  //* Az osztályos lapon nincs feltétel: az osztály órarendje amúgy is
+  //* bárkinek megnyitható, az értesítés semmit nem ad hozzá, amit ne látna.
+  const notifyAllowed = mode === "class" || sessionIsTeacher;
   const notifySetup = useCallback(
     ({ subjectShort }: { subjectShort: string }) => (
-      <NotificationMenu classes={subjects} currentClass={subjectShort} />
+      <NotificationMenu
+        mode={mode}
+        subjects={subjects}
+        currentSubject={subjectShort}
+      />
     ),
-    [subjects],
+    [subjects, mode],
   );
 
   useEffect(() => {
@@ -211,10 +220,22 @@ export function TimetablePage({
 
         //* A hét kulcsa ugyanaz, amit a `/ma` ír (alany + hétfő), tehát a két
         //* lap UGYANAZT a mentett hetet találja meg.
+        //! ÉS HÉTVÉGÉN A KÖVETKEZŐ HÉT AZ ELSŐ. A mai hét szombaton már
+        //! végigfutott — aki akkor nyitja meg a lapot, a hétfőt keresi benne,
+        //! nem a lezárt keddet (lásd `focusMondayKey`). A `/ma` ugyanezt teszi
+        //! a nappal (`focusDayKey`), így a két lap ugyanazt a hetet nyitja.
+        //* A kért hét a kulcsban ÉS a kérésben is ugyanaz: a forrás
+        //* alapértelmezése a mai hét volna, ami hétvégén már nem a fókuszé.
+        const focusWeek = focusMondayKey();
         const first = await loadWeekOrCached(
           subjectStoreKey(mode, wanted),
-          mondayOf(),
-          () => buildTimetableView({ kind: mode, userClass: wanted }),
+          focusWeek,
+          () =>
+            buildTimetableView({
+              kind: mode,
+              userClass: wanted,
+              weekStart: focusWeek,
+            }),
         );
         if (cancelled) return;
         setView(first.view);
@@ -255,7 +276,7 @@ export function TimetablePage({
           variant="fullscreen"
           dualStatusForDay={dualStatusForDay}
           dualSetup={dualSetup}
-          notifySetup={mode === "class" ? notifySetup : undefined}
+          notifySetup={notifyAllowed ? notifySetup : undefined}
           //* A „Ma: Duális/Iskola" jelvényt a rács rajzolja a cím mellé — ott
           //* ismert az ÉPPEN nézett hét és alany (lásd `TimetableCalendar`).
           heading={
@@ -318,7 +339,7 @@ function emptyView(kind: TimetableSubjectKind): TimetableView {
     ok: false,
     kind,
     subject: null,
-    weekStart: mondayOf(),
+    weekStart: focusMondayKey(),
     days: [],
     periods: [],
     lessons: [],

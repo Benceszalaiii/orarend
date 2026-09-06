@@ -1,4 +1,10 @@
-import { DEFAULT_PREFS, MAX_CLASSES, type PushPrefs } from "./push-shared";
+import {
+  DEFAULT_PREFS,
+  MAX_CLASSES,
+  MAX_TEACHERS,
+  type PushPrefs,
+  prefsEmpty,
+} from "./push-shared";
 import { registerWorker } from "./sw-register";
 
 //* ---------------------------------------------------------------------------
@@ -31,14 +37,21 @@ export function loadPrefs(): PushPrefs {
     if (!raw) return DEFAULT_PREFS;
     const parsed = JSON.parse(raw) as Partial<PushPrefs> | null;
     return {
-      classes: Array.isArray(parsed?.classes)
-        ? parsed.classes.filter((c): c is string => typeof c === "string")
-        : [],
+      classes: stringList(parsed?.classes),
+      //* A tanári ág előtt mentett példányokban ez a mező nincs meg — üres
+      //* lista, nem hiba.
+      teachers: stringList(parsed?.teachers),
       everyLesson: parsed?.everyLesson === true,
     };
   } catch {
     return DEFAULT_PREFS;
   }
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string")
+    : [];
 }
 
 function savePrefs(prefs: PushPrefs): void {
@@ -189,6 +202,11 @@ export type SubscribeResult =
         | "no-worker"
         /** Nincs VAPID kulcs a kiszolgálón — nem a böngésző hibája. */
         | "misconfigured"
+        //! A KÉRÉS RENDBEN VOLT, A JOGOSULTSÁG NEM. Egyetlen dolog esik ide: a
+        //! tanári lista igazolt tanári fiók nélkül (lásd `/api/ertesites`). A
+        //! „server" nem fedné le — abból a felhasználó azt olvasná ki, hogy
+        //! várjon és próbálja újra, holott be kellene lépnie.
+        | "forbidden"
         | "server";
     };
 
@@ -196,8 +214,8 @@ export type SubscribeResult =
 //! felhasználói mozdulathoz kötött — effektből vagy időzítőből egyes böngészők
 //! el sem indítják. A hívási helyet ezért nem szabad „kényelmesebbre" mozgatni.
 export async function enablePush(prefs: PushPrefs): Promise<SubscribeResult> {
-  const classes = prefs.classes.slice(0, MAX_CLASSES);
-  if (classes.length === 0) return { ok: false, reason: "unsupported" };
+  const next = capped(prefs);
+  if (prefsEmpty(next)) return { ok: false, reason: "unsupported" };
 
   //! A SORREND KÖTÖTT: ELŐBB AZ ENGEDÉLY, AZTÁN MINDEN MÁS `await`. A Safari a
   //! `requestPermission()`-t csak ÉLŐ felhasználói aktivációval engedi — egy
@@ -225,25 +243,26 @@ export async function enablePush(prefs: PushPrefs): Promise<SubscribeResult> {
     return { ok: false, reason: "unsupported" };
   }
 
-  const next: PushPrefs = { classes, everyLesson: prefs.everyLesson };
   const sent = await postSubscription(subscription, next);
-  if (!sent) {
+  if (sent !== "ok") {
     //! HA A SZERVER NEM VETTE ÁT, NE MARADJON FÉLKÉSZ ÁLLAPOT. A böngészőben
     //! élő, de a szerver által nem ismert feliratkozás a legrosszabb végállapot:
     //! a harang bekapcsolva látszana, és soha nem jönne semmi.
     await subscription.unsubscribe().catch(() => undefined);
-    return { ok: false, reason: "server" };
+    return { ok: false, reason: sent };
   }
 
   savePrefs(next);
   return { ok: true };
 }
 
+type PostResult = "ok" | "forbidden" | "server";
+
 async function postSubscription(
   subscription: PushSubscription,
   prefs: PushPrefs,
   replaces?: string,
-): Promise<boolean> {
+): Promise<PostResult> {
   const json = subscription.toJSON();
   try {
     const res = await fetch("/api/ertesites", {
@@ -253,13 +272,20 @@ async function postSubscription(
         endpoint: subscription.endpoint,
         keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
         classes: prefs.classes,
+        //! MINDIG MINDKÉT LISTA MEGY. A két lista két KÜLÖN felületen
+        //! szerkeszthető (a diák „Ma"-ján az osztályok, a tanárin a tanárok),
+        //! de a feliratkozás EGY sor: ha csak a szerkesztett listát küldenénk,
+        //! a végpont a másikat örökölné ugyan, de a törlés soha nem érne oda —
+        //! egy levett osztály örökre bent maradna.
+        teachers: prefs.teachers,
         everyLesson: prefs.everyLesson,
         replaces,
       }),
     });
-    return res.ok;
+    if (res.ok) return "ok";
+    return res.status === 403 ? "forbidden" : "server";
   } catch {
-    return false;
+    return "server";
   }
 }
 
@@ -277,17 +303,29 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
 
 //* Beállítás módosítása bekapcsolt állapotban: nincs új engedélykérés, csak a
 //* meglévő sor frissül.
-export async function updatePush(prefs: PushPrefs): Promise<boolean> {
+export async function updatePush(prefs: PushPrefs): Promise<SubscribeResult> {
   const subscription = await currentSubscription();
-  if (!subscription) return false;
-  const next: PushPrefs = {
+  if (!subscription) return { ok: false, reason: "server" };
+  const next = capped(prefs);
+  //* Üres feliratkozás nincs: aki mindkét listáját kiürítené, az valójában
+  //* kikapcsolja az értesítéseket — azt a `disablePush` intézi, hogy a
+  //* böngésző feliratkozása se maradjon ott gazdátlanul.
+  if (prefsEmpty(next)) return { ok: false, reason: "unsupported" };
+  const result = await postSubscription(subscription, next);
+  if (result !== "ok") return { ok: false, reason: result };
+  savePrefs(next);
+  return { ok: true };
+}
+
+//* A felső korlátok a KÜLDÉS előtt is érvényesek, nem csak a szerveren: a
+//* párbeszéd amúgy sem enged többet kiválasztani, de egy régi (vagy másik
+//* készülékről örökölt) mentés hosszabb listát is hozhat.
+function capped(prefs: PushPrefs): PushPrefs {
+  return {
     classes: prefs.classes.slice(0, MAX_CLASSES),
+    teachers: prefs.teachers.slice(0, MAX_TEACHERS),
     everyLesson: prefs.everyLesson,
   };
-  if (next.classes.length === 0) return false;
-  const ok = await postSubscription(subscription, next);
-  if (ok) savePrefs(next);
-  return ok;
 }
 
 export async function disablePush(): Promise<void> {
@@ -314,7 +352,7 @@ export async function disablePush(): Promise<void> {
 //* Csendben fut, és semmit nem kér a felhasználótól: engedélyt már nem kell.
 export async function refreshPush(): Promise<void> {
   const prefs = loadPrefs();
-  if (prefs.classes.length === 0) return;
+  if (prefsEmpty(prefs)) return;
   const subscription = await currentSubscription();
   if (!subscription) return;
   await postSubscription(subscription, prefs);

@@ -31,11 +31,29 @@ export const LEAD_WINDOW_MINUTES = 6;
 //! rezeghet. Öt fölött már nem értesítés, hanem hírfolyam.
 export const MAX_CLASSES = 5;
 
+//! HÁNY TANÁRRA — ÉS MIÉRT KEVESEBBRE. A diák több osztályhoz is tartozhat
+//! (nyelvi csoport, testvér, duális pár), a tanár viszont EGY: a sajátjára
+//! iratkozik fel. A második hely a helyettesítésé — aki egy kolléga óráit
+//! átveszi egy hétre, annak érdemes tudnia a változásairól. A harmadik már nem
+//! a saját napjáról szólna, hanem mások órarendjének figyeléséről; erre a lap
+//! nem való, és a suli szerverén is minden feliratkozott tanár egy újabb heti
+//! lekérés percenként.
+export const MAX_TEACHERS = 2;
+
 //* Egy feliratkozás beállításai. Ennyit tud rólunk a szerver — és ennél többet
 //* nem is akarunk, hogy tudjon (lásd `/adatvedelem`).
 export type PushPrefs = {
-  /** Mely osztályok órarendjéről jöjjön jelzés. Legalább egy, legfeljebb `MAX_CLASSES`. */
+  /** Mely osztályok órarendjéről jöjjön jelzés. Legfeljebb `MAX_CLASSES`. */
   classes: string[];
+  //! A TANÁRI LISTA NEM „MÉG EGY OSZTÁLY". Külön mező, mert (1) más a
+  //! névtere és az alakja (`AA`, `BNM` — lásd `known-class.ts`), (2) más
+  //! szöveget kap ugyanaz az esemény (a diáknak a TANTÁRGY a hír, a tanárnak
+  //! az OSZTÁLY és a TEREM), és (3) EZ AZ EGYETLEN mező, amit nem tölthet ki
+  //! akárki: csak iskolai belépéssel, tanárként igazolt fiók (lásd
+  //! `/api/ertesites`). Egy közös listában a jogosultság kérdése némán
+  //! elveszne.
+  /** Mely tanárok órarendjéről jöjjön jelzés. Legfeljebb `MAX_TEACHERS`. */
+  teachers: string[];
   //! KÉT SŰRŰSÉG, EGY KAPCSOLÓ. Alapból csak a nap ELSŐ órája előtt szólunk, és
   //! minden olyan óra előtt, ami szünet vagy lyukasóra UTÁN kezdődik — vagyis
   //! amikor a diák nincs is az iskolában, vagy nem ott van, ahol lennie kell.
@@ -45,7 +63,38 @@ export type PushPrefs = {
   everyLesson: boolean;
 };
 
-export const DEFAULT_PREFS: PushPrefs = { classes: [], everyLesson: false };
+export const DEFAULT_PREFS: PushPrefs = {
+  classes: [],
+  teachers: [],
+  everyLesson: false,
+};
+
+//! A KETTŐ EGYÜTT A FELIRATKOZÁS. Egy feliratkozás akkor él, ha LEGALÁBB
+//! egyik listája nem üres — az osztályfőnök tanár mindkettőre iratkozhat, és a
+//! két lista két KÜLÖN felületen szerkeszthető (a diák „Ma"-ján az egyik, a
+//! tanárin a másik). Ezért nem szabad sehol azt kérdezni, hogy „üres-e a
+//! `classes`": attól a másik lista még tarthatja életben a sort.
+export function prefsEmpty(prefs: PushPrefs): boolean {
+  return prefs.classes.length === 0 && prefs.teachers.length === 0;
+}
+
+//* A két lista ugyanazon a néven, alanyfajta szerint — így a lap, a végpont és
+//* a háttérfeladat is egyetlen ágon tudja kezelni mindkettőt.
+export function subjectsOf(
+  prefs: PushPrefs,
+  kind: "class" | "teacher",
+): string[] {
+  const list = kind === "teacher" ? prefs.teachers : prefs.classes;
+  //! A RÉGI SOROKBAN NINCS `teachers`. A tárolóban élő feliratkozások a tanári
+  //! ág előtt keletkeztek, és a lejáratukig (több mint egy év) ott is
+  //! maradnak — a hiányzó mező tehát NEM elméleti eset. Üres listát adunk rá,
+  //! mert az igaz: arra a sorra nincs tanári feliratkozás.
+  return Array.isArray(list) ? list : [];
+}
+
+export function maxSubjects(kind: "class" | "teacher"): number {
+  return kind === "teacher" ? MAX_TEACHERS : MAX_CLASSES;
+}
 
 //! AMIT A SERVICE WORKER MEGKAP. Szándékosan KÉSZ szöveg: a worker nem számol
 //! és nem formáz, csak megjelenít. Ha a fogalmazás a workerben élne, minden

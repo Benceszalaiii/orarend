@@ -27,7 +27,7 @@ export default function AdatvedelemPage() {
           Adatvédelmi tájékoztató
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Utolsó frissítés: 2026. szeptember 4.
+          Utolsó frissítés: 2026. szeptember 6.
         </p>
 
         <div className="mt-8 flex flex-col gap-8 text-sm leading-relaxed text-muted-strong">
@@ -136,12 +136,26 @@ export default function AdatvedelemPage() {
               push-végpontot — ez egy cím a böngésződ gyártójának
               szolgáltatásánál (Google, Apple, Mozilla), amelyre az értesítés
               érkezhet. Ezt a címet, a hozzá tartozó titkosítási kulcsokat és az
-              általad kiválasztott osztályok nevét tároljuk. Ez az oldal
-              egyetlen olyan adata, amely egy adott készülékhez köthető; enélkül
-              az értesítés nem tudna megérkezni. Nevet, e-mail-címet, IP-címet,
-              eszközleírót vagy csoportbontás-beállítást nem tárolunk mellé, és
-              az értesítésekből gyűjtött adatot semmilyen más célra —
-              statisztikára sem — használjuk fel.
+              általad kiválasztott osztályok — tanárként a tanári jelek — nevét
+              tároljuk. Ez az oldal egyetlen olyan adata, amely egy adott
+              készülékhez köthető; enélkül az értesítés nem tudna megérkezni.
+              Nevet, e-mail-címet, IP-címet, eszközleírót vagy
+              csoportbontás-beállítást nem tárolunk mellé, és az értesítésekből
+              gyűjtött adatot semmilyen más célra — statisztikára sem —
+              használjuk fel.
+            </p>
+            {/*//! A TANÁRI FELIRATKOZÁS TÖBBET MOND EL EGY EMBERRŐL, MINT EGY
+              //! OSZTÁLYOS — ezért külön bekezdést kap. Nem az adat titkos (az
+              //! órarend nyilvános), hanem az, hogy ez a lap EGY KONKRÉT
+              //! EMBER munkanapját küldi el egy készülékre nap mint nap. Az
+              //! ehhez kötött feltételt (iskolai belépés) ezért ki kell
+              //! mondani, nem csak a kódban betartani. */}
+            <p>
+              Tanár órarendjéről csak az kaphat értesítést, aki iskolai
+              belépéssel, tanári fiókkal jelentkezett be — a beállítást a
+              kiszolgáló ehhez köti, nem csak a felület. A feliratkozás így is
+              ugyanannyit tárol, mint az osztályos: a push-címet, a kulcsokat és
+              a kiválasztott tanári jelet; azt nem, hogy ki állította be.
             </p>
             <p>
               A tárolt sor legfeljebb 400 napig él, és minden alkalommal
@@ -232,6 +246,27 @@ export default function AdatvedelemPage() {
               </span>{" "}
               szakaszt. Minden helyben tárolt adat bármikor törölhető a böngésző
               adatainak törlésével.
+            </p>
+            {/*//! EZT KI KELL MONDANI, MERT ITT EGY SÜTI VAN. A többi
+                //! beállítás a böngésző helyi tárolójában marad, és a
+                //! kiszolgáló soha nem látja — ez az egy viszont MINDEN
+                //! kéréssel elmegy, tehát nem sorolható a fenti mondat alá. A
+                //! szakasz ezért megnevezi a sütit, megmondja, mi van benne,
+                //! meddig él, és mi történik, ha nincs. */}
+            <p>
+              Egyetlen kivétel az utoljára megnyitott nézet, amely a
+              localStorage mellett egy sütiben is eltárolódik (
+              <span className="font-medium text-foreground">
+                orarend_last_view_v2
+              </span>
+              ). Ennek egyetlen tartalma az utoljára megnyitott nézet címe (pl.{" "}
+              <span className="font-medium text-foreground">/orarend</span>), és
+              egyetlen dolgot csinál: a nyitóoldal ebből tudja, hogy jártál-e
+              már az órarenden, és ha igen, rögtön oda visz, a bemutatkozó
+              nyitólap helyett. Nem tartalmaz azonosítót, nem alkalmas a
+              felismerésedre, és nem használjuk mérésre vagy hirdetésre. A süti
+              legfeljebb 400 napig él, és a böngésző adatainak törlésével
+              megszűnik — utána a nyitóoldal ismét a nyitólapot mutatja.
             </p>
           </section>
 

@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 import { Redis } from "@upstash/redis";
 import type { WeekSnapshot } from "./push-plan";
 import type { PushPrefs } from "./push-shared";
-import type { TimetableLesson } from "./timetable";
+import { subjectsOf } from "./push-shared";
+import {
+  subjectStoreKey,
+  type TimetableLesson,
+  type TimetableSubjectKind,
+} from "./timetable";
 
 //! CSAK A SZERVEREN. Ez a modul az írás-jogú tokent olvassa a környezetből —
 //! kliens bundle-be SOHA nem kerülhet be.
@@ -51,10 +56,30 @@ function subscriptionId(endpoint: string): string {
 }
 
 const SUB_KEY = (id: string) => `push:sub:${id}`;
-const CLASS_KEY = (short: string) => `push:class:${short}`;
-//* Melyik osztályokra van EGYÁLTALÁN feliratkozó. Enélkül a háttérfeladatnak
+
+//! ─── KÉT ALANY, KÉT KULCSTÉR ───────────────────────────────────────────────
+//! Az osztályos kulcsok alakja SZÁNDÉKOSAN változatlan (`push:class:09B`,
+//! `push:classes`): a tanári ág bevezetése nem költöztetheti el a már élő
+//! feliratkozásokat — egy átnevezés némán mindenkit leiratkoztatna, aki nem
+//! nyitja meg a lapot. A tanár a maga előtagját kapja, és ezzel a két névtér
+//! akkor sem ér össze, ha a suli egyszer számjeggyel kezdődő tanári jelet ad
+//! ki.
+const SUBJECT_KEY = (kind: TimetableSubjectKind, short: string) =>
+  kind === "teacher" ? `push:teacher:${short}` : `push:class:${short}`;
+
+//* Melyik alanyokra van EGYÁLTALÁN feliratkozó. Enélkül a háttérfeladatnak
 //* végig kellene pásztáznia a kulcsteret, hogy megtudja, kinek dolgozzon.
-const CLASS_INDEX = "push:classes";
+const SUBJECT_INDEX: Record<TimetableSubjectKind, string> = {
+  class: "push:classes",
+  teacher: "push:teachers",
+};
+
+//* A háttérfeladat mindkét ágon ugyanazt csinálja, csak más listából — ezért
+//* mindenhol EZEN a soron megyünk végig, és nem két külön másolaton.
+export const SUBJECT_KINDS: readonly TimetableSubjectKind[] = [
+  "class",
+  "teacher",
+];
 
 //! MEDDIG ÉL EGY FELIRATKOZÁS. Egy tanév plusz a szünet: aki egy éve nem
 //! nyitotta meg a lapot, annak az órarend-értesítés már nem szolgáltatás,
@@ -83,17 +108,19 @@ export async function saveSubscription(
 
   await redis.set(SUB_KEY(id), record, { ex: SUB_TTL_SECONDS });
 
-  //* Az osztály-index a KÜLÖNBSÉGGEL frissül: aki levett egy osztályt, annak a
-  //* halmazából is ki kell kerülnie, különben a háttérfeladat továbbra is neki
-  //* címezné a jelzést.
-  const before = new Set(previous?.classes ?? []);
-  const after = new Set(record.classes);
-  for (const short of before) {
-    if (!after.has(short)) await redis.srem(CLASS_KEY(short), id);
-  }
-  for (const short of after) {
-    await redis.sadd(CLASS_KEY(short), id);
-    await redis.sadd(CLASS_INDEX, short);
+  //* Az alany-index a KÜLÖNBSÉGGEL frissül: aki levett egy osztályt (vagy egy
+  //* tanárt), annak a halmazából is ki kell kerülnie, különben a háttérfeladat
+  //* továbbra is neki címezné a jelzést.
+  for (const kind of SUBJECT_KINDS) {
+    const before = new Set(previous ? subjectsOf(previous, kind) : []);
+    const after = new Set(subjectsOf(record, kind));
+    for (const short of before) {
+      if (!after.has(short)) await redis.srem(SUBJECT_KEY(kind, short), id);
+    }
+    for (const short of after) {
+      await redis.sadd(SUBJECT_KEY(kind, short), id);
+      await redis.sadd(SUBJECT_INDEX[kind], short);
+    }
   }
 }
 
@@ -101,8 +128,10 @@ export async function removeSubscription(endpoint: string): Promise<void> {
   if (!redis) return;
   const id = subscriptionId(endpoint);
   const previous = await redis.get<StoredSubscription>(SUB_KEY(id));
-  for (const short of previous?.classes ?? []) {
-    await redis.srem(CLASS_KEY(short), id);
+  for (const kind of SUBJECT_KINDS) {
+    for (const short of previous ? subjectsOf(previous, kind) : []) {
+      await redis.srem(SUBJECT_KEY(kind, short), id);
+    }
   }
   await redis.del(SUB_KEY(id));
 }
@@ -114,21 +143,24 @@ export async function readSubscription(
   return await redis.get<StoredSubscription>(SUB_KEY(subscriptionId(endpoint)));
 }
 
-//* Mely osztályokra van feliratkozó — a háttérfeladat munkalistája.
-export async function subscribedClasses(): Promise<string[]> {
+//* Mely alanyokra van feliratkozó — a háttérfeladat munkalistája.
+export async function subscribedSubjects(
+  kind: TimetableSubjectKind,
+): Promise<string[]> {
   if (!redis) return [];
-  return (await redis.smembers(CLASS_INDEX)) ?? [];
+  return (await redis.smembers(SUBJECT_INDEX[kind])) ?? [];
 }
 
 export async function subscribersOf(
+  kind: TimetableSubjectKind,
   short: string,
 ): Promise<PushSubscription[]> {
   if (!redis) return [];
-  const ids = (await redis.smembers(CLASS_KEY(short))) ?? [];
+  const ids = (await redis.smembers(SUBJECT_KEY(kind, short))) ?? [];
   if (ids.length === 0) {
-    //* Üresre fogyott halmaz: az index is felejtse el az osztályt, hogy a
+    //* Üresre fogyott halmaz: az index is felejtse el az alanyt, hogy a
     //* háttérfeladat ne kérje le fölöslegesen a suli szerverétől.
-    await redis.srem(CLASS_INDEX, short);
+    await redis.srem(SUBJECT_INDEX[kind], short);
     return [];
   }
   const rows = await Promise.all(
@@ -140,7 +172,7 @@ export async function subscribersOf(
     //* A sor a saját élettartama végén magától eltűnik; a halmazból viszont
     //* nem — ezt itt takarítjuk, menet közben.
     if (!row) {
-      await redis.srem(CLASS_KEY(short), ids[i]);
+      await redis.srem(SUBJECT_KEY(kind, short), ids[i]);
       continue;
     }
     alive.push(row);
@@ -163,23 +195,44 @@ async function lease(key: string, ttlSeconds: number): Promise<boolean> {
   return won === "OK";
 }
 
+//! MINDEN KULCS AZ ALANYRA SZÓL, NEM A JELÉRE. A `subjectStoreKey` a tanári
+//! jelet `tanar:` előtaggal írja (ugyanaz a leképezés, mint a böngésző helyi
+//! tárolóiban) — az osztályos kulcs viszont VÁLTOZATLAN marad, tehát a már
+//! kiadott foglalások és a meglévő lenyomatok érvényben maradnak.
+//!
+//! MIÉRT KELL EGYÁLTALÁN NÉVTÉR: a `13C` osztály és egy `13C` jelű tanár
+//! foglalása közös kulcson OSSZA EGYMÁST — az egyik kiküldés elnyelné a
+//! másikat, és a hiba pont az a fajta lenne, ami csak élesben, ritkán, egy
+//! elmaradt értesítésként derül ki.
+function subjectNs(kind: TimetableSubjectKind, short: string): string {
+  return subjectStoreKey(kind, short);
+}
+
 //* Az emlékeztető foglalása napra és percre. Fél nap élettartam: a nap végére
 //* magától eltűnik, de egy elhúzódó kimaradást is átvészel.
 export function leaseReminder(
+  kind: TimetableSubjectKind,
   short: string,
   dayKey: string,
   startMin: number,
 ): Promise<boolean> {
-  return lease(`push:sent:${short}:${dayKey}:${startMin}`, 60 * 60 * 12);
+  return lease(
+    `push:sent:${subjectNs(kind, short)}:${dayKey}:${startMin}`,
+    60 * 60 * 12,
+  );
 }
 
 //* A változás-értesítés foglalása a különbség lenyomatával. Egy nap: ha
 //* ugyanaz a változás egy nap múlva ÚJRA előáll, az már valóban új hír.
 export function leaseChange(
+  kind: TimetableSubjectKind,
   short: string,
   fingerprint: string,
 ): Promise<boolean> {
-  return lease(`push:change:${short}:${fingerprint}`, 60 * 60 * 24);
+  return lease(
+    `push:change:${subjectNs(kind, short)}:${fingerprint}`,
+    60 * 60 * 24,
+  );
 }
 
 //* ---------------------------------------------------------------------------
@@ -199,21 +252,25 @@ export type CachedWeekLessons = {
 };
 
 export async function readWeekCache(
+  kind: TimetableSubjectKind,
   short: string,
   weekStart: string,
 ): Promise<CachedWeekLessons | null> {
   if (!redis) return null;
-  return await redis.get<CachedWeekLessons>(`push:week:${short}:${weekStart}`);
+  return await redis.get<CachedWeekLessons>(
+    `push:week:${subjectNs(kind, short)}:${weekStart}`,
+  );
 }
 
 export async function writeWeekCache(
+  kind: TimetableSubjectKind,
   short: string,
   weekStart: string,
   lessons: TimetableLesson[],
 ): Promise<void> {
   if (!redis) return;
   await redis.set(
-    `push:week:${short}:${weekStart}`,
+    `push:week:${subjectNs(kind, short)}:${weekStart}`,
     { fetchedAt: Date.now(), lessons } satisfies CachedWeekLessons,
     { ex: WEEK_CACHE_SECONDS },
   );
@@ -225,20 +282,28 @@ export async function writeWeekCache(
 const SNAPSHOT_SECONDS = 60 * 60 * 24 * 30;
 
 export async function readSnapshot(
+  kind: TimetableSubjectKind,
   short: string,
   weekStart: string,
 ): Promise<WeekSnapshot | null> {
   if (!redis) return null;
-  return await redis.get<WeekSnapshot>(`push:snap:${short}:${weekStart}`);
+  return await redis.get<WeekSnapshot>(
+    `push:snap:${subjectNs(kind, short)}:${weekStart}`,
+  );
 }
 
 export async function writeSnapshot(
+  kind: TimetableSubjectKind,
   short: string,
   weekStart: string,
   snapshot: WeekSnapshot,
 ): Promise<void> {
   if (!redis) return;
-  await redis.set(`push:snap:${short}:${weekStart}`, snapshot, {
-    ex: SNAPSHOT_SECONDS,
-  });
+  await redis.set(
+    `push:snap:${subjectNs(kind, short)}:${weekStart}`,
+    snapshot,
+    {
+      ex: SNAPSHOT_SECONDS,
+    },
+  );
 }

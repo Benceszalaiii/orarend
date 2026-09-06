@@ -17,7 +17,11 @@ import { hoursLabel, type SubjectRow, type WeekModel } from "./week";
 
 //* A szakkör-oldal szekció-nyelve: cím + halk kiegészítés, alatta a tartalom.
 //* Nem kártya a kártyában — a keret a LISTÁÉ, nem a szekcióé.
-function Section({
+//! KIFELÉ IS LÁTSZIK, MERT A TANÁRI SÁV UGYANEZT A NYELVET BESZÉLI. A
+//! `teacher-panels.tsx` panelei ugyanabban a hasábban állnak, ugyanazokkal a
+//! szomszédokkal; ha a szekciócím, a listakeret vagy az üres állapot ott
+//! MÁSHOGY lenne megírva, a sáv két különböző kézírásból állna össze.
+export function Section({
   id,
   title,
   aside,
@@ -47,13 +51,13 @@ function Section({
   );
 }
 
-const listGroup =
+export const listGroup =
   "divide-y divide-border overflow-hidden rounded-xl border border-border bg-card";
-const rowBase =
+export const rowBase =
   "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none";
 
 //* Halk üres-panel: a szekció megmarad (a hely tanít), de nem kiabál.
-function EmptyPanel({ children }: { children: React.ReactNode }) {
+export function EmptyPanel({ children }: { children: React.ReactNode }) {
   return (
     <p className="rounded-xl border border-dashed border-border px-4 py-4 text-sm text-pretty text-muted-strong">
       {children}

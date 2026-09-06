@@ -12,7 +12,13 @@ import {
   nowState,
   spanFraction,
 } from "./now";
-import { addDaysKey, minLabel, rangeLabel, todayKey } from "./shared";
+import {
+  addDaysKey,
+  focusIsNextWeek,
+  minLabel,
+  rangeLabel,
+  todayKey,
+} from "./shared";
 import { useClock, useVisibilityEpoch } from "./use-clock";
 
 //* ---------------------------------------------------------------------------
@@ -33,7 +39,7 @@ import { useClock, useVisibilityEpoch } from "./use-clock";
 export function NowRail({
   today,
   later,
-  inCurrentWeek,
+  inFocusWeek,
   onToday,
   onOpen,
   className,
@@ -42,8 +48,13 @@ export function NowRail({
   today: AgendaItem[];
   //* A hét további napjainak elemei — a „mára vége" ág mutat rájuk.
   later: AgendaItem[];
-  //* A betöltött hét tartalmazza-e a mai napot.
-  inCurrentWeek: boolean;
+  //! A BETÖLTÖTT HÉT-E A MOSTANI. Nem azt kérdezzük, hogy a mai nap benne
+  //! van-e a rácsban: a rács öt tanítási napot mutat, tehát szombaton és
+  //! vasárnap EGYETLEN hétben sincs benne a mai nap — a sáv így minden
+  //! hétvégén azt állította, hogy a diák „egy másik hetet néz", pedig épp a
+  //! neki szánt hetet nyitotta meg. A kérdés ezért a hétre szól: a fókusz hete
+  //! áll-e a lapon (hétköznap a mai, hétvégén a következő — `focusMondayKey`).
+  inFocusWeek: boolean;
   onToday: () => void;
   //* A futó elem kártyájának megnyitása a részletlapon.
   onOpen?: (key: string) => void;
@@ -51,7 +62,7 @@ export function NowRail({
 }) {
   const clock = useClock();
   const state: NowState | null =
-    clock && inCurrentWeek ? nowState(today, later, clock.min) : null;
+    clock && inFocusWeek ? nowState(today, later, clock.min) : null;
   const span = state && "span" in state ? state.span : null;
   const epoch = useVisibilityEpoch();
 
@@ -69,7 +80,8 @@ export function NowRail({
   );
 
   //* Másik hetet nézünk: a „most" itt hazugság lenne — helyette az út vissza.
-  if (!inCurrentWeek) {
+  if (!inFocusWeek) {
+    const nextWeekFocus = focusIsNextWeek();
     return (
       <div className={shell}>
         <CalendarDays
@@ -77,7 +89,9 @@ export function NowRail({
           aria-hidden
         />
         <p className="min-w-0 flex-1 truncate text-[13px] text-muted-strong">
-          Egy másik hetet nézel — a „most" jelzés a mai hétre vonatkozik.
+          {nextWeekFocus
+            ? "Egy másik hetet nézel — a hétvége után a következő hét jön."
+            : "Egy másik hetet nézel — a „most” jelzés a mai hétre vonatkozik."}
         </p>
         <Button
           size="sm"
@@ -85,7 +99,7 @@ export function NowRail({
           className="h-8 shrink-0 rounded-full px-3 text-xs"
           onClick={onToday}
         >
-          Mai hét
+          {nextWeekFocus ? "Következő hét" : "Mai hét"}
         </Button>
       </div>
     );
