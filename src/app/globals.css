@@ -125,6 +125,15 @@
       //* megszólalni, nem a törzsbetű. */
   --font-script: var(--font-petit-formal-script), cursive;
 
+  /*//! A KIJELZŐBETŰ BE VOLT TÖLTVE, DE NEM VOLT BEJELENTVE. A `next/font`
+      //! feltette a Lexendet a `<html>`-re, a nyitólap kobalt sávja pedig egy
+      //! `font-jakarta-sans` osztályt írt ki rá — csakhogy a Tailwind v4 a
+      //! betűcsalád-osztályokat EBBŐL a blokkból generálja, és itt nem volt
+      //! ilyen kulcs. Az osztály tehát nem létezett, a cím némán a rendszer
+      //! sans-jével jelent meg: a 166 kB-os betűt letöltöttük és nem
+      //! használtuk. Ez a kulcs köti össze a kettőt. */
+  --font-display: var(--font-lexend), sans-serif;
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -179,7 +188,7 @@
       //! EZ NEM EGY MÁSODIK TÉMA, HANEM EGY ZÁRT DOBOZ. Nem a `.dark`
       //! változatot bolygatjuk meg (az az egész alkalmazásé), hanem
       //! újraértelmezzük azt a néhány tokent A VÁLTÓ BELSEJÉBEN, amiből a
-      //! benne álló vezérlők élnek: így a `site-nav`, az `AccountMenu` és a
+      //! benne álló vezérlők élnek: így a `chrome/standing-line`, az `AccountMenu` és a
       //! `Button` kódja változatlan marad, a váltó mégis helyes marad
       //! papíron, kobalton és éjszakai felületen is.
       //! A `--background` az AKTÍV pirula BETŰJE (`bg-foreground
@@ -219,6 +228,122 @@
     top: var(--site-header-h);
   }
 
+  /*//! A SÁV TÖLTÉSJELZŐJE. Nem a folyamban áll, hanem a sáv alsó élén fut,
+      //! ezért a megjelenése egyetlen vezérlőt sem mozdít el — a régi, a hét
+      //! címkéje mellé tett pörgő korong pontosan ezt csinálta, méghozzá
+      //! lapozás közben, amikor a nyíl a helyén kell maradjon. */
+  @keyframes site-bar-progress {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(400%);
+    }
+  }
+  .site-bar-progress {
+    animation: site-bar-progress 1.1s ease-in-out infinite;
+  }
+  /*//* Mozgáscsökkentés mellett a csík nem fut, hanem áll: a tény („tölt")
+      //* megmarad, a mozgás nem. */
+  @media (prefers-reduced-motion: reduce) {
+    .site-bar-progress {
+      width: 100%;
+      opacity: 0.55;
+      animation: none;
+    }
+  }
+
+  /*//! ─── A LAP SÁV-ALAKJA ───────────────────────────────────────────────
+      //! `xl`-től a fejléc lapjának a TARTALMA a sávban áll (lásd
+      //! `chrome/standing-line.tsx`): ugyanaz a React-fa, más alak. Ami
+      //! függőleges listaként helyes — szakaszcím, magyarázat, teljes
+      //! szélességű sor —, az vízszintes sávban zaj, ezért itt elmarad.
+      //*
+      //! A CSOPORTOSÍTÁS VISZONT MEGMARAD, és ez a lényeg: a szakaszok
+      //! egymás MELLETT állnak külön csoportként, nem összeolvadva. A régi
+      //! eszköztár baja nem a vezérlők SZÁMA volt, hanem hogy tizenkettő állt
+      //! egy sorban, azonos súllyal, csoport és felirat nélkül. Itt mindegyik
+      //! vezérlő KI VAN ÍRVA, és a saját csoportjában ül. */
+  .chrome-rail {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+  /*//* A szakasz vízszintes csoport lesz; a címe elmarad — a benne álló
+      //* vezérlők maguk ki vannak írva, a cím fölöttük ismétlés lenne. */
+  .chrome-rail section {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0;
+  }
+  .chrome-rail section > h2 {
+    display: none;
+  }
+  .chrome-rail section > div {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.375rem;
+  }
+  /*//! A CSOPORTHATÁR LÁTSZIK IS, NEM CSAK VAN. Az eredeti eszköztár baja nem
+      //! a vezérlők száma volt, hanem hogy tizenkettő állt egy sorban azonos
+      //! súllyal, csoport nélkül. Egyforma gombközzel a műveletsor ugyanezt
+      //! csinálná: „ki vagy", „melyik hét" és a műveletek egyetlen szalaggá
+      //! olvadnának. A szakaszok közti `<hr>` ezért nem eltűnik, hanem
+      //! ELFORDUL: vízszintes vonalból függőleges válaszfal lesz. */
+  .chrome-rail hr {
+    display: block;
+    align-self: center;
+    width: 0;
+    height: 1.25rem;
+    margin-block: 0;
+    margin-inline: 0.5rem;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+  /*//! A SORBÓL PIRULA LESZ. Ugyanaz a gomb, ugyanaz az ikon és felirat —
+      //! csak a szélessége a tartalmáé, nem a lapé. */
+  .chrome-rail .sheet-item {
+    width: auto;
+    min-height: 2.25rem;
+    padding-inline: 0.625rem;
+    border-radius: 9999px;
+  }
+  .chrome-rail .sheet-hint {
+    display: none;
+  }
+  /*//! AMI A SORBAN MÁR OTT ÁLL, AZ A SÁVBAN NEM ISMÉTLŐDIK. Mérve 1440
+      //! px-en: a „Melyik hetet" csoport 337 px-t vitt el pusztán azért, hogy
+      //! megismételje a dátumot és a „Ma"-t, amit a sor bal oldala már kimond
+      //! — és a sáv emiatt 1478 px-t lógott ki. A naptárikon marad, mert az
+      //! egy külön művelet: ugrás egy tetszőleges dátumra. */
+  .chrome-rail .sheet-disclosure-summary,
+  .chrome-rail .sheet-disclosure-action {
+    display: none;
+  }
+  /*//* Egy „Osztály" felirat egy „13C"-t mutató választó MELLETT nem mond
+      //* semmit: a választó maga a felirata. Függőleges listában viszont kell,
+      //* ezért csak itt marad el. */
+  .chrome-rail .sheet-row-text {
+    display: none;
+  }
+  /*//! A KINYÍLÓ NAPTÁR SÁVBAN BUBORÉK. Helyben terjeszkedve szétnyomná a
+      //! sort; a gombhoz kötve viszont pontosan úgy viselkedik, ahogy egy
+      //! dátumválasztótól elvárt. */
+  .chrome-rail .sheet-disclosure-panel {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    z-index: 50;
+    width: max-content;
+    border-radius: 0.75rem;
+    background-color: var(--popover);
+    padding: 0.25rem;
+    box-shadow: 0 24px 48px -20px oklch(0 0 0 / 0.85);
+    outline: 1px solid var(--border);
+  }
+
   /*//! BIZTONSÁGOS SÁVOK. A lap `viewport-fit=cover`-rel fut, hogy fekvő
       //! telefonon a rács a lekerekített sarkokig érjen — cserébe NEKÜNK kell
       //! kikerülni a bevágást és a „home indicator"-t. Az idősáv a bal szélen
@@ -239,55 +364,47 @@
     }
   }
 
-  /*//! A BEÁLLÍTÁS-CSOPORT KÉT ALAKJA. Az eszköztár négy ritkán nyúlt vezérlője
-      //! (jelmagyarázat, szűrések, duális beosztás, értesítés) `sm`-től egy sor
-      //! ikon, telefonon viszont EGY „…" gomb mögé bújó, feliratos lista — lásd
-      //! `toolbar-more.tsx`. Mind a két alakban UGYANAZ a React-elem: a gombok
-      //! egyszer csatlakoznak a fába, és csak a megjelenésük vált. Ezért nem
-      //! propon múlik, hanem médialekérdezésen — a `/ma` sávjában ugyanaz a
-      //! harang áll, ott viszont NINCS `.tt-more` szülő, tehát felirat sincs.
+  /*//! ─── A PALETTA VÁLASZTÓJA ────────────────────────────────────────────
+      //! ITT DŐL EL, MELYIK KÉPLET SZÍNE LÁTSZIK. A kártya mind a hármat
+      //! magával hozza (`lib/accent.ts`), és ez a néhány sor köti az egyiket
+      //! az `--acc-h`-ra, ami alatt az egész lap dolgozik. A váltás így nem
+      //! renderelés, hanem EGY attribútum a `<html>`-en: a rács azonnal
+      //! átfordul, mozdulatlan DOM mellett.
       //*
-      //* A `.tt-more-item` a panelben teljes szélességű, balra zárt sorrá teszi
-      //* a gombot; a `.tt-more-label` a csak ott megjelenő feliratot. Két
-      //* osztálynyi fajsúly (0,2,0) — pont annyi, hogy a Tailwind egyosztályos
-      //* `w-9`/`hidden` segédosztályait felülírja, többre nincs szükség. */
-  @media (width < 40rem) {
-    .tt-more .tt-more-item {
-      width: 100%;
-      height: 2.5rem;
-      min-height: 2.5rem;
-      justify-content: flex-start;
-      gap: 0.625rem;
-      padding-inline: 0.625rem;
-      border-radius: 0.625rem;
-    }
-    /*//* A nyugalmi keret és háttér a panelben nem kell: négy egyforma sor
-        //* olvasható listát ad, négy egymás alatti pirula nem. A `:not(:hover)`
-        //* nem óvatoskodás — enélkül ez a szabály a Tailwind `hover:bg-*`
-        //* segédosztályát is elnyomná (azonos fajsúly, későbbi sor), és a
-        //* soroknak nem lenne visszajelzésük. */
-    .tt-more .tt-more-item:not(:hover) {
-      border-color: transparent;
-      background-color: transparent;
-    }
-    /*//! A HALVÁNY IKONSZÍN A PANELBEN LETILTOTTNAK LÁTSZIK. A sávban a
-        //! `text-muted-foreground` helyes: ott a négy ikon szándékosan halkabb
-        //! a mellettük álló osztályválasztónál. Feliratos listasorként viszont
-        //! ugyanez a szürke azt üzeni, hogy a sor nem nyomható meg. A BEKAPCSOLT
-        //! állapot színét (`text-primary`: beállított duális, élő értesítés) ez
-        //! nem érinti — a szabály pontosan a halvány osztályt nevezi meg, nem a
-        //! gombot. */
-    .tt-more .tt-more-item.text-muted-foreground {
-      color: var(--foreground);
-    }
-    .tt-more .tt-more-label {
-      display: inline;
-    }
+      //! A LISTA NEM DÍSZ, HANEM SZERZŐDÉS. Ezek pontosan azok az osztályok,
+      //! amelyek lentebb `var(--acc-h)`-t olvasnak; a szabály a HASZNÁLÓRA ül,
+      //! nem egy `*`-ra, mert így palettánként pár száz elemet érint, nem az
+      //! egész fát. //! Aki új `acc-` osztályt vesz fel, annak ide is fel kell
+      //! vennie — enélkül az új elem némán a `ciklus`-on ragadna.
+      //*
+      //* A `210` tartalék annak az esetnek szól, amikor egy `acc-` osztály
+      //* olyan elemre kerül, ami fölött nincs `accentStyle` (minta, üres
+      //* állapot): kobalt, vagyis a lap saját színe — nem érvénytelen érték. */
+  .acc-tint,
+  .acc-tint-strong,
+  .acc-dot,
+  .acc-text,
+  .acc-break {
+    --acc-h: var(--h-ciklus, 210);
+  }
+  [data-palette="prizma"]
+    :is(.acc-tint, .acc-tint-strong, .acc-dot, .acc-text, .acc-break) {
+    --acc-h: var(--h-prizma, 210);
+  }
+  [data-palette="nyugodt"]
+    :is(.acc-tint, .acc-tint-strong, .acc-dot, .acc-text, .acc-break) {
+    --acc-h: var(--h-nyugodt, 210);
   }
 
+  /*//! A HALVÁNY KITÖLTÉS VILÁGOS ALAPON. Ez a szabály sokáig NEM LÉTEZETT: a
+      //! lap kizárólag sötétben futott, ezért a `.acc-tint`-nek csak `.dark`
+      //! változata volt, és világosban a kártya háttér és keret nélkül maradt
+      //! volna. Az értékek nem találgatás — a nyomtatási blokk (a lap alján)
+      //! ugyanezt a feladatot már megoldotta egyszer, papírra: világos, de
+      //! telített folt, ami mellett a fekete felirat olvasható marad. */
   .acc-tint {
-    background-color: oklch(0.966 0.03 var(--acc-h));
-    border-color: oklch(0.85 0.072 var(--acc-h));
+    background-color: oklch(0.955 0.035 var(--acc-h));
+    border-color: oklch(0.72 0.09 var(--acc-h));
   }
   .dark .acc-tint {
     background-color: oklch(0.335 0.042 var(--acc-h));
@@ -831,10 +948,12 @@
 }
 
 @media print {
-  /*//* A `color-scheme` a lapon SORON BELÜLI stílus (sötét űrlapelemek miatt) —
-      //* egy `!important` az egyetlen út, ami ezt nyomtatásra visszabontja. */
+  /*//* A `color-scheme` a lapon SORON BELÜLI stílus: a festés előtti szkript
+      //* írja a `<html>`-re (`lib/appearance.ts`), hogy a böngésző saját
+      //* vezérlői is a választott témát vegyék fel. Egy `!important` az
+      //* egyetlen út, ami ezt nyomtatásra visszabontja. */
   html {
-    /* biome-ignore lint/complexity/noImportantStyles: soron belüli stílusból jön (layout.tsx), ezt más nem üti. */
+    /* biome-ignore lint/complexity/noImportantStyles: soron belüli stílusból jön (lib/appearance.ts), ezt más nem üti. */
     color-scheme: light !important;
   }
   html,
@@ -862,19 +981,27 @@
 
   /*//! A KÁRTYA SZÍNE ADAT, nem dísz: a tantárgyat azonosítja. A böngésző
       //! alapból elhagyja a háttereket nyomtatáskor — itt ezt visszakérjük, és
-      //! a papírra hangolt (világos, de telített) változatot adjuk. */
-  .dark .acc-tint {
+      //! a papírra hangolt (világos, de telített) változatot adjuk.
+      //*
+      //! A SZELEKTOROK NEM `.dark`-KAL KEZDŐDNEK, ÉS EZ AZÓTA FONTOS, AMIÓTA A
+      //! LAPNAK VILÁGOS TÉMÁJA IS VAN. Amíg csak sötét volt, a `.dark` előtag
+      //! ártalmatlan pontosítás volt; ma viszont azt jelentené, hogy a papír
+      //! csak annak lesz helyes, aki épp sötétben nyomtat. A papír a HARMADIK
+      //! médium — nem a képernyős témák egyikének a változata —, ezért
+      //! feltétel nélkül érvényes. A rétegen kívüliség (lásd fentebb) elég
+      //! ahhoz, hogy a `@layer utilities`-ben álló mindkét változatot verje. */
+  .acc-tint {
     background-color: oklch(0.955 0.035 var(--acc-h));
     border-color: oklch(0.72 0.09 var(--acc-h));
   }
-  .dark .acc-tint-strong {
+  .acc-tint-strong {
     background-color: oklch(0.92 0.065 var(--acc-h));
     border-color: oklch(0.62 0.13 var(--acc-h));
   }
-  .dark .acc-dot {
+  .acc-dot {
     background-color: oklch(0.55 0.18 var(--acc-h));
   }
-  .dark .acc-break {
+  .acc-break {
     background-image: repeating-linear-gradient(
       -45deg,
       oklch(0.55 0.18 var(--acc-h) / 0.22) 0 3px,

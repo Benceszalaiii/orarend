@@ -30,6 +30,27 @@ export function dateFromKey(dateKey: string): Date {
   return new Date(y, m - 1, d, 12);
 }
 
+//! ─── MELYIK HÉT A „MOSTANI" ────────────────────────────────────────────────
+//! SZOMBATON A MAI HÉT MÁR TELJES EGÉSZÉBEN A MÚLTÉ. Mind az öt tanítási napja
+//! elmúlt; aki hétvégén nyitja meg az órarendet, nem azt kérdezi, mi volt
+//! kedden, hanem azt, mi jön hétfőn. A lap ezért hétvégén a KÖVETKEZŐ hetet
+//! tekinti a mostaninak — ugyanaz a döntés, amit a `/ma` a `focusDayKey`-jel
+//! hoz meg a napokra (lásd `components/ma/day.ts`), csak egy szinttel feljebb.
+export function focusMondayKey(today: string = todayKey()): string {
+  const isoDow = ((dateFromKey(today).getDay() + 6) % 7) + 1;
+  //* Szombat (6) → +2 nap, vasárnap (7) → +1 nap: mindkettő a következő hétfő.
+  return mondayKey(isoDow <= 5 ? today : addDaysKey(today, 8 - isoDow));
+}
+
+/**
+ * Igaz, ha a fókusz hete NEM a mai hét — vagyis hétvége van. Ettől függ, hogy
+ * a visszatérő gombok „Ma"-t vagy „Hétfő"-t mondanak: a hét, ahova visszavisznek,
+ * hétvégén nem tartalmazza a mai napot.
+ */
+export function focusIsNextWeek(today: string = todayKey()): boolean {
+  return focusMondayKey(today) !== mondayKey(today);
+}
+
 export function minLabel(min: number): string {
   return `${pad(Math.floor(min / 60))}:${pad(Math.round(min % 60))}`;
 }

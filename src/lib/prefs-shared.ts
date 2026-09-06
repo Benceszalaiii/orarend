@@ -1,3 +1,5 @@
+import { isPalette, isTheme, type Palette, type Theme } from "./appearance";
+import { type Identity, isIdentity } from "./identity";
 import {
   CLASS_MAX_LENGTH,
   looksLikeClass,
@@ -40,6 +42,23 @@ export type SyncedPrefs = {
   teacher: string | null;
   /** Melyik nézetben járt utoljára (`/orarend`, `/ma` vagy `/tanari`). */
   lastView: ViewRoute | null;
+  //! AZ ALANY IS ÁTJÖN A MÁSIK KÉSZÜLÉKRE. Enélkül egy tanár a telefonján a
+  //! saját napját látná, a táblagépén viszont a 13C-ét — ugyanazzal a
+  //! belépéssel, ugyanazon a `/ma` címen. Egy mező, két érték; a
+  //! `looksLikeTeacher`-höz hasonló alaki ellenőrzés itt egy zárt halmaz.
+  /** Osztály- vagy tanár-olvasatban nézi-e a `/ma`-t (`orarend:identity:v1`). */
+  identity: Identity | null;
+  //! A MEGJELENÉS IS ÁTJÖN A MÁSIK KÉSZÜLÉKRE, ÉS EZ NEM MAGÁTÓL ÉRTETŐDŐ.
+  //! Lehetne amellett érvelni, hogy a világos/sötét KÉSZÜLÉKFÜGGŐ: a telefonon
+  //! sötét, a gépen világos. Csakhogy a „Rendszer" pont ezt az esetet oldja meg
+  //! — és aki KÉZZEL állít sötétet, az nem a készülékéről mond valamit, hanem
+  //! magáról. A tantárgyszínek pedig végképp az adat olvasatához tartoznak:
+  //! értelmetlen lenne két készüléken két különböző színben látni ugyanazt a
+  //! hetet.
+  /** A lap felülete: rendszer, világos vagy sötét (`orarend:theme:v1`). */
+  theme: Theme | null;
+  /** A tantárgyszínek képlete (`orarend:palette:v1`). */
+  palette: Palette | null;
   /** Összevont csoportbontások alanyonként (`orarend:merge-prefs:v1`). */
   merge: Record<string, MergePrefEntry[]>;
   /** Duális beosztás alanyonként (`orarend:dual-schedule:v1`). */
@@ -67,6 +86,9 @@ export const EMPTY_PREFS: SyncedPrefs = {
   class: null,
   teacher: null,
   lastView: null,
+  identity: null,
+  theme: null,
+  palette: null,
   merge: {},
   dual: {},
 };
@@ -183,6 +205,14 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
     ? (input.lastView as ViewRoute)
     : null;
 
+  const identity = isIdentity(input.identity) ? input.identity : null;
+
+  //* Ugyanaz a szabály, mint mindenhol máshol ebben a fájlban: ismeretlen
+  //* érték = nincs érték. A zárt halmazokat az `appearance.ts` mondja ki, és
+  //* ez az EGYETLEN hely, ahonnan a szerver megtudja őket.
+  const theme = isTheme(input.theme) ? input.theme : null;
+  const palette = isPalette(input.palette) ? input.palette : null;
+
   const merge: Record<string, MergePrefEntry[]> = {};
   if (isRecord(input.merge)) {
     for (const [key, value] of Object.entries(input.merge)) {
@@ -208,7 +238,16 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
     }
   }
 
-  return { class: cls, teacher, lastView, merge, dual };
+  return {
+    class: cls,
+    teacher,
+    lastView,
+    identity,
+    theme,
+    palette,
+    merge,
+    dual,
+  };
 }
 
 /** Van-e egyáltalán mit szinkronizálni. Üres beállítást nem töltünk fel. */
@@ -217,6 +256,9 @@ export function hasAnyPrefs(prefs: SyncedPrefs): boolean {
     prefs.class !== null ||
     prefs.teacher !== null ||
     prefs.lastView !== null ||
+    prefs.identity !== null ||
+    prefs.theme !== null ||
+    prefs.palette !== null ||
     Object.keys(prefs.merge).length > 0 ||
     Object.keys(prefs.dual).length > 0
   );

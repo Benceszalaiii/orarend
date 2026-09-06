@@ -9,6 +9,7 @@ import {
   SquarePlus,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { SheetItemBody, sheetItem } from "@/components/chrome/chrome-sheet";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,8 +29,17 @@ import {
   refreshPush,
   updatePush,
 } from "@/lib/push";
-import { LEAD_MINUTES, MAX_CLASSES } from "@/lib/push-shared";
-import type { TimetableClass } from "@/lib/timetable";
+import {
+  LEAD_MINUTES,
+  maxSubjects,
+  type PushPrefs,
+  subjectsOf,
+} from "@/lib/push-shared";
+import {
+  SUBJECT_WORDS,
+  type TimetableSubject,
+  type TimetableSubjectKind,
+} from "@/lib/timetable";
 import { cn } from "@/lib/utils";
 
 //* ---------------------------------------------------------------------------
@@ -52,6 +62,23 @@ import { cn } from "@/lib/utils";
 //! meg tudunk mondani: mi kezdődik hamarosan, és mi változott az órarendben.
 //! A párbeszéd pontosan ezt a kettőt mondja ki — nem „értesítéseket" ajánl
 //! általánosságban, mert abból a diák nem tudja eldönteni, kell-e neki.
+//*
+//! ─── EGY HARANG, KÉT ALANY ─────────────────────────────────────────────────
+//! UGYANAZ A PÁRBESZÉD SZOLGÁLJA KI AZ OSZTÁLYT ÉS A TANÁRT, mert a döntés,
+//! amit meghoz, ugyanaz: kiről szóljon a jelzés, és milyen sűrűn. Ami eltér —
+//! a lista, a felső korlát, a szavak — az a `mode`-ból következik.
+//!
+//! A KÉT LISTA EGYÜTT ÉL, DE KÜLÖN SZERKESZTHETŐ. Egy feliratkozás EGY sor a
+//! szerveren, benne mindkét lista (`push-shared.ts`); ez a párbeszéd viszont
+//! mindig csak a SAJÁT alanyfajtáját írja, a másikat érintetlenül továbbadja.
+//! Így az osztályfőnök tanár a diák „Ma"-ján az osztályát, a tanárin magát
+//! állítja be, és egyik beállítás sem törli a másikat.
+//!
+//! A TANÁRI ÁG BELÉPÉSHEZ KÖTÖTT, ÉS EZT NEM ITT DÖNTJÜK EL. A jogosultságot a
+//! végpont ellenőrzi az iskolai fiókból (`/api/ertesites`) — a felület csak
+//! MEGMUTATJA a válaszát. Ezért a harang a tanári felületen is csak akkor
+//! jelenik meg, ha a hívó fél tanárként lépett be (lásd a hívási helyeket);
+//! egy „kapcsold be" gomb, ami utána 403-at kap, rosszabb a hiányzó gombnál.
 
 //* Az élettartam-frissítés (`refreshPush`) LAPONKÉNT egyszer fut, nem
 //* komponensenként: a harang mindkét nézet sávjában ott van, és két
@@ -59,19 +86,30 @@ import { cn } from "@/lib/utils";
 let refreshed = false;
 
 export function NotificationMenu({
-  classes,
-  currentClass,
+  mode = "class",
+  subjects,
+  currentSubject,
   className,
 }: {
-  classes: readonly TimetableClass[];
-  /** Az éppen nézett osztály — ez a párbeszéd alapértelmezett választása. */
-  currentClass: string;
+  /** Kire szól ez a harang — osztályra vagy tanárra. */
+  mode?: TimetableSubjectKind;
+  subjects: readonly TimetableSubject[];
+  /** Az éppen nézett alany — ez a párbeszéd alapértelmezett választása. */
+  currentSubject: string;
   className?: string;
 }) {
+  const words = SUBJECT_WORDS[mode];
+  const max = maxSubjects(mode);
+
   const [open, setOpen] = useState(false);
   const [support, setSupport] = useState<PushSupport | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  //! A MÁSIK LISTA NEM ÁLLAPOT, HANEM ŐRIZET. A párbeszéd nem mutatja és nem
+  //! szerkeszti — csak azért tartjuk, hogy a mentés vissza tudja adni a
+  //! szervernek. Enélkül a tanári panelen mentett beállítás CSENDBEN törölné a
+  //! diák-oldalon felvett osztályokat.
+  const [other, setOther] = useState<string[]>([]);
   const [everyLesson, setEveryLesson] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,14 +125,16 @@ export function NotificationMenu({
     setEnabled(subscription !== null);
     const prefs = loadPrefs();
     setEveryLesson(prefs.everyLesson);
+    const mine = subjectsOf(prefs, mode);
+    setOther(subjectsOf(prefs, mode === "teacher" ? "class" : "teacher"));
     setSelected(
-      subscription && prefs.classes.length > 0
-        ? prefs.classes
-        : currentClass
-          ? [currentClass]
+      subscription && mine.length > 0
+        ? mine
+        : currentSubject
+          ? [currentSubject]
           : [],
     );
-  }, [currentClass]);
+  }, [currentSubject, mode]);
 
   useEffect(() => {
     void sync();
@@ -111,18 +151,26 @@ export function NotificationMenu({
     setOpen(true);
   };
 
-  const toggleClass = (short: string) => {
+  const toggleSubject = (short: string) => {
     setError(null);
     setSelected((current) =>
       current.includes(short)
         ? current.filter((c) => c !== short)
         : //* A felső korlát nem hibaüzenet, hanem meg nem történő koppintás —
-          //* a már kiválasztottak levehetők, a hatodik nem tehető hozzá.
-          current.length >= MAX_CLASSES
+          //* a már kiválasztottak levehetők, az eggyel túli nem tehető hozzá.
+          current.length >= max
           ? current
           : [...current, short],
     );
   };
+
+  //* A mentendő állapot: a szerkesztett lista a saját helyére, a másik
+  //* változatlanul vissza.
+  const prefsToSave = (mine: string[]): PushPrefs => ({
+    classes: mode === "teacher" ? other : mine,
+    teachers: mode === "teacher" ? mine : other,
+    everyLesson,
+  });
 
   const save = async () => {
     if (selected.length === 0) return;
@@ -132,9 +180,8 @@ export function NotificationMenu({
     //! engedélye is kell (`enablePush`); a már bekapcsolt feliratkozás
     //! osztálylistáját viszont engedélykérés NÉLKÜL írjuk át — egy második
     //! kérdés ott csak megijesztené a diákot.
-    const result = enabled
-      ? { ok: await updatePush({ classes: selected, everyLesson }) }
-      : await enablePush({ classes: selected, everyLesson });
+    const next = prefsToSave(selected);
+    const result = enabled ? await updatePush(next) : await enablePush(next);
     setBusy(false);
 
     if (result.ok) {
@@ -155,17 +202,34 @@ export function NotificationMenu({
           ? "Az engedély megvan, de az Órarend háttérszolgáltatása nem indult el — enélkül nincs mire megérkeznie az értesítésnek. Tölts újra a lapot, és próbáld újra."
           : reason === "misconfigured"
             ? "Az értesítések ezen a kiszolgálón nincsenek beállítva. Ez nem a te böngésződön múlik."
-            : reason === "unsupported"
-              ? "Ez a böngésző nem tudja fogadni az értesítéseket."
-              : "Az értesítések most nem kapcsolhatók be — próbáld újra később.",
+            : //! A LEJÁRT BELÉPÉS A LEGVALÓSZÍNŰBB OK, ÉS EZ NEM HIBA, HANEM
+              //! ELVÉGZENDŐ LÉPÉS. A tanári feliratkozáshoz iskolai fiók kell
+              //! (lásd `/api/ertesites`); a munkamenet 30 nap után lejár, a
+              //! feliratkozás viszont tovább él — ilyenkor pontosan ez az
+              //! egyetlen teendő.
+              reason === "forbidden"
+              ? "A tanári értesítéshez iskolai belépés kell. Lépj be az iskolai fiókoddal, aztán próbáld újra."
+              : reason === "unsupported"
+                ? "Ez a böngésző nem tudja fogadni az értesítéseket."
+                : "Az értesítések most nem kapcsolhatók be — próbáld újra később.",
     );
   };
 
+  //! A KIKAPCSOLÁS CSAK ADDIG TART, AMEDDIG EZ A PÁRBESZÉD LÁT. Ha a
+  //! készüléken a MÁSIK alanyra is van feliratkozás (osztályfőnök tanár), akkor
+  //! ez a gomb nem az egész harangot oltja el, csak a saját listáját üríti — a
+  //! diák-oldali beállítást egy tanári panelen nyomott „Kikapcsolás" nem
+  //! veheti el, mert arról a felhasználó itt semmit nem lát.
   const turnOff = async () => {
     setBusy(true);
-    await disablePush();
+    if (other.length > 0) {
+      await updatePush(prefsToSave([]));
+    } else {
+      await disablePush();
+      setEnabled(false);
+    }
+    setSelected([]);
     setBusy(false);
-    setEnabled(false);
     setOpen(false);
   };
 
@@ -181,33 +245,25 @@ export function NotificationMenu({
     <>
       <Button
         variant="ghost"
-        size="icon"
         onClick={openDialog}
-        className={cn(
-          "size-9 rounded-full touch-target",
-          //* Az `/orarend` telefonos sávjában ez a gomb a beállítás-panel egyik
-          //* sora — lásd `toolbar-more.tsx` és a `.tt-more-item` szabályt. A
-          //* `/ma` sávjában NINCS `.tt-more` szülő, ott a szabály nem fog: ott
-          //* a harang marad puszta ikon.
-          "tt-more-item",
-          enabled
-            ? "text-primary hover:text-primary"
-            : "text-muted-foreground hover:text-foreground",
-          className,
-        )}
-        aria-label={
-          enabled ? "Értesítések beállításai" : "Értesítések bekapcsolása"
-        }
-        title="Értesítések"
+        className={sheetItem(className)}
       >
-        {enabled ? (
-          <BellRing className="size-4 shrink-0" />
+        {enabled && selected.length > 0 ? (
+          <BellRing className="size-4 shrink-0 text-primary" aria-hidden />
         ) : (
-          <Bell className="size-4 shrink-0" />
+          <Bell className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         )}
-        <span className="hidden tt-more-label text-sm font-medium">
-          Értesítések
-        </span>
+        <SheetItemBody
+          label="Értesítés"
+          hint={
+            //* A „Bekapcsolva" ITT ARRA az alanyra vonatkozik, amit ez a
+            //* párbeszéd szerkeszt: egy tanári panelen a diák-oldali
+            //* feliratkozás nem tenné igazzá.
+            selected.length > 0 && enabled
+              ? "Bekapcsolva"
+              : "Napi emlékeztető az órarendről"
+          }
+        />
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -243,6 +299,17 @@ export function NotificationMenu({
                     megváltozik az órarend
                   </span>{" "}
                   (elmarad egy óra, teremcsere, áthelyezés).
+                  {/*//! A TANÁRNAK MÁS A JELZÉS ELSŐ SORA, ÉS EZT ELŐRE
+                      //! KIMONDJUK. Nála nem a tantárgy a hír (azt tanítja
+                      //! egész nap), hanem az OSZTÁLY és a TEREM — lásd
+                      //! `teacherReminderText` a `push-plan.ts`-ben. */}
+                  {mode === "teacher" && (
+                    <>
+                      {" "}
+                      Az emlékeztető azzal kezdi, melyik osztályhoz és melyik
+                      terembe kell menned.
+                    </>
+                  )}
                 </>
               )}
             </DialogDescription>
@@ -278,37 +345,41 @@ export function NotificationMenu({
             </ol>
           ) : support === "blocked" ? null : (
             <div className="flex flex-col gap-3">
-              {/*//! AZ OSZTÁLY NEM MAGÁTÓL ÉRTETŐDIK. A lap egy osztály
-                  //! órarendjét mutatja, de a harang MÁSIKRA is beállítható
-                  //! (nyelvi csoport, testvér, duális pár). Ezért kimondjuk,
-                  //! melyik van most kiválasztva — és nem csak jelöljük. */}
+              {/*//! AZ ALANY NEM MAGÁTÓL ÉRTETŐDIK. A lap egy osztály (vagy egy
+                  //! tanár) órarendjét mutatja, de a harang MÁSIKRA is
+                  //! beállítható (nyelvi csoport, testvér, duális pár — a
+                  //! tanárnál helyettesítés). Ezért kimondjuk, melyik van most
+                  //! kiválasztva — és nem csak jelöljük. */}
               <p className="text-sm text-muted-strong">
-                {currentClass ? (
+                {currentSubject ? (
                   <>
                     Most a(z){" "}
                     <span className="font-medium text-foreground">
-                      {currentClass}
+                      {currentSubject}
                     </span>{" "}
                     órarendjét nézed. Erről szólunk — ha más (is) kell, válaszd
                     ki alább.
                   </>
                 ) : (
-                  <>Válaszd ki, melyik osztály órarendjéről szóljunk.</>
+                  <>Válaszd ki, melyik {words.one} órarendjéről szóljunk.</>
                 )}
               </p>
 
               <div className="max-h-52 overflow-y-auto rounded-lg border border-input p-2">
                 <div className="flex flex-wrap gap-1.5">
-                  {classes.map((c) => {
+                  {subjects.map((c) => {
                     const on = selected.includes(c.short);
-                    const full = !on && selected.length >= MAX_CLASSES;
+                    const full = !on && selected.length >= max;
                     return (
                       <button
                         key={c.short}
                         type="button"
                         aria-pressed={on}
                         disabled={full}
-                        onClick={() => toggleClass(c.short)}
+                        //* A tanári jel (`KJ`) magában nem azonosít senkit —
+                        //* a teljes nevet ezért a gomb címkéje viseli.
+                        title={c.name !== c.short ? c.name : undefined}
+                        onClick={() => toggleSubject(c.short)}
                         className={cn(
                           "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
                           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
@@ -354,7 +425,12 @@ export function NotificationMenu({
           )}
 
           <DialogFooter className="sm:justify-between">
-            {enabled ? (
+            {/*//! KIKAPCSOLNI CSAK AZT LEHET, AMI BE VAN KAPCSOLVA — ÉS ITT az
+                //! „ami" ennek a párbeszédnek az alanyfajtája. Az osztályfőnök
+                //! tanár készülékén a feliratkozás él (`enabled`), de ha erre az
+                //! alanyra még nincs kiválasztva senki, egy „Kikapcsolás" gomb
+                //! olyat ígérne, amit nem tud megtenni. */}
+            {enabled && selected.length > 0 ? (
               <Button
                 variant="ghost"
                 size="sm"

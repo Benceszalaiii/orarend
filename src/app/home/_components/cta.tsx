@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 //! ─── A KÉT AJTÓ ────────────────────────────────────────────────────────────
 //! A lap egyetlen döntéssel zár, és a döntés NEM az, hogy „belépjek-e".
-//! A `site-nav.tsx` már kimondja, mi a két nézet viszonya: ugyanarra az
+//! A `chrome/standing-line.tsx` már kimondja, mi a két nézet viszonya: ugyanarra az
 //! adatra néznek, csak MÁS KÉRDÉSRE válaszolnak. A nyitólap végén ezért nem
 //! egy elsődleges és egy „másodlagos" gomb áll, hanem két egyenrangú ajtó —
 //! a diák maga tudja, most melyik kérdése van.
@@ -94,7 +94,18 @@ function Door({
       variant={variant}
       size="lg"
       className={cn(
-        "h-auto w-full flex-col items-start gap-6 rounded-[calc(var(--radius)-2px)] p-7 text-left whitespace-normal sm:gap-8 sm:p-9",
+        //! AZ AJTÓ MAGASSÁGA IS AZ AJTÓÉ. Széles, lapos táblaként a jel és a
+        //! felirat egymáshoz tapadt, a panel jobb harmada pedig üresen állt.
+        //! `lg`-től a panel kap egy alsó magasságot, és a két tartalom a két
+        //! végére kerül: fent a mértani jel, lent a név — ez az arány olvas
+        //! ajtónak, nem névtáblának.
+        //*
+        //! A `justify-start` NEM DÍSZ. A `Button` alap `justify-center`-je
+        //! `flex-col`-ban függőlegesen középre húz, így a rács által egyenlővé
+        //! tett két ajtóban a két mértani jel elcsúszott egymáshoz képest,
+        //! valahányszor a két leírás nem ugyanannyi sorra tört (768px-en 12px).
+        //! Fent kezdenek, `lg`-től pedig a két végre feszülnek.
+        "h-auto w-full flex-col items-start justify-start gap-6 rounded-[calc(var(--radius)-2px)] p-7 text-left whitespace-normal sm:gap-8 sm:p-9 lg:min-h-[19rem] lg:justify-between",
         variant === "default" && "text-ink-on-primary",
       )}
     >
@@ -120,14 +131,20 @@ export default function Cta() {
           //* mindkettő akkora felület, amekkora egy döntést megérdemel. Egy
           //* oldalsó hasábba szorítva keskeny kártyapárrá zsugorodnának. */}
       <div className="mx-auto max-w-6xl">
-        <div className="max-w-[46rem]">
-          <h2 className="max-w-[14ch] text-[clamp(2.1rem,5.5vw,4rem)] font-semibold leading-[1.0] tracking-[-0.045em] text-foreground">
-            Két kérdés, két nézet.
-          </h2>
+        <h2 className="max-w-[14ch] text-[clamp(2.1rem,5.5vw,4rem)] font-semibold leading-[1.0] tracking-[-0.045em] text-foreground">
+          Két kérdés, két nézet.
+        </h2>
 
-        </div>
-
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 md:mt-14">
+        {/*//* A SZAKASZ ÜTEME KIFELÉ TÁGUL: a szakasz kerete a legnagyobb köz,
+            //* alatta a cím és az ajtók távolsága, majd a két ajtó hézaga, és
+            //* legbelül az ajtó saját bélése. A hézag korábban 16px volt a 36px
+            //* bélés mellett — a két panel egyetlen, elrepedt táblának látszott.
+            //*
+            //* A KÉT HASÁB `md`-TŐL NYÍLIK, NEM `sm`-TŐL. 640px-en az egymás
+            //* melletti ajtó 280px széles lett, amiből 72px a bélés: a cím két
+            //* sorra tört, a leírás ötre. Ott még teljes szélességű, egymás
+            //* alatti ajtó a helyes alak; 768px-től fér el a kettő egymás mellett. */}
+        <div className="mt-14 grid gap-8 sm:gap-10 md:mt-16 md:grid-cols-2">
           <Door
             href="/orarend"
             title="Heti órarend"

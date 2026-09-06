@@ -1,6 +1,8 @@
-import { filterKnownClasses } from "@/lib/known-class";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+import { filterKnownClasses, filterKnownTeachers } from "@/lib/known-class";
 import { sendPush } from "@/lib/push-send";
-import { LEAD_MINUTES, MAX_CLASSES } from "@/lib/push-shared";
+import { LEAD_MINUTES, MAX_CLASSES, MAX_TEACHERS } from "@/lib/push-shared";
 import {
   type PushSubscription,
   pushStoreReady,
@@ -54,9 +56,54 @@ type Body = {
   endpoint?: unknown;
   keys?: { p256dh?: unknown; auth?: unknown };
   classes?: unknown;
+  teachers?: unknown;
   everyLesson?: unknown;
   replaces?: unknown;
 };
+
+//* A lista hosszát a szűrés ELŐTT vágjuk (lásd lentebb): ezer elemű tömbre nem
+//* futtatunk ezer ellenőrzést.
+function wantedList(raw: unknown, max: number): string[] {
+  return Array.isArray(raw)
+    ? raw.filter((v): v is string => typeof v === "string").slice(0, max)
+    : [];
+}
+
+function sameList(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+//! ─── A TANÁRI FELIRATKOZÁS AZ EGYETLEN, AMIT IGAZOLNI KELL ─────────────────
+//! AZ OSZTÁLY ÓRARENDJE NYILVÁNOS: bárki megnézheti a lapon, tehát az
+//! értesítés sem ad hozzá semmit, amihez ne férne hozzá amúgy is. A TANÁRI
+//! feliratkozás más — nem azért, mert az adat titkos (az sem az), hanem mert
+//! ez a lap EGY EMBER munkanapját küldi el egy készülékre percre pontosan,
+//! nap mint nap. Az „hol van most X tanár" kérdésre adott automata válasz
+//! akkor is követés, ha minden egyes adata nyilvános.
+//!
+//! EZÉRT: tanári feliratkozást KIZÁRÓLAG iskolai belépéssel, tanárként
+//! igazolt fiók hozhat létre vagy módosíthat (`isTeacher === true`, amit az
+//! iskola rendszere mond meg — lásd `jedlik-ad.ts`; a mezőt a kliens nem tudja
+//! átírni, `auth.ts`).
+//!
+//! ÉS AMI EBBŐL KÖVETKEZIK, DE NEM MAGÁTÓL ÉRTETŐDŐ: a MEGÚJÍTÁSHOZ nem kell
+//! munkamenet. A feliratkozás 400 napig él, a belépés 30-ig; a lap minden
+//! megnyitáskor csendben megújítja a sorát (`refreshPush`), és a böngésző a
+//! push-címet is lecserélheti magától (`pushsubscriptionchange`) — ezek
+//! egyikéhez sincs élő munkamenet. Ha a megújítás jogosultságot kérne, a
+//! tanár értesítései a belépése lejártakor NÉMÁN elhalnának. Ezért a szabály
+//! pontosan ez: ÚJ vagy MEGVÁLTOZOTT tanári lista igazolást kér; a MÁR
+//! TÁROLTTAL AZONOS lista igazolás nélkül is megmarad.
+async function sessionIsTeacher(): Promise<boolean> {
+  try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    return session?.user.isTeacher === true;
+  } catch {
+    //* A munkamenet-lekérés bukása NEM jogosultság: aki nem igazolható, az
+    //* nem kap tanári feliratkozást.
+    return false;
+  }
+}
 
 export async function POST(request: Request) {
   if (!pushStoreReady()) {
@@ -97,20 +144,51 @@ export async function POST(request: Request) {
   //! Enélkül a kulcsforgatás némán kikapcsolná valakinek az értesítéseit.
   const inherited = replaces ? await readSubscription(replaces) : null;
 
-  const rawClasses = payload?.classes;
   //! A LISTA HOSSZÁT A SZŰRÉS ELŐTT VÁGJUK. Ezer elemű tömbre nem futtatunk
   //! ezer ellenőrzést — a felső korlát a munkára is korlát, nem csak a tárolt
   //! adatra.
-  const wanted = Array.isArray(rawClasses)
-    ? rawClasses
-        .filter((c): c is string => typeof c === "string")
-        .slice(0, MAX_CLASSES)
-    : [];
+  const wantedClasses = wantedList(payload?.classes, MAX_CLASSES);
+  const wantedTeachers = wantedList(payload?.teachers, MAX_TEACHERS);
+
+  //* A kliens a KÉT LISTÁT KÜLÖN felületen szerkeszti (a diák „Ma"-ján az
+  //* osztályokat, a tanárin a tanárokat), de mindig mindkettőt elküldi — a
+  //* hiányzó mező ezért a `replaces`-ből örökölt (vagy a tárolt) listát
+  //* jelenti, nem üresítést.
   const classes =
-    wanted.length > 0
-      ? await filterKnownClasses(wanted)
-      : (inherited?.classes ?? []);
-  if (classes.length === 0) {
+    payload?.classes === undefined
+      ? (inherited?.classes ?? [])
+      : await filterKnownClasses(wantedClasses);
+
+  const stored = (await readSubscription(endpoint)) ?? inherited;
+  const storedTeachers = stored?.teachers ?? [];
+
+  const requestedTeachers =
+    payload?.teachers === undefined
+      ? storedTeachers
+      : await filterKnownTeachers(wantedTeachers);
+
+  //! CSAK AZ VÁLTOZTATHATJA, AKI IGAZOLTAN TANÁR — a megújítás viszont nem
+  //! változtatás (lásd `sessionIsTeacher` fölött). A munkamenetet ezért csak
+  //! akkor kérdezzük meg, ha a kért lista ELTÉR a tárolttól: egy csendes
+  //! frissítés így egyetlen adatbázis-kérést sem indít.
+  const teachersChanged = !sameList(requestedTeachers, storedTeachers);
+  if (teachersChanged && !(await sessionIsTeacher())) {
+    //! 403, NEM NÉMA ELDOBÁS. Ez az egyetlen ág, ahol a kérés alakja hibátlan,
+    //! és mégsem teljesítjük — a diáknak (vagy a lejárt munkamenetű tanárnak)
+    //! meg kell tudnia, hogy nem a hálózat akadt el, hanem be kell lépnie.
+    return Response.json(
+      {
+        error:
+          "Tanári értesítést csak iskolai belépéssel, tanári fiókkal lehet beállítani.",
+      },
+      { status: 403 },
+    );
+  }
+  const teachers = requestedTeachers;
+
+  //* Feliratkozás legalább egy alanyra: mindkét lista üresen egy olyan sor
+  //* keletkezne, amire soha semmi nem megy ki.
+  if (classes.length === 0 && teachers.length === 0) {
     return new Response(null, { status: 400 });
   }
 
@@ -119,6 +197,7 @@ export async function POST(request: Request) {
     p256dh,
     auth,
     classes,
+    teachers,
     everyLesson:
       payload?.everyLesson === undefined
         ? (inherited?.everyLesson ?? false)
@@ -129,7 +208,7 @@ export async function POST(request: Request) {
   //! A CSERE NEM ELSŐ FELIRATKOZÁS. Ha a régi sort örököltük, a diák már rég
   //! bekapcsolta az értesítéseket — egy „Értesítések bekapcsolva" üzenet
   //! ilyenkor a semmiből jönne, ok nélkül.
-  const existing = (await readSubscription(endpoint)) ?? inherited;
+  const existing = stored;
 
   try {
     await saveSubscription(record, replaces);
@@ -150,7 +229,10 @@ export async function POST(request: Request) {
     await sendPush([record], {
       kind: "change",
       title: "Értesítések bekapcsolva",
-      body: `${classes.join(", ")} — szólunk ${LEAD_MINUTES} perccel az óra előtt és ha változik az órarend.`,
+      //* A visszaigazolás azt sorolja fel, amire a feliratkozás TÉNYLEGESEN
+      //* szól — a tanárit is, különben a tanár nem tudná meg, hogy a jelzés az
+      //* ő órarendjéről szólt-e, vagy az osztályéról.
+      body: `${[...classes, ...teachers].join(", ")} — szólunk ${LEAD_MINUTES} perccel az óra előtt és ha változik az órarend.`,
       url: "/ma",
       tag: "orarend-welcome",
     });

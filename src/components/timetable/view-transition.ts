@@ -2,7 +2,19 @@
 
 import { flushSync } from "react-dom";
 
-type ViewTransition = { finished: Promise<void> };
+type ViewTransition = {
+  finished: Promise<void>;
+  //! AZ ÁTMENETNEK HÁROM ÍGÉRETE VAN, ÉS MINDHÁRMAT EL KELL KAPNI. Gyors
+  //! hetelésnél a következő átmenet FÉLBESZAKÍTJA a még futót, és a
+  //! félbeszakítottnak a `ready`-je utasítja vissza magát
+  //! („InvalidStateError: Transition was aborted because of invalid state").
+  //! Csak a `finished`-re kötött `catch` ezt nem fogja meg: a `ready` kezelő
+  //! nélkül marad, és kezeletlen ígéret-hibaként jut ki a konzolra. Mérve:
+  //! három egymás utáni „következő hét" koppintás három hibát dob.
+  //* Opcionális, mert régebbi megvalósításokban nincs mindegyik.
+  ready?: Promise<void>;
+  updateCallbackDone?: Promise<void>;
+};
 type DocumentWithVT = Document & {
   startViewTransition?: (
     callback: () => void | Promise<void>,
@@ -54,6 +66,9 @@ export function weekTransition(
     delete root.dataset.ttDir;
     return;
   }
+  //* A félbeszakítás nem hiba: a felhasználó gyorsabb, mint az animáció.
+  transition.ready?.catch(() => undefined);
+  transition.updateCallbackDone?.catch(() => undefined);
   transition.finished
     .catch(() => undefined)
     .finally(() => {
@@ -96,5 +111,7 @@ export function focusMorph(options: {
     release();
     return;
   }
+  transition.ready?.catch(() => undefined);
+  transition.updateCallbackDone?.catch(() => undefined);
   transition.finished.catch(() => undefined).finally(release);
 }

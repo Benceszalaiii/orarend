@@ -225,3 +225,70 @@ export function describeRestDay(input: {
     note: "A tanév rendje szerint ez tanítási nap — órát mégsem írtak ki rá.",
   };
 }
+
+//! ---------------------------------------------------------------------------
+//! A HÉTVÉGE ÍVE
+//! ---------------------------------------------------------------------------
+//! A HÉTVÉGE KÁRTYÁJA MŰSZER VOLT ÁLLANDÓ FELIRATTAL. A szám másodpercenként
+//! mozdult, a sáv töltődött — a mondat alattuk viszont szombat reggel és
+//! vasárnap este ugyanaz a négy szó volt („Nincs óra, nincs csengő"). Pedig a
+//! kettő nem ugyanaz a hétvége, és a lap ezt PONTOSAN tudja: a szakasz két
+//! végpontja valódi adat.
+//!
+//! AZ ÉJSZAKA A HÉTVÉGE SAJÁT EGYSÉGE. Az óra a csengő egysége; a hétvégét
+//! abban mérik, hány alvás van még hátra belőle — és ebből az is következik,
+//! hány TELJES nap marad: `éjszaka - 1`. A mondat ezért nem hangulat, hanem
+//! ugyanannak a szakasznak a másik leolvasása, olyan egységben, amit a nagy
+//! szám nem tud kimondani.
+//!
+//! ÉS CSAK ANNYIT ÁLLÍT, AMENNYIT A SZAKASZ BIZONYÍT. Nincs benne napnév (a
+//! hétvége nem mindig szombaton kezdődik a lap szemszögéből), nincs benne
+//! biztatás, és nincs benne olyan szám, ami ne a két végpontból jönne.
+const NIGHT_WORD = ["nulla", "egy", "két", "három", "négy", "öt"];
+const DAY_WORD = ["nulla", "egy", "két", "három", "négy", "öt"];
+
+//* Az utolsó este határa: ennyi óránál kevesebb már nem fér el egy újabb nap.
+const LAST_EVENING_SEC = 12 * 3600;
+
+//! HÁNY ÉJFÉL VAN MÉG. A hétvége nem órákban telik, hanem alvásokban — a
+//! `weekendVoice` ebből az egyetlen számból dolgozik, és a mondat mellékesen
+//! a TELJES napokat is megkapja belőle (`éjszaka - 1`). A léptetés ugyanaz,
+//! mint a hero vonalzójának osztásánál: a `setHours(24, …)` a nyári
+//! időszámítás átállását is helyesen viszi át, mert naptári napot lép, nem
+//! 86 400 másodpercet ad hozzá.
+export function nightsUntil(nowMs: number, toMs: number): number {
+  const cursor = new Date(nowMs);
+  let n = 0;
+  cursor.setHours(24, 0, 0, 0);
+  //* A felső korlát csak biztosíték: a szakasz sosem hosszabb néhány napnál.
+  while (cursor.getTime() <= toMs && n < 14) {
+    n += 1;
+    cursor.setHours(24, 0, 0, 0);
+  }
+  return n;
+}
+
+export function weekendVoice(input: {
+  /** Hány éjfél van még a következő becsengetésig. */
+  nights: number;
+  remainingSec: number;
+}): string {
+  const { nights, remainingSec } = input;
+
+  //! KETTŐ VAGY TÖBB ÉJSZAKA: a hétvégéhez hozzá sem kezdtél. A mondat a
+  //! köztük lévő TELJES napot mondja ki — az a hétvége igazi tétje, nem az
+  //! óraszám.
+  if (nights >= 2) {
+    const n = NIGHT_WORD[nights] ?? String(nights);
+    const d = DAY_WORD[nights - 1] ?? String(nights - 1);
+    return `Még ${n} éjszaka, és köztük ${d} teljes nap.`;
+  }
+
+  if (nights === 1) {
+    return remainingSec > LAST_EVENING_SEC
+      ? "Egy éjszaka maradt belőle. A mai nap még a tiéd."
+      : "Az utolsó este. Reggel újra becsengetnek.";
+  }
+
+  return "Néhány óra, és újra becsengetnek.";
+}

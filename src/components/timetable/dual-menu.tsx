@@ -2,6 +2,7 @@
 
 import { Briefcase } from "lucide-react";
 import { useMemo, useState } from "react";
+import { SheetItemBody, sheetItem } from "@/components/chrome/chrome-sheet";
 import { DualScheduleGrid } from "@/components/ma/dual-setup";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,29 +73,20 @@ export function DualSetupButton({
     <>
       <Button
         variant="ghost"
-        size="icon"
         onClick={() => setOpen(true)}
-        className={cn(
-          "size-9 rounded-full touch-target",
-          //* Telefonon ez a gomb a beállítás-panel egyik sora — lásd
-          //* `toolbar-more.tsx` és a `.tt-more-item` szabályt.
-          "tt-more-item",
-          active
-            ? "text-primary hover:text-primary"
-            : "text-muted-foreground hover:text-foreground",
-          className,
-        )}
-        aria-label={
-          active ? "Duális beosztás módosítása" : "Duális beosztás beállítása"
-        }
-        title="Duális képzés"
+        className={sheetItem(className)}
       >
-        <Briefcase className="size-4 shrink-0" />
-        {/*//* A felirat CSAK a panelben látszik: ikonsorban a `title` és az
-            //* `aria-label` viszi a nevet, ott nincs hely kiírni. */}
-        <span className="hidden tt-more-label text-sm font-medium">
-          Duális beosztás
-        </span>
+        <Briefcase
+          className={cn(
+            "size-4 shrink-0",
+            active ? "text-primary" : "text-muted-foreground",
+          )}
+          aria-hidden
+        />
+        <SheetItemBody
+          label="Duális beosztás"
+          hint={active ? "Beállítva" : "Mely napokon vagy a munkahelyen"}
+        />
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

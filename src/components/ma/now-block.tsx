@@ -7,6 +7,7 @@ import {
   GraduationCap,
   MapPin,
   Undo2,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { DrainBar } from "@/components/timetable/drain-bar";
@@ -27,6 +28,7 @@ import type { Clock } from "@/components/timetable/use-clock";
 import { Button } from "@/components/ui/button";
 import { accentStyle } from "@/lib/accent";
 import { cn } from "@/lib/utils";
+import { GAP_MIN_MIN } from "./day";
 
 //* ---------------------------------------------------------------------------
 //* A HERO BLOKK — az idő a főszereplő
@@ -49,6 +51,7 @@ export function NowBlock({
   preview,
   onClearPreview,
   previewDismissable = true,
+  variant = "class",
 }: {
   state: NowState | null;
   clock: Clock | null;
@@ -56,7 +59,13 @@ export function NowBlock({
   preview: AgendaItem | null;
   onClearPreview: () => void;
   previewDismissable?: boolean;
+  //! A HERO EGYETLEN KÜLÖNBSÉGE A KÉT ALANY KÖZT. Nem külön komponens: a
+  //! doboz, az idő mérete, a haladás-sáv, a visszaszámláló és minden állapot
+  //! ugyanaz — csak az azonosító sor cserél helyet a tantárgyéval, mert a
+  //! folyosón a tanár nem azt keresi, MIT tanít, hanem KINEK és HOL.
+  variant?: "class" | "teacher";
 }) {
+  const teacher = variant === "teacher";
   if (preview) {
     return (
       <section className={block} aria-label="Kiválasztott óra">
@@ -64,7 +73,7 @@ export function NowBlock({
           Kiválasztott óra
         </p>
         <TimeRow item={preview} lead={null} />
-        <Facts item={preview} />
+        <Facts item={preview} teacher={teacher} />
         <p className="mt-2 text-sm text-hero-foreground/60">
           {durationLabel(preview.endMin - preview.startMin)} hosszú
         </p>
@@ -104,6 +113,7 @@ export function NowBlock({
   const span = "span" in state ? state.span : null;
   const remainingSec = span ? Math.max(0, span.toMin * 60 - clock.sec) : 0;
   const countdown = countdownLabel(remainingSec);
+  const gapLike = span !== null && span.toMin - span.fromMin >= GAP_MIN_MIN;
 
   //* A „mára vége" ág másik NAPRA mutat — ott a nap neve a hasznos adat.
   const dayLabel =
@@ -125,14 +135,24 @@ export function NowBlock({
 
       <p className="text-sm font-medium text-hero-foreground/70">
         {running
-          ? "Most ezen ülsz"
-          : state.phase === "done"
-            ? "A következő órád"
-            : "Következő órád"}
+          ? teacher
+            ? "Most ezt tartod"
+            : "Most ezen ülsz"
+          : //! A HOSSZÚ HÉZAG NEM SZÜNET, ÉS A TANÁRNAK EZ NEM SZŐRSZÁLHASOGATÁS.
+            //! A diák napján a két óra közti rés tíz perc; a tanárén simán két
+            //! üres óra, amit be lehet osztani. Ugyanaz az állapot, más név —
+            //! a küszöb ugyanaz a 25 perc, amitől a `day.ts` külön szakaszként
+            //! kezeli a hézagot, tehát a hero és a nap listája nem mondhat
+            //! kétfélét ugyanarról a résről.
+            teacher && state.phase === "break" && gapLike
+            ? "Lyukasórád van"
+            : state.phase === "done"
+              ? "A következő órád"
+              : "Következő órád"}
       </p>
 
       <TimeRow item={primary} lead={running ? "Most" : dayLabel} />
-      <Facts item={primary} />
+      <Facts item={primary} teacher={teacher} />
 
       {state.phase !== "done" && span && (
         <p className="mt-3 text-sm text-hero-foreground/70">
@@ -192,8 +212,48 @@ function TimeRow({ item, lead }: { item: AgendaItem; lead: string | null }) {
   );
 }
 
-function Facts({ item }: { item: AgendaItem }) {
-  const [room, teacher] = item.meta;
+function Facts({ item, teacher }: { item: AgendaItem; teacher: boolean }) {
+  const { room, who } = item;
+  const WhoIcon = who?.kind === "class" ? Users : GraduationCap;
+
+  //! ─── A TANÁRI OLVASAT: AZ OSZTÁLY A FŐCÍM ───────────────────────────────
+  //! A `lib/timetable.ts` `teacherLessons`-e ezt már kimondja a saját
+  //! megjegyzésében: a tanár kártyáján az OSZTÁLY a hír, a tanár neve magától
+  //! értetődik. A folyosón a tantárgyat tudja — azt keresi, kihez és hova
+  //! megy. Ezért itt az osztály és a terem cserél helyet a tantárggyal.
+  //*
+  //* AMI NEM CSERÉL: az idő marad a doboz legnagyobb eleme (`TimeRow`), és a
+  //* PÖTTY a tantárgy mellett marad. A tizenkét hue a tantárgyat azonosítja;
+  //* az osztály mellé húzva ugyanaz a szín két különböző dolgot jelölne.
+  if (teacher && who?.kind === "class") {
+    return (
+      <div className="mt-3 space-y-1">
+        <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+          <span className="text-xl font-bold tracking-tight">{who.label}</span>
+          {room && (
+            <span className="rounded-[4px] bg-hero-foreground/12 px-1.5 py-px text-sm font-bold tabular-nums text-hero-foreground">
+              {room}
+            </span>
+          )}
+        </p>
+        <p className="flex items-start gap-2 text-sm font-medium text-hero-foreground/80">
+          <span
+            className="mt-[0.45em] size-2 shrink-0 rounded-full acc-dot"
+            style={accentStyle(item.accentSeed)}
+            aria-hidden
+          />
+          <span className="min-w-0">{item.fullTitle}</span>
+        </p>
+        <p className="flex items-center gap-1.5 text-sm text-hero-foreground/70">
+          <CalendarClock className="size-3.5" aria-hidden />
+          <span className="tabular-nums">
+            {rangeLabel(item.startMin, item.endMin)}
+          </span>
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-3 space-y-1">
       {/*//! A PÖTTY A CÍM ELSŐ SORA MELLETT ÜL, nem fölötte. `flex-wrap`-pel a
@@ -221,10 +281,10 @@ function Facts({ item }: { item: AgendaItem }) {
             <span className="tabular-nums">{room}</span>
           </span>
         )}
-        {teacher && (
+        {who && (
           <span className="flex items-center gap-1.5">
-            <GraduationCap className="size-3.5" aria-hidden />
-            {teacher}
+            <WhoIcon className="size-3.5" aria-hidden />
+            {who.label}
           </span>
         )}
       </p>

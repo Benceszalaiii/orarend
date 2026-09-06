@@ -10,7 +10,7 @@
 
 import { minLabel } from "@/components/timetable/shared";
 import { LEAD_MINUTES, LEAD_WINDOW_MINUTES } from "./push-shared";
-import type { TimetableLesson } from "./timetable";
+import type { TimetableLesson, TimetableSubjectKind } from "./timetable";
 
 const TIME_ZONE = "Europe/Budapest";
 
@@ -64,6 +64,12 @@ export type Reminder = {
   subjectsShort: string[];
   /** A hozzájuk tartozó termek, duplikátum nélkül. */
   rooms: string[];
+  //! AZ OSZTÁLY CSAK A TANÁRI LEKÉRÉSBEN VAN KITÖLTVE, és pont ott a LEGFŐBB
+  //! információ (lásd `TimetableLesson.classShort`). Osztály-nézetben a forrás
+  //! üresen hagyja — ilyenkor ez a lista is üres marad, és a szöveg a
+  //! tantárgyra épül, ahogy eddig.
+  /** A percben kezdődő órák osztályai — a TANÁR nézetében. */
+  classes: string[];
 };
 
 function uniq(values: readonly string[]): string[] {
@@ -136,6 +142,7 @@ export function dueReminders(input: {
         subjects: uniq(here.map((l) => l.subject || l.subjectShort)),
         subjectsShort: uniq(here.map((l) => l.subjectShort || l.subject)),
         rooms: uniq(here.map((l) => l.room)),
+        classes: uniq(here.map((l) => l.classShort || l.className)),
       };
     });
 }
@@ -147,12 +154,41 @@ export function dueReminders(input: {
 //! ki belőle, mi a jelzés.
 const SUBJECT_BUDGET = 34;
 
+//! ─── A TANÁR EMLÉKEZTETŐJE MÁSRÓL SZÓL ─────────────────────────────────────
+//! UGYANAZ AZ ESEMÉNY, MÁSIK ELSŐ MONDAT. A diáknak a TANTÁRGY a hír: azt nem
+//! tudja fejből, melyik óra jön, a termét pedig hozzá keresi. A tanárnak a
+//! tantárgya adott (azt tanítja egész nap) — neki az OSZTÁLY és a TEREM a
+//! kérdés, pontosan úgy, ahogy a `/ma` tanári nézete is az osztállyal kezd
+//! (lásd `NowBlock variant="teacher"`). A cím ezért nála az osztály; ami a
+//! diáknál a címben állt, itt a törzsbe kerül.
+//*
+//* Ütközésnél (két osztály egy percben) mindkettő kiírásra kerül — a tanári
+//* lap sem tünteti el egyiket sem, lásd `clashesOf`.
+function teacherReminderText(reminder: Reminder): {
+  title: string;
+  body: string;
+} {
+  const where =
+    reminder.rooms.length > 0 ? ` — ${reminder.rooms.join(" / ")}` : "";
+  const subject = reminder.subjects.join(" / ");
+  //* Osztály nélküli kártya (a forrás hibája) esetén a tantárgy lép a helyére:
+  //* egy „ — 214" című értesítés semmit nem mondana.
+  const who = reminder.classes.join(" / ") || subject || "Óra";
+  return {
+    title: `${who} ${LEAD_MINUTES} perc múlva`,
+    body: `${subject ? `${subject} · ` : ""}${minLabel(reminder.startMin)}${where}`,
+  };
+}
+
 //* Az emlékeztető szövege. A cím a LÉNYEG (mi jön), a törzs a részlet (mikor,
 //* hol) — a rendszersávban gyakran csak a cím látszik.
 export function reminderText(
   reminder: Reminder,
+  kind: TimetableSubjectKind,
   classShort: string,
 ): { title: string; body: string } {
+  if (kind === "teacher") return teacherReminderText(reminder);
+
   //! HA TÖBB TANTÁRGY KEZDŐDIK EGYSZERRE, MIND KIÍRJUK. A szerver az OSZTÁLYT
   //! ismeri, a csoportot nem (a csoportbontás döntése a böngészőben marad,
   //! lásd `/adatvedelem`) — így nem tudjuk, melyik a diáké. Egy találgatott
@@ -200,6 +236,15 @@ function slotKey(l: TimetableLesson): string {
   return `${l.dateKey}|${l.startMin}|${l.groupColumn}`;
 }
 
+//! AZ OSZTÁLY IS A LENYOMAT RÉSZE — DE CSAK OTT, AHOL VAN. A tanári lekérés
+//! kártyáin a tanár mezője üres, és az OSZTÁLY hordozza az információt (lásd
+//! `TimetableLesson`): enélkül egy „a 9.B helyett a 11.A jön" csere némán
+//! kimaradna a változásfigyelésből. Osztály-nézetben a mező üres marad, tehát
+//! ott a lenyomat tartalma nem változik.
+//*
+//* A MEZŐ HOZZÁVÉTELE NEM ÖNTI KI A RÉGI LENYOMATOKAT: a régi (öt mezős) és az
+//* új (hat mezős) sor szövegként ugyan eltér, de mezőnként azonos — a
+//* `describeFieldChange` ilyenkor `null`-t ad, és nem lesz belőle értesítés.
 function slotValue(l: TimetableLesson): string {
   return [
     l.subjectShort || l.subject,
@@ -207,6 +252,7 @@ function slotValue(l: TimetableLesson): string {
     l.room,
     String(l.endMin),
     l.moved ? "moved" : "",
+    l.classShort || l.className,
   ].join("|");
 }
 
@@ -237,8 +283,26 @@ function parseSlot(key: string): { dayKey: string; startMin: number } {
 }
 
 function parseValue(value: string) {
-  const [subject, teacher, room, endMin, moved] = value.split("|");
-  return { subject, teacher, room, endMin, moved: moved === "moved" };
+  const [subject, teacher, room, endMin, moved, classShort] = value.split("|");
+  return {
+    subject,
+    teacher,
+    room,
+    endMin,
+    moved: moved === "moved",
+    //* A tanári ág előtti lenyomatokban ez a mező nincs meg — `undefined`
+    //* helyett üres szöveg, hogy az összehasonlítás ne hazudjon változást.
+    classShort: classShort ?? "",
+  };
+}
+
+//! AMIN AZ ÓRA NEVE MÚLIK. A diák lapján egy változás-sor a TANTÁRGGYAL
+//! azonosítja az órát („matek terem: 214 → 305"); a tanárén ugyanez
+//! használhatatlan volna, mert neki minden órája ugyanaz a tantárgy — ott az
+//! OSZTÁLY különbözteti meg őket. Egyetlen helyen döntjük el, hogy a két
+//! nézet sorai ne csússzanak el egymástól.
+function slotLabel(v: ReturnType<typeof parseValue>): string {
+  return v.classShort ? `${v.classShort} ${v.subject}` : v.subject;
 }
 
 const weekdayFormatter = new Intl.DateTimeFormat("hu-HU", {
@@ -255,23 +319,26 @@ function describeFieldChange(
   before: ReturnType<typeof parseValue>,
   after: ReturnType<typeof parseValue>,
 ): string | null {
-  if (before.subject !== after.subject) {
-    return `${before.subject} helyett ${after.subject}`;
+  if (
+    before.subject !== after.subject ||
+    before.classShort !== after.classShort
+  ) {
+    return `${slotLabel(before)} helyett ${slotLabel(after)}`;
   }
   if (before.room !== after.room) {
-    return `${after.subject} terem: ${before.room || "—"} → ${after.room || "—"}`;
+    return `${slotLabel(after)} terem: ${before.room || "—"} → ${after.room || "—"}`;
   }
   if (before.teacher !== after.teacher) {
-    return `${after.subject} tanár: ${before.teacher || "—"} → ${after.teacher || "—"}`;
+    return `${slotLabel(after)} tanár: ${before.teacher || "—"} → ${after.teacher || "—"}`;
   }
   if (before.endMin !== after.endMin) {
-    return `${after.subject} vége: ${minLabel(Number(before.endMin))} → ${minLabel(Number(after.endMin))}`;
+    return `${slotLabel(after)} vége: ${minLabel(Number(before.endMin))} → ${minLabel(Number(after.endMin))}`;
   }
   //! AZ „ÁTHELYEZVE" JELÖLÉS MEGJELENÉSE ÖNMAGÁBAN IS HÍR. Ilyenkor a tartalom
   //! változatlan, csak a forrás mondja meg, hogy az óra nem a rendes helyén
   //! van — ezt továbbadjuk, mert pont ez az, amit a rácson is kiemelünk.
   if (!before.moved && after.moved) {
-    return `${after.subject} áthelyezve`;
+    return `${slotLabel(after)} áthelyezve`;
   }
   return null;
 }
@@ -327,9 +394,11 @@ export function diffWeeks(input: {
     const pair = addedKeys.find((k) => {
       if (usedAdded.has(k)) return false;
       const there = parseSlot(k);
+      const fresh = parseValue(after[k]);
+      //* Az azonosság a nézet szerinti címke: a tanárén az ugyanaz a
+      //* tantárgy MÁS osztálynak nem ugyanaz az óra, tehát nem áthelyezés.
       return (
-        there.dayKey === slot.dayKey &&
-        parseValue(after[k]).subject === gone.subject
+        there.dayKey === slot.dayKey && slotLabel(fresh) === slotLabel(gone)
       );
     });
     if (pair) {
@@ -339,14 +408,14 @@ export function diffWeeks(input: {
         kind: "moved",
         dayKey: slot.dayKey,
         startMin: to.startMin,
-        text: `${dayLabel(slot.dayKey)} — ${gone.subject} ${minLabel(slot.startMin)} → ${minLabel(to.startMin)}`,
+        text: `${dayLabel(slot.dayKey)} — ${slotLabel(gone)} ${minLabel(slot.startMin)} → ${minLabel(to.startMin)}`,
       });
       continue;
     }
     changes.push({
       kind: "removed",
       ...slot,
-      text: `${dayLabel(slot.dayKey)} ${minLabel(slot.startMin)} — ${gone.subject} elmarad`,
+      text: `${dayLabel(slot.dayKey)} ${minLabel(slot.startMin)} — ${slotLabel(gone)} elmarad`,
     });
   }
 
@@ -357,7 +426,7 @@ export function diffWeeks(input: {
     changes.push({
       kind: "added",
       ...slot,
-      text: `${dayLabel(slot.dayKey)} ${minLabel(slot.startMin)} — ${fresh.subject} (új óra)`,
+      text: `${dayLabel(slot.dayKey)} ${minLabel(slot.startMin)} — ${slotLabel(fresh)} (új óra)`,
     });
   }
 
@@ -374,16 +443,22 @@ const CHANGE_LINES = 3;
 
 export function changeText(
   changes: readonly Change[],
-  classShort: string,
+  kind: TimetableSubjectKind,
+  short: string,
 ): { title: string; body: string } {
   const shown = changes.slice(0, CHANGE_LINES).map((c) => c.text);
   const rest = changes.length - shown.length;
   if (rest > 0) shown.push(`+${rest} további változás`);
+  //! A NÉVELŐ AZ ALANY FAJTÁJÁN MÚLIK. Az osztály jele elé kell („a 13C
+  //! órarendje"), a tanári jel elé NEM („Változott KJ órarendje") — egy közös
+  //! mondatsablon az egyik nézeten mindig helytelenül szólna, és pont a
+  //! rendszersávban, ahol egyetlen sor az egész üzenet.
+  const who = kind === "teacher" ? short : `a ${short}`;
   return {
     title:
       changes.length === 1
-        ? `Változott a ${classShort} órarendje`
-        : `${changes.length} változás a ${classShort} órarendjében`,
+        ? `Változott ${who} órarendje`
+        : `${changes.length} változás ${who} órarendjében`,
     body: shown.join("\n"),
   };
 }

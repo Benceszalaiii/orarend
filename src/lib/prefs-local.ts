@@ -1,4 +1,14 @@
+import {
+  applyAppearance,
+  DEFAULT_PALETTE,
+  DEFAULT_THEME,
+  loadPalette,
+  loadTheme,
+  savePalette,
+  saveTheme,
+} from "./appearance";
 import { loadAllDualSchedules, saveDualSchedule } from "./dual-schedule";
+import { loadIdentity, saveIdentity } from "./identity";
 import { loadLastView, saveLastView } from "./last-view";
 import { type SyncedPrefs, sanitizePrefs } from "./prefs-shared";
 import {
@@ -40,6 +50,9 @@ export function collectLocalPrefs(): SyncedPrefs {
     class: loadCachedClass(),
     teacher: loadCachedTeacher(),
     lastView: loadLastView(),
+    identity: loadIdentity(),
+    theme: loadTheme(),
+    palette: loadPalette(),
     merge: loadAllLocalPreferences(),
     dual: loadAllDualSchedules(),
   });
@@ -57,6 +70,21 @@ export function applyLocalPrefs(prefs: SyncedPrefs): void {
   if (prefs.class) saveCachedClass(prefs.class);
   if (prefs.teacher) saveCachedTeacher(prefs.teacher);
   if (prefs.lastView) saveLastView(prefs.lastView);
+  if (prefs.identity) saveIdentity(prefs.identity);
+
+  //! A MEGJELENÉST NEM ELÉG ELMENTENI, LÁTSZANIA IS KELL. A többi beállítást
+  //! az olvasója a következő rendereléskor úgyis felszedi a tárolóból; a téma
+  //! viszont a `<html>`-en ül, amit senki nem rajzol újra. Enélkül a másik
+  //! készülékről érkező választás csak a lap ÚJRATÖLTÉSE után szólalna meg —
+  //! és a diák azt látná, hogy „nem szinkronizált".
+  if (prefs.theme) saveTheme(prefs.theme);
+  if (prefs.palette) savePalette(prefs.palette);
+  if (prefs.theme || prefs.palette) {
+    applyAppearance(
+      prefs.theme ?? loadTheme() ?? DEFAULT_THEME,
+      prefs.palette ?? loadPalette() ?? DEFAULT_PALETTE,
+    );
+  }
 
   //* A kulcs itt már NÉVTERES lehet (`tanar:AA`) — a tárolók ezt nem
   //* értelmezik, csak azonosítóként viszik tovább (lásd `subjectStoreKey`).
@@ -99,6 +127,11 @@ export function mergePrefs(
     class: winner.class ?? loser.class,
     teacher: winner.teacher ?? loser.teacher,
     lastView: winner.lastView ?? loser.lastView,
+    identity: winner.identity ?? loser.identity,
+    //* Egyetlen értékek, mint a `class` és a `lastView`: itt tényleg a
+    //* frissebb nyer. Ha az egyik oldal nem nyilatkozott, a másiké marad.
+    theme: winner.theme ?? loser.theme,
+    palette: winner.palette ?? loser.palette,
     //* A vesztes oldal bejegyzései alapként; a győztesé fölé írva.
     merge: { ...loser.merge, ...winner.merge },
     dual: { ...loser.dual, ...winner.dual },

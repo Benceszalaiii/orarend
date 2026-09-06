@@ -4,6 +4,7 @@ import { Check, Fingerprint, LogOut, RefreshCw, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { SheetItemBody, sheetItem } from "@/components/chrome/chrome-sheet";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -28,7 +29,16 @@ import { cn } from "@/lib/utils";
 //! készülékre. A belépés itt eszköz, nem cél.
 //! ═══════════════════════════════════════════════════════════════════════════
 
-export function AccountMenu({ className }: { className?: string }) {
+//! KÉT ALAK, EGY VEZÉRLŐ. `icon`: a nyitólap lebegő tábláján, ahol nincs lap
+//! és a hely szűk. `row`: a fejléc lapjában, ahol a sor MAGA a gomb — teljes
+//! szélességben kattintható, kiírt névvel (lásd `chrome/chrome-sheet.tsx`).
+export function AccountMenu({
+  className,
+  variant = "icon",
+}: {
+  className?: string;
+  variant?: "icon" | "row";
+}) {
   const { data: session, isPending } = useSession();
   const pathname = usePathname();
   const [busy, setBusy] = useState(false);
@@ -38,12 +48,21 @@ export function AccountMenu({ className }: { className?: string }) {
   //! kör; amíg tart, ugyanakkora helyet foglalunk, mint utána. Enélkül a
   //! mellette álló vezérlők elcsúsznának, amikor a válasz megjön.
   if (isPending) {
-    return <div className={cn("size-9 shrink-0", className)} aria-hidden />;
+    return (
+      <div
+        className={cn(
+          variant === "row" ? "h-11 w-full" : "size-9 shrink-0",
+          className,
+        )}
+        aria-hidden
+      />
+    );
   }
 
   return session ? (
     <SignedIn
       className={className}
+      variant={variant}
       name={session.user.name}
       email={session.user.email}
       image={session.user.image}
@@ -56,7 +75,11 @@ export function AccountMenu({ className }: { className?: string }) {
     //! ODA TÉRÜNK VISSZA, AHONNAN ELINDULT. A belépés nem egy külön „állomás",
     //! amin át kell menni — a diák ugyanazt a lapot kapja vissza, amit nézett,
     //! csak már a saját beállításaival.
-    <SignedOut className={className} next={pathname || "/orarend"} />
+    <SignedOut
+      className={className}
+      variant={variant}
+      next={pathname || "/orarend"}
+    />
   );
 }
 
@@ -65,20 +88,43 @@ export function AccountMenu({ className }: { className?: string }) {
 //! címen, ahol a böngésző címsora és a jelszókezelője is látszik. Egy sávból
 //! kinyíló, jelszót kérő buborék pont azt a szokást alakítaná ki, amire az
 //! adathalászat épül — és a jelszókezelő sem ismerné fel megbízhatóan.
-function SignedOut({ className, next }: { className?: string; next: string }) {
+function SignedOut({
+  className,
+  variant,
+  next,
+}: {
+  className?: string;
+  variant: "icon" | "row";
+  next: string;
+}) {
+  const row = variant === "row";
   return (
     <Button
       asChild
       variant="ghost"
-      size="sm"
-      className={cn("h-9 shrink-0 touch-target gap-1.5 px-2.5", className)}
+      size={row ? "default" : "sm"}
+      className={
+        row
+          ? sheetItem(className)
+          : cn("h-9 shrink-0 touch-target gap-1.5 px-2.5", className)
+      }
     >
       <Link
         href={`/belepes?tovabb=${encodeURIComponent(next)}`}
         title="Belépés az iskolai fiókkal — a beállításaid átjönnek a többi eszközödre"
       >
-        <User className="size-4" aria-hidden />
-        <span className="text-xs font-medium max-sm:sr-only">Belépés</span>
+        <User
+          className={cn("size-4 shrink-0", row && "text-muted-foreground")}
+          aria-hidden
+        />
+        {row ? (
+          <SheetItemBody
+            label="Belépés"
+            hint="A beállításaid átjönnek a többi eszközödre"
+          />
+        ) : (
+          <span className="text-xs font-medium max-sm:sr-only">Belépés</span>
+        )}
       </Link>
     </Button>
   );
@@ -86,6 +132,7 @@ function SignedOut({ className, next }: { className?: string; next: string }) {
 
 function SignedIn({
   className,
+  variant,
   name,
   email,
   image,
@@ -95,6 +142,7 @@ function SignedIn({
   setBusy,
 }: {
   className?: string;
+  variant: "icon" | "row";
   name: string;
   email: string;
   image?: string | null;
@@ -108,29 +156,49 @@ function SignedIn({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={cn(
-            "flex size-9 shrink-0 touch-target items-center justify-center rounded-full border border-input text-xs font-semibold text-muted-strong transition-colors",
-            "hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
-            "dark:bg-input/30",
-            className,
-          )}
+          className={
+            variant === "row"
+              ? sheetItem(className)
+              : cn(
+                  "flex size-9 shrink-0 touch-target items-center justify-center rounded-full border border-input text-xs font-semibold text-muted-strong transition-colors",
+                  "hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
+                  "dark:bg-input/30",
+                  className,
+                )
+          }
           title={`Bejelentkezve: ${name}`}
         >
+          {/*//* Sor-alakban a monogram egy kis korong a sor bal szélén — ugyanaz
+              //* a hely, ahol a többi sor ikonja áll. */}
           {/*//! A KÉPET NEM ERŐLTETJÜK. Az iskolai fiókok többségének nincs
               //! profilképe, és egy törött kép rosszabb, mint a monogram. A
               //! `next/image` itt szándékosan nem szerepel: külső, változó
               //! forrásról van szó, amihez tartomány-engedélyezés kellene. */}
-          {image ? (
-            // biome-ignore lint/performance/noImgElement: külső, nem optimalizálható profilkép
-            <img
-              src={image}
-              alt=""
-              className="size-full rounded-full object-cover"
-            />
+          <span
+            aria-hidden
+            className={cn(
+              "flex items-center justify-center overflow-hidden rounded-full text-xs font-semibold",
+              variant === "row"
+                ? "size-6 shrink-0 border border-input text-muted-strong"
+                : "size-full",
+            )}
+          >
+            {image ? (
+              // biome-ignore lint/performance/noImgElement: külső, nem optimalizálható profilkép
+              <img
+                src={image}
+                alt=""
+                className="size-full rounded-full object-cover"
+              />
+            ) : (
+              initials(name)
+            )}
+          </span>
+          {variant === "row" ? (
+            <SheetItemBody label={name} hint="A beállításaid szinkronizálva" />
           ) : (
-            <span aria-hidden>{initials(name)}</span>
+            <span className="sr-only">Fiók: {name}</span>
           )}
-          <span className="sr-only">Fiók: {name}</span>
         </button>
       </PopoverTrigger>
 

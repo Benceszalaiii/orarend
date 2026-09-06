@@ -77,7 +77,7 @@ export type DayModel = {
 //! `MERGE_GAP_MAX_MIN` (25 perc) ugyanezt a határt húzza meg az órák
 //! összefűzésénél. Ami ennél hosszabb, az már saját szakasz — annyi helyet is
 //! kap a nap sávjában.
-const GAP_MIN_MIN = 25;
+export const GAP_MIN_MIN = 25;
 
 export function buildDayModel(
   view: TimetableView,
@@ -216,6 +216,19 @@ export function agendaItem(
   dateKey: string,
   dayName: string,
 ): AgendaItem {
+  const room = run.rooms.join(" · ");
+  //! AZ ALANYT AZ ADAT MONDJA MEG, NEM EGY KAPCSOLÓ. Osztály-lekérésnél a
+  //! tanár mezői ki vannak töltve és az osztályé üresek; tanári lekérésnél
+  //! pontosan fordítva (`lib/timetable.ts`, `classLesson` / `teacherLessons`).
+  //! Ezért ez a függvény `mode` nélkül is mindkét lapot kiszolgálja — és nem
+  //! tud kicsúszni a szinkronból azzal, amit a lap hisz magáról.
+  const teacher = run.lesson.teacher || run.lesson.teacherShort;
+  const klass = run.lesson.className || run.lesson.classShort;
+  const who: AgendaItem["who"] = teacher
+    ? { kind: "teacher", label: teacher }
+    : klass
+      ? { kind: "class", label: klass }
+      : null;
   return {
     key: run.key,
     kind: "lesson",
@@ -226,10 +239,9 @@ export function agendaItem(
     endMin: run.endMin,
     title: run.lesson.subjectShort || run.lesson.subject,
     fullTitle: run.lesson.subject || run.lesson.subjectShort,
-    meta: [
-      run.rooms.join(" · "),
-      run.lesson.teacher || run.lesson.teacherShort,
-    ].filter(Boolean),
+    meta: [room, who?.label ?? ""].filter(Boolean),
+    room,
+    who,
     accentSeed: run.lesson.subjectShort || run.lesson.subject,
   };
 }

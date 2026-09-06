@@ -8,6 +8,8 @@
 //* egyik szigorúbb, a másik lesz a nyitott ajtó.
 
 const JEDLIK_CLASSES = "https://jedlikinfo.jedlik.eu/api/api/timetable/classes";
+const JEDLIK_TEACHERS =
+  "https://jedlikinfo.jedlik.eu/api/api/timetable/teachers";
 
 //* A tényleges osztálynevek (`09A`, `09KNY`, `13C`) alakja. Ez a tartalék, ha a
 //* Jedlikinfo listája épp nem érhető el — így egy külső kimaradás nem nyeli el
@@ -75,6 +77,41 @@ export async function filterKnownClasses(
 ): Promise<string[]> {
   const checked = await Promise.all(
     values.map(async (v) => ((await isKnownClass(v)) ? v : null)),
+  );
+  return checked.filter((v): v is string => v !== null);
+}
+
+//! UGYANAZ A HATÁR A TANÁRI JELRE. Nem másolat kényelemből: a tanári
+//! feliratkozás (lásd `/api/ertesites`) ugyanúgy KULCSOT hoz létre a
+//! tárolóban, mint az osztályos, és ugyanúgy egy heti lekérést a suli
+//! szerverén — egy kitalált jel tehát ugyanazt a kárt okozná. A tartalék is
+//! ugyanaz: ha a lista nem érhető el, az ALAK dönt, mert egy külső kimaradás
+//! ne tegye lehetetlenné a feliratkozást.
+export async function isKnownTeacher(short: string): Promise<boolean> {
+  if (typeof short !== "string" || short.length > TEACHER_MAX_LENGTH) {
+    return false;
+  }
+  try {
+    const res = await fetch(JEDLIK_TEACHERS, {
+      signal: AbortSignal.timeout(5_000),
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return TEACHER_SHAPE.test(short);
+    const list = (await res.json()) as { short?: unknown }[];
+    if (!Array.isArray(list) || list.length === 0) {
+      return TEACHER_SHAPE.test(short);
+    }
+    return list.some((t) => t?.short === short);
+  } catch {
+    return TEACHER_SHAPE.test(short);
+  }
+}
+
+export async function filterKnownTeachers(
+  values: readonly string[],
+): Promise<string[]> {
+  const checked = await Promise.all(
+    values.map(async (v) => ((await isKnownTeacher(v)) ? v : null)),
   );
   return checked.filter((v): v is string => v !== null);
 }

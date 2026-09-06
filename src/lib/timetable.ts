@@ -90,9 +90,7 @@ const SUBJECT_STORAGE_KEY: Record<TimetableSubjectKind, string> = {
   teacher: "orarend:teacher:v1",
 };
 
-export function loadCachedSubject(
-  kind: TimetableSubjectKind,
-): string | null {
+export function loadCachedSubject(kind: TimetableSubjectKind): string | null {
   try {
     return window.localStorage.getItem(SUBJECT_STORAGE_KEY[kind]);
   } catch {
@@ -629,7 +627,8 @@ async function resolveSubjectResult(
   //* belépés ezt adja vissza, nem a rövid jelet — lásd `/tanari`.
   if (kind === "teacher") {
     const byName = subjects.find(
-      (c) => c.name.toLocaleLowerCase("hu") === input.trim().toLocaleLowerCase("hu"),
+      (c) =>
+        c.name.toLocaleLowerCase("hu") === input.trim().toLocaleLowerCase("hu"),
     );
     if (byName) return { resolved: byName };
   }

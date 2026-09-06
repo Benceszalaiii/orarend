@@ -83,6 +83,18 @@ model User {
   //* belépés NEM (ott nincs jelszó, amit az iskola felé továbbadhatnánk).
   adCheckedAt DateTime?
 
+  //! ─── A VÁLASZTOTT TWEAKCN-PRESET ─────────────────────────────────────────
+  //! MIÉRT NEM A `Preference.data`-BAN, A TÖBBI BEÁLLÍTÁSSAL. Az a JSON a
+  //! KÉSZÜLÉKEK KÖZÖTT vándorol: a böngésző írja, a szerver átlátszó
+  //! tárolóként veszi át (`src/lib/prefs-shared.ts`). A preset viszont a
+  //! SZERVEREN dől el — abból lesz a lapba ágyazott `<style>`, még a
+  //! renderelés közben —, és olyan slug kerülhet csak bele, amit a tweakcn
+  //! regiszterében ellenőriztünk. Egy saját oszlop ezt kimondja: ez nem a
+  //! kliens által küldött adat.
+  //* `null` = a `globals.css`-be épített paletta. Ilyenkor nem ágyazunk be
+  //* semmit, tehát nincs többletköltsége annak, aki nem választott.
+  themePreset String?
+
   sessions   Session[]
   accounts   Account[]
   passkeys   Passkey[]

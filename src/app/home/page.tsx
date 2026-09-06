@@ -1,36 +1,22 @@
-"use server";
+import type { Metadata } from "next";
+import { Landing } from "./_components/landing";
 
-import { SiteFooter } from "@/components/site-footer";
-import { SiteNav } from "@/components/site-nav";
-import Cta from "./_components/cta";
-import { GridFilm } from "./_components/film";
-import Latest from "./_components/latest";
-
-//! ─── A NYITÓLAP EGY TÁRGYAT MUTAT ──────────────────────────────────────────
-//! A lap nem szakaszokban magyarázza el az órarendet, hanem EGYETLEN hetet
-//! rajzol ki, és a görgetés viszi rá a kamerát: totál → csoportbontás →
-//! duális hét → egyetlen óra. A `GridFilm` ezért nem három komponens
-//! egymás alatt, hanem egy rács négy nézőpontból (lásd `_components/film.tsx`).
+//! ─── A NYITÓLAP MEGŐRZÖTT CÍME ─────────────────────────────────────────────
+//! A lap törzse a `/`-re költözött (lásd `app/page.tsx`), de ez a cím MARAD:
+//! a váltó „Nyitólap" hivatkozása erre mutat, és ez az egyetlen visszaút
+//! azoknak, akiket a `/`-ről a süti már továbbküld a saját nézetükbe. Ha a
+//! `/home` a `/`-re irányítana, ők soha többé nem látnák a nyitólapot.
 //*
-//! A SORREND A KAMERÁÉ. A film után jön a kobalt „Ami most már működik" sáv
-//! — a lap ütemének egyetlen világos csíkja —, és a lapot két egyenrangú
-//! ajtó zárja: a heti rács és a progresszív mód.
+//! A KERESŐNEK VISZONT EGY LAP, EGY CÍM: a kanonikus hivatkozás a gyökérre
+//! mutat, így a két azonos tartalom nem versenyez egymással.
 
-export default async function Page() {
-  return (
-    <main className="bg-card">
-      {/*//! A VÁLTÓ ÁTKEL HÁROM ALAPSZÍNEN. A film meleg papírral nyit, kobalton
-          //! megy át és éjszakai felületen zár — egy rögzített sáv mindhármon
-          //! rajta ül. A `floating` változat ezért saját, sötét üvegtáblát
-          //! visel: nem a mögötte lévő laptól kéri a kontrasztot. */}
-      <SiteNav
-        surface="floating"
-        className="fixed top-[calc(env(safe-area-inset-top)+0.75rem)] right-[calc(env(safe-area-inset-right)+0.75rem)] z-50 sm:top-4 sm:right-4"
-      />
-      <GridFilm />
-{/* <Latest/> */}
-      <Cta />
-      <SiteFooter />
-    </main>
-  );
+export const metadata: Metadata = {
+  title: "Órarend — a Jedlik hete egy lapon",
+  description:
+    "A Jedlik órarendje osztályokra, csoportbontásokra és duális hetekre bontva: heti rács teljes képernyőn, vagy a mai nap egyetlen képernyőn, óráról órára.",
+  alternates: { canonical: "https://jedlik.info/" },
+};
+
+export default function Page() {
+  return <Landing />;
 }

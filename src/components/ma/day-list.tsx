@@ -328,13 +328,27 @@ function LessonCard({
   const past = nowMin !== null && nowMin >= seg.endMin;
   const running =
     nowMin !== null && nowMin >= seg.startMin && nowMin < seg.endMin;
-  //* Alacsony kártyán a tanár a dátum mellé kerül; magason saját sort kap.
+  //* Alacsony kártyán a szemközti fél a dátum mellé kerül; magason saját sort kap.
   const roomy = height >= 78;
+  //! EGY RÉS, KÉT OLVASAT — ÉS AZ ADAT DÖNTI EL, MELYIK. A diák kártyáján itt
+  //! a TANÁR áll: „kivel van ez az óra". A tanár kártyáján ugyanez a rés az
+  //! OSZTÁLYÉ, ugyanabban a szerepben — és ott ez nem melléklet, hanem a
+  //! kártya legfontosabb adata a terem mellett, ezért kap erősebb súlyt.
   //* Teljes név ott, ahol elfér: a fél szélességű (osztozó) kártyán a rövid
   //* alak az, ami még kifér a csoportnév mellé.
-  const teacher = compact
+  const rawTeacher = compact
     ? lesson.teacherShort || lesson.teacher
     : lesson.teacher || lesson.teacherShort;
+  const counterpart = rawTeacher
+    ? { label: rawTeacher, isClass: false }
+    : lesson.classShort
+      ? {
+          label: compact
+            ? lesson.classShort
+            : lesson.className || lesson.classShort,
+          isClass: true,
+        }
+      : null;
   //! A CSOPORT NEVE CSAK AKKOR ADAT, HA RÖVID. A forrás csoportnevei nem
   //! egységesek: van, ahol „A csoport", és van, ahol a tantárgy nevét vagy a
   //! tanár monogramját ismétlik el benne („Szakmai német nyelv", „BKE"). A
@@ -355,7 +369,7 @@ function LessonCard({
     lesson.subject || short,
     rangeLabel(seg.startMin, seg.endMin),
     run.lessonCount > 1 ? `${run.lessonCount} egymást követő óra` : null,
-    lesson.teacher || null,
+    lesson.teacher || lesson.className || lesson.classShort || null,
     run.rooms.join(" · ") || null,
   ]
     .filter(Boolean)
@@ -451,8 +465,15 @@ function LessonCard({
               {group}
             </span>
           )}
-          {!roomy && teacher && (
-            <span className="min-w-0 truncate">{teacher}</span>
+          {!roomy && counterpart && (
+            <span
+              className={cn(
+                "min-w-0 truncate",
+                counterpart.isClass && "font-semibold text-foreground/85",
+              )}
+            >
+              {counterpart.label}
+            </span>
           )}
           {lesson.moved && (
             <span className="flex shrink-0 items-center gap-1 font-medium text-brand">
@@ -462,17 +483,30 @@ function LessonCard({
           )}
         </div>
 
-        {/*//! MAGAS KÁRTYÁN A TANÁR SAJÁT SORT KAP — de ha a blokkot szünet
-            //! szeli át, a név a kártya ALJÁRA megy: különben pont a szaggatott
-            //! sávra esne, és két információ takarná egymást. */}
-        {roomy && teacher && (
+        {/*//! MAGAS KÁRTYÁN A SZEMKÖZTI FÉL SAJÁT SORT KAP — de ha a blokkot
+            //! szünet szeli át, a TANÁR NEVE a kártya ALJÁRA megy: különben
+            //! pont a szaggatott sávra esne, és két információ takarná egymást.
+            //!
+            //! AZ OSZTÁLY VISZONT NEM MEHET LE. A tanári lapon ez a kártya
+            //! LEGFONTOSABB adata a terem mellett, és egy háromórás blokk 150
+            //! képpontján a cím alól az aljára küldve elárvul: a szem a
+            //! tantárgyat és az osztályt nem köti össze, mert egy üres sáv van
+            //! köztük. Ezért az osztály a cím alatt marad, a szünetsávtól
+            //! függetlenül — a sáv halk, szaggatott réteg, a fölé eső
+            //! félkövér jel elolvasható marad rajta. */}
+        {roomy && counterpart && (
           <span
             className={cn(
-              "min-w-0 truncate text-[11px] leading-tight text-foreground/70",
-              run.breaks.length > 0 ? "mt-auto" : "mt-0.5",
+              "min-w-0 truncate text-[11px] leading-tight",
+              !counterpart.isClass && run.breaks.length > 0
+                ? "mt-auto"
+                : "mt-0.5",
+              counterpart.isClass
+                ? "font-semibold text-foreground/85"
+                : "text-foreground/70",
             )}
           >
-            {teacher}
+            {counterpart.label}
           </span>
         )}
       </div>
