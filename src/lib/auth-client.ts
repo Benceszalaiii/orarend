@@ -1,5 +1,6 @@
 "use client";
 
+import { dashClient } from "@better-auth/infra/client";
 import { passkeyClient } from "@better-auth/passkey/client";
 import type { BetterAuthClientPlugin } from "better-auth/client";
 import { createAuthClient } from "better-auth/react";
@@ -37,8 +38,21 @@ const jedlikAdClient = () =>
     ],
   }) satisfies BetterAuthClientPlugin;
 
+//! ─── A DASH KLIENS CSAK OLVAS, ÉS CSAK A SAJÁT NAPLÓT ───────────────────────
+//! Két műveletet ad (`authClient.dash.getAuditLogs` és `getAllAuditLogs`),
+//! mindkettő a munkamenettel megy, és a szerver a hívó SAJÁT sorait adja
+//! vissza: idegen `userId` kérése `FORBIDDEN`. A `/dash/*` üzemeltetői
+//! végpontokhoz (fiók létrehozása, jelszóállítás, megszemélyesítés) ez a
+//! bővítmény nem ad hozzáférést — azok az infra által aláírt JWT-t követelnek,
+//! ami böngészőben nincs (lásd `auth.ts`).
+//!
+//! AMIT SZÁNDÉKOSAN NEM HÚZUNK BE: ugyanennek a csomagnak van egy `sentinel`
+//! kliense is, ami böngésző-ujjlenyomatot vesz (canvas-hash, hardver- és
+//! betűkészlet-adatok). Egy iskolai órarendhez nincs rá szükség, és pont az
+//! ellenkezője annak, amit ez az app a diákok adatairól vállal — ezért csak a
+//! `dashClient` szerepel itt.
 export const authClient = createAuthClient({
-  plugins: [jedlikAdClient(), passkeyClient()],
+  plugins: [jedlikAdClient(), passkeyClient(), dashClient()],
 });
 
 export const { signOut, useSession } = authClient;

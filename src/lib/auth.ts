@@ -1,5 +1,6 @@
 import "server-only";
 
+import { dash } from "@better-auth/infra";
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -210,6 +211,36 @@ export const auth = betterAuth({
         //* kétfaktoros (birtoklás = eszköz, tudás/tulajdonság = PIN vagy ujjlenyomat).
         userVerification: "required",
       },
+    }),
+
+    //! ─── A BETTER AUTH INFRA IRÁNYÍTÓPULTJA ──────────────────────────────
+    //! Üzemeltetői rálátás a fiókokra (a távoli pult ezeken a végpontokon át
+    //! olvas), és a bejelentkezett diáknak a SAJÁT auditnaplója.
+    //!
+    //! MIÉRT NEM NYIT ÚJ BEJÁRATOT — ezt fontos érteni, mert a bővítmény
+    //! felcsatol olyan végpontokat is, amiket ez az app máshol szándékosan
+    //! tilt (`/dash/create-user`, `/dash/set-password`,
+    //! `/dash/impersonate-user`). Ezek NEM munkamenettel hitelesítenek:
+    //! mindegyik egy rövid életű, az infra által aláírt JWT-t követel, amit a
+    //! szerver a távoli JWKS ellen ellenőriz, ÉS a helyi
+    //! `BETTER_AUTH_API_KEY` hasheléhez köt. Bejelentkezett felhasználó — a
+    //! tanár sem — nem éri el őket; kulcs hiányában pedig mindegyik
+    //! `UNAUTHORIZED`, tehát a bővítmény puszta bekapcsolása semmit nem nyit.
+    //!
+    //! EBBŐL KÖVETKEZIK EGY ÜZEMELTETÉSI SZABÁLY: aki a `BETTER_AUTH_API_KEY`-t
+    //! birtokolja, az a pultról jelszót állíthat és megszemélyesíthet. A kulcs
+    //! ezért pontosan olyan érzékeny, mint a `BETTER_AUTH_SECRET`: nem megy a
+    //! repóba, és a kiszivárgása fiókátvétel — cserélni kell, nem „figyelni".
+    //!
+    //! Az EGYETLEN kliensnek szánt végpont az `/events/audit-logs`. Az
+    //! munkamenettel megy, és a szerver csak a hívó saját sorait adja vissza:
+    //! idegen `userId` kérése `FORBIDDEN`.
+    dash({
+      //* Az `activityTracking` egy `lastActiveAt` mezőt tenne a `User`-re,
+      //* tehát sémamódosítást (`bun run db:push`) igényelne, és minden
+      //* kérésnél írna az adatbázisba. Kikapcsolva marad: az órarendhez semmit
+      //* nem ad, viszont új adatot gyűjtene arról, ki mikor használja a lapot.
+      activityTracking: { enabled: false },
     }),
   ],
 });
