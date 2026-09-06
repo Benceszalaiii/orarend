@@ -95,6 +95,10 @@ model User {
   //* semmit, tehát nincs többletköltsége annak, aki nem választott.
   themePreset String?
 
+  //* A Better Auth infra `activityTracking` bővítménye írja minden
+  //* kérésnél — lásd `src/lib/auth.ts`. `null` = még soha nem járt itt.
+  lastActiveAt DateTime?
+
   sessions   Session[]
   accounts   Account[]
   passkeys   Passkey[]

@@ -5,6 +5,7 @@ import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware } from "better-auth/api";
+import { isBlockedAuthPath } from "./auth-blocked-paths";
 import { jedlikAd } from "./auth-jedlik";
 import prisma from "./prisma";
 
@@ -169,19 +170,19 @@ export const auth = betterAuth({
   },
 
   hooks: {
-    //! A PROFIL AZ ISKOLÁÉ, NEM A KLIENSÉ. A Better Auth `/update-user`
-    //! végpontja alapból engedi a nevet és a profilképet átírni. Nálunk a név,
-    //! az osztály és a tanár-státusz az iskolai válaszból jön, és minden
-    //! belépéskor onnan frissül.
+    //! ─── A ZÁRT VÉGPONTOK KAPUJA ─────────────────────────────────────────
+    //! Egy bővítmény bekapcsolása MINDEN végpontját felcsatolja — válogatni nem
+    //! lehet. Amit ez az app nem akar kiszolgálni, azt tehát itt kell lezárni,
+    //! a kérés útjában. A lista és a hozzá tartozó indoklás az
+    //! `auth-blocked-paths.ts`-ben áll, hogy tesztelhető legyen.
     //!
-    //! Az osztályt és a tanár-státuszt a bővítmény `input: false` mezői már
-    //! védik; ez a horog a maradékot (`name`, `image`) zárja le, hogy a
-    //! felületen megjelenő név biztosan az legyen, amit az iskola mond.
+    //! Ami itt záródik: a profilírás (`/update-user` — a nevet az iskola adja),
+    //! a `dash()` meghívós ága (hitelesítés NÉLKÜL csinál fiókot és
+    //! munkamenetet), és az „összes napló" nézet (idegen hatókör).
     before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path === "/update-user") {
+      if (isBlockedAuthPath(ctx.path)) {
         throw new APIError("FORBIDDEN", {
-          message:
-            "A profiladatokat az iskolai fiók adja — itt nem módosíthatók.",
+          message: "Ez a végpont ezen az oldalon nem érhető el.",
         });
       }
     }),
@@ -217,29 +218,47 @@ export const auth = betterAuth({
     //! Üzemeltetői rálátás a fiókokra (a távoli pult ezeken a végpontokon át
     //! olvas), és a bejelentkezett diáknak a SAJÁT auditnaplója.
     //!
-    //! MIÉRT NEM NYIT ÚJ BEJÁRATOT — ezt fontos érteni, mert a bővítmény
-    //! felcsatol olyan végpontokat is, amiket ez az app máshol szándékosan
-    //! tilt (`/dash/create-user`, `/dash/set-password`,
-    //! `/dash/impersonate-user`). Ezek NEM munkamenettel hitelesítenek:
-    //! mindegyik egy rövid életű, az infra által aláírt JWT-t követel, amit a
-    //! szerver a távoli JWKS ellen ellenőriz, ÉS a helyi
-    //! `BETTER_AUTH_API_KEY` hasheléhez köt. Bejelentkezett felhasználó — a
-    //! tanár sem — nem éri el őket; kulcs hiányában pedig mindegyik
-    //! `UNAUTHORIZED`, tehát a bővítmény puszta bekapcsolása semmit nem nyit.
+    //! ─── MIT CSATOL FEL, ÉS MI VÉDI ────────────────────────────────────────
+    //! Ez az egy sor ~90 útvonalat tesz nyilvánosan hívhatóvá az `/api/auth/*`
+    //! alatt. Három csoportra bomlanak, és NEM ugyanaz védi őket:
     //!
-    //! EBBŐL KÖVETKEZIK EGY ÜZEMELTETÉSI SZABÁLY: aki a `BETTER_AUTH_API_KEY`-t
-    //! birtokolja, az a pultról jelszót állíthat és megszemélyesíthet. A kulcs
-    //! ezért pontosan olyan érzékeny, mint a `BETTER_AUTH_SECRET`: nem megy a
-    //! repóba, és a kiszivárgása fiókátvétel — cserélni kell, nem „figyelni".
+    //! 1. ÜZEMELTETŐI VÉGPONTOK (`/dash/create-user`, `/dash/set-password`,
+    //!    `/dash/impersonate-user`, `/dash/execute-adapter`, …). Ezek nem
+    //!    munkamenettel hitelesítenek: rövid életű, az infra által aláírt JWT-t
+    //!    követelnek, amit a szerver a távoli JWKS ellen ellenőriz, ÉS a helyi
+    //!    `BETTER_AUTH_API_KEY` hasheléhez köt. Bejelentkezett felhasználó — a
+    //!    tanár sem — nem éri el őket; kulcs hiányában `UNAUTHORIZED`.
     //!
-    //! Az EGYETLEN kliensnek szánt végpont az `/events/audit-logs`. Az
-    //! munkamenettel megy, és a szerver csak a hívó saját sorait adja vissza:
-    //! idegen `userId` kérése `FORBIDDEN`.
+    //! 2. MUNKAMENETES VÉGPONTOK (`/events/list`, `/events/types`,
+    //!    `/events/audit-logs`). Ezek a saját sorokra szűrnek: idegen `userId`
+    //!    kérése `FORBIDDEN`.
+    //!
+    //! 3. HITELESÍTÉS NÉLKÜLI VÉGPONTOK — a meghívós ág. EZEK NEM KÉRNEK SEM
+    //!    JWT-T, SEM MUNKAMENETET, és fiókot hoznak létre + beléptetnek. Ezért
+    //!    a `hooks.before` FORBIDDEN-nel zárja őket (`auth-blocked-paths.ts`).
+    //!    Ne legyen félreértés: a bővítmény bekapcsolása ÖNMAGÁBAN nem hagyja
+    //!    zárva ezt a csoportot — a tiltás az, ami zárja.
+    //!
+    //! ÜZEMELTETÉSI SZABÁLY: aki a `BETTER_AUTH_API_KEY`-t birtokolja, az az
+    //! 1. csoporton át jelszót állíthat, megszemélyesíthet, és az
+    //! `/dash/execute-adapter`-rel az adatbázis BÁRMELY tábláját olvashatja és
+    //! írhatja. A kulcs ezért pontosan olyan érzékeny, mint a
+    //! `BETTER_AUTH_SECRET`: nem megy a repóba, és a kiszivárgása teljes
+    //! adatbázis-hozzáférés — cserélni kell, nem „figyelni".
+    //!
+    //! AMIT TUDNI KELL, ÉS AMI NEM KAPCSOLHATÓ KI: a bővítmény minden
+    //! belépésnél, kilépésnél és munkamenet-létrehozásnál eseményt küld a
+    //! `https://dash.better-auth.com` címre, és az esemény tartalmazza a diák
+    //! NEVÉT, e-mail-címét, IP-címét, város/ország adatát és böngészőazonosítóját.
+    //! Erre a bővítménynek NINCS kapcsolója, és a kulcs hiánya sem állítja meg a
+    //! kimenő kérést. Ez tehát egy új adatfeldolgozó — az adatvédelmi
+    //! tájékoztatóban (`/adatvedelem`) meg kell nevezni, mielőtt élesbe megy.
     dash({
-      //* Az `activityTracking` egy `lastActiveAt` mezőt tenne a `User`-re,
-      //* tehát sémamódosítást (`bun run db:push`) igényelne, és minden
-      //* kérésnél írna az adatbázisba. Kikapcsolva marad: az órarendhez semmit
-      //* nem ad, viszont új adatot gyűjtene arról, ki mikor használja a lapot.
+      //! Az `activityTracking` `lastActiveAt`-et ír a `User`-re minden nem-GET
+      //! kérésnél (séma: `prisma/schema.prisma`, migrálva `bun run db:push`-sal).
+      //! FIGYELEM: ez rögzíti, ki mikor használja a lapot — olyan adat, amit az
+      //! órarend nem igényel, és amiről az adatvédelmi tájékoztató jelenleg nem
+      //! szól. Élesbe menet előtt ezt meg kell nevezni ott (`/adatvedelem`).
       activityTracking: { enabled: true },
     }),
   ],
