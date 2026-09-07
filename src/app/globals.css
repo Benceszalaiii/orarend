@@ -171,6 +171,30 @@
         //! nem kerül semmibe. */
     scrollbar-gutter: stable;
   }
+
+  /*//! A LENYÍLÓ LISTA A RENDSZERÉ, A SZÍNE VISZONT A MI DOLGUNK. A natív
+      //! `<select>` (osztály- és tanárválasztó) maga átlátszó pirula: a
+      //! háttere a lapé, a betűszíne az örökölt `--foreground`. Windowson a
+      //! böngésző a NYITOTT listát is a vezérlő saját színeivel festi, és mivel
+      //! ott nincs háttér, amit átvegyen, marad a rendszer fehér lapja — a
+      //! sötét témában majdnem fehér betűvel. A tanárválasztóban ez több száz
+      //! olvashatatlan sor. (A `text-muted-foreground` állapot ugyanígy
+      //! szürkére húzná az EGÉSZ listát, nem csak a csukott vezérlőt.)
+      //*
+      //! macOS és iOS a listát a rendszer rajzolja, ezeket a szabályokat
+      //! figyelmen kívül hagyja — vagyis ott nem változtat semmin, Windowson és
+      //! Linuxon viszont ez az egyetlen fogódzó. A méret is ide tartozik: a
+      //! csukott pirula 12 px-es szövege a listában már nem kényelmes, a
+      //! felugró listának pedig nincs oka átvenni a vezérlő méretét. */
+  option,
+  optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+    font-size: 0.875rem;
+  }
+  option:disabled {
+    color: var(--muted-foreground);
+  }
 }
 
 @layer utilities {
