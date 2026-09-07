@@ -290,11 +290,7 @@ export function NotificationMenu({
                 </>
               ) : (
                 <>
-                  Két dologról szólunk, semmi másról:{" "}
-                  <span className="font-medium text-foreground">
-                    {LEAD_MINUTES} perccel az óra kezdése előtt
-                  </span>
-                  , és ha{" "}
+                  Szólunk, ha {" "}
                   <span className="font-medium text-foreground">
                     megváltozik az órarend
                   </span>{" "}
@@ -411,10 +407,6 @@ export function NotificationMenu({
                 />
                 <span className="text-muted-strong">
                   Minden óra előtt szólj
-                  <span className="block text-xs text-muted-foreground">
-                    Alapból csak a nap első órája előtt, és szünet vagy
-                    lyukasóra után.
-                  </span>
                 </span>
               </label>
 

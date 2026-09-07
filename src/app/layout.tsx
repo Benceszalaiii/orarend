@@ -9,6 +9,7 @@ import { PrefsSync } from "@/components/prefs-sync";
 import { AddToHomeScreen } from "@/components/pwa/add-to-home-screen";
 import { RegisterSW } from "@/components/register-sw";
 import { cn } from "@/lib/utils";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -144,6 +145,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/*//* A telepítés tippje csak iOS-en, csak egyszer — a döntést maga a
             //* komponens hozza meg (lásd `lib/a2hs.ts`). */}
         <AddToHomeScreen />
+        <SpeedInsights />
         <Analytics />
       </body>
     </html>

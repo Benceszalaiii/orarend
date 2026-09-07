@@ -1,6 +1,6 @@
 import "server-only";
 
-import { dash } from "@better-auth/infra";
+import { dash, sentinel } from "@better-auth/infra";
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -261,6 +261,7 @@ export const auth = betterAuth({
       //! szól. Élesbe menet előtt ezt meg kell nevezni ott (`/adatvedelem`).
       activityTracking: { enabled: true },
     }),
+    sentinel()
   ],
 });
 

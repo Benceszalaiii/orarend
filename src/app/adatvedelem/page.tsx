@@ -27,7 +27,7 @@ export default function AdatvedelemPage() {
           Adatvédelmi tájékoztató
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Utolsó frissítés: 2026. szeptember 6.
+          Utolsó frissítés: 2026. szeptember 7.
         </p>
 
         <div className="mt-8 flex flex-col gap-8 text-sm leading-relaxed text-muted-strong">
@@ -87,6 +87,36 @@ export default function AdatvedelemPage() {
                 className="text-primary underline underline-offset-2"
               >
                 a Vercel Web Analytics adatvédelmi tájékoztatója
+              </a>
+              .
+            </p>
+          </section>
+
+          <section className="flex flex-col gap-2">
+            <h2 className="text-base font-semibold text-foreground">
+              Teljesítménymérés (Vercel Speed Insights)
+            </h2>
+            <p>
+              Az oldal a Vercel Speed Insights szolgáltatását használja a
+              betöltési sebesség mérésére (pl. mennyi idő alatt jelenik meg a
+              tartalom, mennyire gyorsan válaszol az oldal az első érintésre). A
+              mérés nem használ cookie-t, és nem gyűjt olyan adatot, amiből egy
+              látogató munkamenete oldalakon átívelően összeállítható, vagy egy
+              látogató felismerhető lenne. Amit a szolgáltatás rögzít: a
+              megnyitott útvonal, a hálózat típusa (pl. 4g), a böngésző és
+              eszköz típusa, az ország (nem pontosabb helyadat), valamint a mért
+              teljesítményértékek. Ebben a folyamatban is a Vercel Inc. jár el
+              adatfeldolgozóként.
+            </p>
+            <p>
+              Bővebben:{" "}
+              <a
+                href="https://vercel.com/docs/speed-insights/privacy-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline underline-offset-2"
+              >
+                a Vercel Speed Insights adatvédelmi tájékoztatója
               </a>
               .
             </p>
@@ -196,7 +226,8 @@ export default function AdatvedelemPage() {
               vagy felugró ablakban.
             </p>
             <p>
-              Amit a sikeres belépés után eltárolunk: az iskolai
+              Amit a sikeres belépés után eltárolunk: a neved (ha az iskola
+              rendszere megadja; ha nem, a felhasználóneved), az iskolai
               felhasználóneved, az iskola rendszere által megadott{" "}
               <span className="font-medium text-foreground">osztályod</span> (és
               hogy tanár vagy-e), valamint a bejelentkezett állapotot fenntartó
@@ -224,6 +255,60 @@ export default function AdatvedelemPage() {
               megmaradnak azon az eszközön, amelyiken vagy. Ha a fiókodat és a
               hozzá mentett beállításokat véglegesen törölni szeretnéd, írj az
               üzemeltetőnek.
+            </p>
+          </section>
+
+          {/*//! A BEJELENTKEZÉST KISZOLGÁLÓ HÁTTÉRSZOLGÁLTATÓ (Better Auth
+            //! Infra: `dash()` + `sentinel()`) EGY ÖNÁLLÓ ADATFELDOLGOZÓ, NEM
+            //! CSAK EGY KÖNYVTÁR. A `dash()` minden belépésről, kilépésről és
+            //! munkamenet-létrehozásról eseményt küld a saját szervereire, ezt
+            //! semmilyen kapcsoló nem tiltja le — ezért ezt itt, nevesítve
+            //! kell kimondani, nem elég a fenti szakaszokba rejteni. */}
+          <section className="flex flex-col gap-2">
+            <h2 className="text-base font-semibold text-foreground">
+              A bejelentkezést kiszolgáló háttérszolgáltató (Better Auth)
+            </h2>
+            <p>
+              Az iskolai belépést a Better Auth nevű, nyílt forráskódú
+              hitelesítési keretrendszer szolgálja ki, ennek egy kiegészítője (a
+              „Better Auth Infra") pedig üzemeltetői rálátást és visszaélés
+              elleni védelmet ad hozzá. Ebben a folyamatban a Better Auth
+              (Better Auth, Inc.) adatfeldolgozóként jár el.
+            </p>
+            <p>
+              Minden sikeres és sikertelen belépésről, kilépésről és új
+              munkamenet létrehozásáról esemény megy a Better Auth szervereire;
+              ez a nevedet (vagy a felhasználónevedet), a helykitöltő
+              e-mail-címedet, az IP-címedet, az IP-címből származtatott
+              hozzávetőleges város/ország adatot és a böngésződ azonosítóját
+              tartalmazza. Erre a funkcióra nincs kapcsoló — ameddig az iskolai
+              belépés elérhető, ez az esemény minden belépéssel együtt jár.
+            </p>
+            <p>
+              Emellett a lap egy „Sentinel" nevű visszaélés-védelmi kiegészítőt
+              is bekapcsolva tart, amely a gyors, jelszó nélküli belépéshez
+              (passkey) tartozó kéréseknél az IP-címedet továbbítja a Better
+              Auth ellenőrző szolgáltatásának, hogy kiszűrje az automatizált,
+              tömeges próbálkozásokat. Jelenleg egyetlen konkrét szabályt (pl.
+              helyszín szerinti tiltás, bot- vagy VPN-felismerés) sem
+              kapcsoltunk hozzá — a kérés így is elmegy, de érdemi döntést
+              (kizárást, kihívást) egyelőre nem hoz belőle a rendszer. Tudatosan
+              NEM használjuk ennek a kiegészítőnek a böngésző-ujjlenyomatot vevő
+              kliens felét (ami képernyő-, betűkészlet- és hardveradatokból
+              azonosítana egy eszközt) — ez nem illene ahhoz, amit ez az oldal a
+              diákok adatairól vállal.
+            </p>
+            <p>
+              Bővebben:{" "}
+              <a
+                href="https://better-auth.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline underline-offset-2"
+              >
+                a Better Auth honlapja
+              </a>
+              .
             </p>
           </section>
 

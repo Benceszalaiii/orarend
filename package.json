@@ -22,6 +22,7 @@
     "@prisma/composer-prisma-cloud": "0.16.0",
     "@upstash/redis": "^1.38.3",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "alchemy": "2.0.0-beta.74",
     "better-auth": "^1.7.2",
     "class-variance-authority": "^0.7.1",
