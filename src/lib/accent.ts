@@ -1,14 +1,15 @@
 import {
   DEFAULT_PALETTE,
+  PALETTE_ACCENT,
   PALETTE_HUE,
   PALETTES,
   type Palette,
 } from "./appearance";
 
 //! ═══════════════════════════════════════════════════════════════════════════
-//! A TANTÁRGY SZÍNE — HÁROM KÉPLET, DE A VÁLASZTÁS A CSS-É
+//! A TANTÁRGY SZÍNE — ÖT KÉPLET, DE A VÁLASZTÁS A CSS-É
 //! ═══════════════════════════════════════════════════════════════════════════
-//! A KÁRTYA MIND A HÁROM SZÍNÉT MAGÁVAL HOZZA, ÉS EZ NEM PAZARLÁS. A kézenfekvő
+//! A KÁRTYA MIND AZ ÖT SZÍNÉT MAGÁVAL HOZZA, ÉS EZ NEM PAZARLÁS. A kézenfekvő
 //! megoldás az lenne, hogy a JS kiszámolja az AKTUÁLIS paletta szerinti fokot,
 //! és egyetlen `--acc-h`-t ír ki. Csak épp a paletta a böngészőben lakik
 //! (`localStorage`), a kártyák egy része viszont a SZERVEREN rendereldik (a
@@ -18,7 +19,7 @@ import {
 //!
 //! EZÉRT A JS NEM DÖNT, CSAK FELKÍNÁL. Kiírja mind a hármat, a `<html>`-en ülő
 //! `data-palette` pedig kiválasztja, melyik legyen az `--acc-h` — lásd
-//! `globals.css`, „A PALETTA VÁLASZTÓJA". Ez háromszor annyi bájt kártyánként
+//! `globals.css`, „A PALETTA VÁLASZTÓJA". Ez ötször annyi bájt kártyánként
 //! (tömörítés után elenyésző, mert minden kártyán ugyanaz a három név áll), és
 //! cserébe:
 //!   • a szerver és a kliens UGYANAZT a HTML-t adja, tehát nincs eltérés;
@@ -49,18 +50,29 @@ export function accentHue(
 }
 
 //* A tokennevek a paletták nevéből jönnek, hogy a CSS oldalán ne kelljen
-//* fejben tartani a sorrendet: `--h-ciklus`, `--h-prizma`, `--h-nyugodt`.
+//* fejben tartani a sorrendet: `--h-ciklus`, `--c-alkony`, `--l-nyar` és így
+//* tovább.
 export const hueTokenName = (palette: Palette) => `--h-${palette}`;
+export const chromaTokenName = (palette: Palette) => `--c-${palette}`;
+export const lightnessTokenName = (palette: Palette) => `--l-${palette}`;
 
 /**
- * A kártyára kerülő három szín. A hívó változatlanul soron belüli stílusként
+ * A kártyára kerülő öt árnyalat. A hívó változatlanul soron belüli stílusként
  * teríti szét (`style={accentStyle(seed)}`); a különbség csak annyi, hogy most
- * három szám megy ki egy helyett, és a választást a CSS végzi.
+ * öt árnyalat megy ki egy helyett, és a választást a CSS végzi.
  */
+//! A SZORZÓ ÉS AZ ELTOLÁS CSAK OTT KERÜL KI, AHOL NEM AZ ALAPÉRTÉK. A CSS
+//! oldalán mindkettő tartalékkal olvas (`var(--c-alkony, 1)`), tehát a hiányzó
+//! token nem hiba, hanem az „ugyanaz, mint eddig" jelentése. Így a három régi
+//! paletta kártyánként EGYETLEN BÁJTTAL sem lesz nehezebb, és a két új is csak
+//! négy számmal — nem tízzel.
 export function accentStyle(seed: string): React.CSSProperties {
   const style: Record<string, number> = {};
   for (const palette of PALETTES) {
-    style[hueTokenName(palette)] = PALETTE_HUE[palette](seed);
+    const { h, c, l } = PALETTE_ACCENT[palette](seed);
+    style[hueTokenName(palette)] = h;
+    if (c !== 1) style[chromaTokenName(palette)] = c;
+    if (l !== 0) style[lightnessTokenName(palette)] = l;
   }
   return style as React.CSSProperties;
 }

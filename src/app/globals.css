@@ -389,9 +389,12 @@
   }
 
   /*//! ─── A PALETTA VÁLASZTÓJA ────────────────────────────────────────────
-      //! ITT DŐL EL, MELYIK KÉPLET SZÍNE LÁTSZIK. A kártya mind a hármat
+      //! ITT DŐL EL, MELYIK KÉPLET SZÍNE LÁTSZIK. A kártya mind az ötöt
       //! magával hozza (`lib/accent.ts`), és ez a néhány sor köti az egyiket
-      //! az `--acc-h`-ra, ami alatt az egész lap dolgozik. A váltás így nem
+      //! az `--acc-h`/`--acc-c`/`--acc-l` hármasra, ami alatt az egész lap
+      //! dolgozik. A szorzó és az eltolás TARTALÉKKAL olvas (1 és 0): a régi
+      //! három paletta ki sem írja őket, és így pontosan azt jelentik, hogy
+      //! „maradjon minden a régiben". A váltás így nem
       //! renderelés, hanem EGY attribútum a `<html>`-en: a rács azonnal
       //! átfordul, mozdulatlan DOM mellett.
       //*
@@ -410,14 +413,32 @@
   .acc-text,
   .acc-break {
     --acc-h: var(--h-ciklus, 210);
+    --acc-c: var(--c-ciklus, 1);
+    --acc-l: var(--l-ciklus, 0);
   }
   [data-palette="prizma"]
     :is(.acc-tint, .acc-tint-strong, .acc-dot, .acc-text, .acc-break) {
     --acc-h: var(--h-prizma, 210);
+    --acc-c: var(--c-prizma, 1);
+    --acc-l: var(--l-prizma, 0);
   }
   [data-palette="nyugodt"]
     :is(.acc-tint, .acc-tint-strong, .acc-dot, .acc-text, .acc-break) {
     --acc-h: var(--h-nyugodt, 210);
+    --acc-c: var(--c-nyugodt, 1);
+    --acc-l: var(--l-nyugodt, 0);
+  }
+  [data-palette="alkony"]
+    :is(.acc-tint, .acc-tint-strong, .acc-dot, .acc-text, .acc-break) {
+    --acc-h: var(--h-alkony, 210);
+    --acc-c: var(--c-alkony, 1);
+    --acc-l: var(--l-alkony, 0);
+  }
+  [data-palette="nyar"]
+    :is(.acc-tint, .acc-tint-strong, .acc-dot, .acc-text, .acc-break) {
+    --acc-h: var(--h-nyar, 210);
+    --acc-c: var(--c-nyar, 1);
+    --acc-l: var(--l-nyar, 0);
   }
 
   /*//! A HALVÁNY KITÖLTÉS VILÁGOS ALAPON. Ez a szabály sokáig NEM LÉTEZETT: a
@@ -427,57 +448,100 @@
       //! ugyanezt a feladatot már megoldotta egyszer, papírra: világos, de
       //! telített folt, ami mellett a fekete felirat olvasható marad. */
   .acc-tint {
-    background-color: oklch(0.955 0.035 var(--acc-h));
-    border-color: oklch(0.72 0.09 var(--acc-h));
+    background-color: oklch(0.955 calc(0.035 * var(--acc-c, 1)) var(--acc-h));
+    border-color: oklch(
+      calc(0.72 + var(--acc-l, 0)) calc(0.09 * var(--acc-c, 1)) var(--acc-h)
+    );
   }
   .dark .acc-tint {
-    background-color: oklch(0.335 0.042 var(--acc-h));
-    border-color: oklch(0.5 0.062 var(--acc-h));
+    background-color: oklch(0.335 calc(0.042 * var(--acc-c, 1)) var(--acc-h));
+    border-color: oklch(
+      calc(0.5 + var(--acc-l, 0)) calc(0.062 * var(--acc-c, 1)) var(--acc-h)
+    );
   }
   .acc-tint-strong {
-    background-color: oklch(0.935 0.056 var(--acc-h));
-    border-color: oklch(0.72 0.12 var(--acc-h));
+    background-color: oklch(0.935 calc(0.056 * var(--acc-c, 1)) var(--acc-h));
+    border-color: oklch(
+      calc(0.72 + var(--acc-l, 0)) calc(0.12 * var(--acc-c, 1)) var(--acc-h)
+    );
   }
   .dark .acc-tint-strong {
-    background-color: oklch(0.4 0.07 var(--acc-h));
-    border-color: oklch(0.6 0.1 var(--acc-h));
+    background-color: oklch(0.4 calc(0.07 * var(--acc-c, 1)) var(--acc-h));
+    border-color: oklch(
+      calc(0.6 + var(--acc-l, 0)) calc(0.1 * var(--acc-c, 1)) var(--acc-h)
+    );
   }
   .acc-dot {
-    background-color: oklch(0.62 0.18 var(--acc-h));
+    background-color: oklch(
+      calc(0.62 + var(--acc-l, 0)) calc(0.18 * var(--acc-c, 1)) var(--acc-h)
+    );
   }
   .dark .acc-dot {
-    background-color: oklch(0.74 0.15 var(--acc-h));
+    background-color: oklch(
+      calc(0.74 + var(--acc-l, 0)) calc(0.15 * var(--acc-c, 1)) var(--acc-h)
+    );
   }
 
   /*//! A TANTÁRGY SZÍNE SZÖVEGSZÍNKÉNT. A napi nézet nem festi ki vele a
       //! felületeket: a kitöltött színes dobozokból a lap a heti rács
       //! nagyítása lenne. A szín itt jelölés — pötty és felirat —, a felületek
       //! pedig végig semlegesek. A világosság a KONTRASZTHOZ van hangolva, nem
-      //! a telítettséghez: sötét alapon fényesebb, világoson sötétebb. */
+      //! a telítettséghez: sötét alapon fényesebb, világoson sötétebb.
+      //*
+      //! //! AZ `--acc-l` EZÉRT CSAK A JELÖLÉSEKRE HAT, a halvány kitöltésekre
+      //! //! nem: ha a kártyák háttere is tantárgyanként világosabb-sötétebb
+      //! //! lenne, a rács foltos lenne. Így a felület egyetlen összefüggő
+      //! //! síkban marad, és a mélységet a pötty meg a felirat hordozza. */
   .acc-text {
-    color: oklch(0.5 0.16 var(--acc-h));
+    color: oklch(
+      calc(0.5 + var(--acc-l, 0)) calc(0.16 * var(--acc-c, 1)) var(--acc-h)
+    );
   }
   .dark .acc-text {
-    color: oklch(0.8 0.13 var(--acc-h));
+    color: oklch(
+      calc(0.8 + var(--acc-l, 0)) calc(0.13 * var(--acc-c, 1)) var(--acc-h)
+    );
   }
 
   .acc-break {
     background-image: repeating-linear-gradient(
       -45deg,
-      oklch(0.62 0.18 var(--acc-h) / 0.18) 0 3px,
+      oklch(
+          calc(0.62 + var(--acc-l, 0)) calc(0.18 * var(--acc-c, 1)) var(--acc-h) /
+          0.18
+        )
+        0 3px,
       transparent 3px 8px
     );
-    border-top: 1px dashed oklch(0.68 0.1 var(--acc-h) / 0.75);
-    border-bottom: 1px dashed oklch(0.68 0.1 var(--acc-h) / 0.75);
+    border-top: 1px dashed
+      oklch(
+        calc(0.68 + var(--acc-l, 0)) calc(0.1 * var(--acc-c, 1)) var(--acc-h) /
+        0.75
+      );
+    border-bottom: 1px dashed
+      oklch(
+        calc(0.68 + var(--acc-l, 0)) calc(0.1 * var(--acc-c, 1)) var(--acc-h) /
+        0.75
+      );
   }
   .dark .acc-break {
     background-image: repeating-linear-gradient(
       -45deg,
-      oklch(0.8 0.14 var(--acc-h) / 0.2) 0 3px,
+      oklch(
+          calc(0.8 + var(--acc-l, 0)) calc(0.14 * var(--acc-c, 1)) var(--acc-h) /
+          0.2
+        )
+        0 3px,
       transparent 3px 8px
     );
-    border-top-color: oklch(0.78 0.09 var(--acc-h) / 0.6);
-    border-bottom-color: oklch(0.78 0.09 var(--acc-h) / 0.6);
+    border-top-color: oklch(
+      calc(0.78 + var(--acc-l, 0)) calc(0.09 * var(--acc-c, 1)) var(--acc-h) /
+      0.6
+    );
+    border-bottom-color: oklch(
+      calc(0.78 + var(--acc-l, 0)) calc(0.09 * var(--acc-c, 1)) var(--acc-h) /
+      0.6
+    );
   }
 
   @keyframes tt-drain {
@@ -1015,24 +1079,40 @@
       //! feltétel nélkül érvényes. A rétegen kívüliség (lásd fentebb) elég
       //! ahhoz, hogy a `@layer utilities`-ben álló mindkét változatot verje. */
   .acc-tint {
-    background-color: oklch(0.955 0.035 var(--acc-h));
-    border-color: oklch(0.72 0.09 var(--acc-h));
+    background-color: oklch(0.955 calc(0.035 * var(--acc-c, 1)) var(--acc-h));
+    border-color: oklch(
+      calc(0.72 + var(--acc-l, 0)) calc(0.09 * var(--acc-c, 1)) var(--acc-h)
+    );
   }
   .acc-tint-strong {
-    background-color: oklch(0.92 0.065 var(--acc-h));
-    border-color: oklch(0.62 0.13 var(--acc-h));
+    background-color: oklch(0.92 calc(0.065 * var(--acc-c, 1)) var(--acc-h));
+    border-color: oklch(
+      calc(0.62 + var(--acc-l, 0)) calc(0.13 * var(--acc-c, 1)) var(--acc-h)
+    );
   }
   .acc-dot {
-    background-color: oklch(0.55 0.18 var(--acc-h));
+    background-color: oklch(
+      calc(0.55 + var(--acc-l, 0)) calc(0.18 * var(--acc-c, 1)) var(--acc-h)
+    );
   }
   .acc-break {
     background-image: repeating-linear-gradient(
       -45deg,
-      oklch(0.55 0.18 var(--acc-h) / 0.22) 0 3px,
+      oklch(
+          calc(0.55 + var(--acc-l, 0)) calc(0.18 * var(--acc-c, 1)) var(--acc-h) /
+          0.22
+        )
+        0 3px,
       transparent 3px 8px
     );
-    border-top-color: oklch(0.6 0.1 var(--acc-h) / 0.8);
-    border-bottom-color: oklch(0.6 0.1 var(--acc-h) / 0.8);
+    border-top-color: oklch(
+      calc(0.6 + var(--acc-l, 0)) calc(0.1 * var(--acc-c, 1)) var(--acc-h) /
+      0.8
+    );
+    border-bottom-color: oklch(
+      calc(0.6 + var(--acc-l, 0)) calc(0.1 * var(--acc-c, 1)) var(--acc-h) /
+      0.8
+    );
   }
   * {
     /* biome-ignore lint/complexity/noImportantStyles: a böngésző saját „hátterek nélkül" beállítása ellen szól. */

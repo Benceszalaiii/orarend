@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  PALETTE_HUE,
+  PALETTE_ACCENT,
   PALETTE_META,
   PALETTES,
   type Palette as PaletteName,
@@ -62,11 +62,17 @@ function themeLabel(theme: Theme): string {
 }
 
 //* A pöttyök a menüben KÖZVETLENÜL `oklch()`-t kapnak, nem az `--acc-h`
-//* rendszert: itt egyszerre kell látszania mind a három palettának, tehát
+//* rendszert: itt egyszerre kell látszania mind az öt palettának, tehát
 //* egyik sem lehet „az aktuális".
+//*
+//! A KÉPLET UGYANAZ, MINT A `.acc-dot`-É, a szorzóval és az eltolással együtt.
+//! Ha a minta csak a fokot venné át, az `alkony` és a `nyar` a menüben MÁSNAK
+//! látszana, mint a rácson — és pont az a dolga, hogy előre megmutassa.
 function swatchColor(palette: PaletteName, seed: string, dark: boolean) {
-  const hue = PALETTE_HUE[palette](seed);
-  return dark ? `oklch(0.74 0.15 ${hue})` : `oklch(0.62 0.18 ${hue})`;
+  const { h, c, l } = PALETTE_ACCENT[palette](seed);
+  const lightness = (dark ? 0.74 : 0.62) + l;
+  const chroma = (dark ? 0.15 : 0.18) * c;
+  return `oklch(${lightness} ${chroma} ${h})`;
 }
 
 function PaletteSwatch({
@@ -324,7 +330,7 @@ export function AppearanceMenu({ className }: { className?: string }) {
           <h3 className="px-1.5 pb-1 text-[11px] font-semibold text-muted-foreground">
             Tantárgyszínek
           </h3>
-          {/* biome-ignore lint/a11y/useSemanticElements: ugyanaz — három kapcsológomb, nem rádiómezők */}
+          {/* biome-ignore lint/a11y/useSemanticElements: ugyanaz — öt kapcsológomb, nem rádiómezők */}
           <div
             role="group"
             aria-label="Tantárgyszínek"

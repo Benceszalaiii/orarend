@@ -52,9 +52,15 @@ export function resolveTheme(theme: Theme): "light" | "dark" {
 
 //! ─── A PALETTA ─────────────────────────────────────────────────────────────
 
-export type Palette = "ciklus" | "prizma" | "nyugodt";
+export type Palette = "ciklus" | "prizma" | "nyugodt" | "alkony" | "nyar";
 
-export const PALETTES = ["ciklus", "prizma", "nyugodt"] as const;
+export const PALETTES = [
+  "ciklus",
+  "prizma",
+  "nyugodt",
+  "alkony",
+  "nyar",
+] as const;
 
 //* A `ciklus` az, ami eddig is volt — aki nem nyúl a beállításhoz, annak a lap
 //* semmit nem változik.
@@ -79,13 +85,21 @@ export const PALETTE_META: Record<Palette, { label: string; hint: string }> = {
     label: "Nyugodt",
     hint: "Egyetlen hideg családban marad",
   },
+  alkony: {
+    label: "Alkony",
+    hint: "Tíz árnyalat egyetlen égboltról",
+  },
+  nyar: {
+    label: "Nyár",
+    hint: "Dinnyétől a mélyvízig",
+  },
 };
 
 //! ─── A KÖZÖS MAG: A TANTÁRGY SZÁMA ─────────────────────────────────────────
-//! MIND A HÁROM KÉPLET UGYANEBBŐL A SZÁMBÓL INDUL, és ez nem spórolás. Ha
+//! MIND AZ ÖT KÉPLET UGYANEBBŐL A SZÁMBÓL INDUL, és ez nem spórolás. Ha
 //! palettánként más lenne a szórás, ugyanaz a tantárgy nem csak MÁS színt
 //! kapna a váltás után, hanem más SZOMSZÉDOKAT is: ami eddig egyedül állt a
-//! napban, az hirtelen összeolvadna a mellette lévővel. Egy mag, három
+//! napban, az hirtelen összeolvadna a mellette lévővel. Egy mag, öt
 //! leképezés — a tantárgyak egymáshoz mért viszonya megmarad.
 //*
 //* A képlet maga a régi `accentHue`-ból való, változatlanul: `hash * 31 + kód`.
@@ -134,15 +148,109 @@ const GOLDEN_ANGLE = 137.508;
 //! szól, akiknek a szín hangulat, és a nap alakját a helyzet és a felirat adja.
 const NYUGODT_HUES = [172, 187, 202, 217, 232, 247, 262, 277];
 
+//! ─── AMIT EGY PALETTA VISSZAAD ─────────────────────────────────────────────
+//! SOKÁIG EGY SZÁM VOLT: a fok. A világosságot és a telítettséget a CSS adta
+//! hozzá, szerepkörönként fixen — a pötty világosban mindig `oklch(0.62 0.18
+//! …)`, akármelyik fokon állt.
+//!
+//! //! EBBŐL KÉT DOLOG NEM MEGY. Az egyik: a színkör NEM egyformán mély. A
+//! //! 0.18-as telítettség 0.62-es világosságon a bíbornál bőven belefér az
+//! //! sRGB-be, a türkiznél viszont már a 0.106 a plafon — a böngésző ilyenkor
+//! //! némán visszavág, és minden képernyő máshol. A mai három paletta
+//! //! szín-szerepkör párjainak negyede-harmada így fut. A másik: két árnyalat
+//! //! között a szem csak a fokban lát különbséget, pedig a világosság
+//! //! ERŐSEBBEN elválaszt.
+//!
+//! EZÉRT A KÉPLET MOSTANTÓL HÁRMAT AD: fokot, telítettség-szorzót és
+//! világosság-eltolást. A régi három paletta 1-et és 0-t ad — nekik a lapon
+//! semmi nem változik, és a HTML-be sem kerül több (lásd `lib/accent.ts`).
+export type Accent = { h: number; c: number; l: number };
+
+const plain = (h: number): Accent => ({ h, c: 1, l: 0 });
+
+//! ─── 4. ALKONY — EGY ÍV, NEM A KÖR ─────────────────────────────────────────
+//! A NEGYEDIK PALETTA NEM OSZT, HANEM BEJÁR. Tíz árnyalat 250°-tól 46°-ig, a
+//! nullán átfordulva: éjkék, indigó, ametiszt, orgona, szilva, málna, rózsa,
+//! vörösréz, parázs, borostyán — pontosan az a sorrend, ahogy egy alkonyi ég a
+//! zenittől a horizontig változik. Nincs benne sárga és nincs benne zöld: a
+//! rács így nem konfetti lesz, hanem egyetlen jelenet.
+//*
+//* AZ ÍV HELYE MÉRÉS, NEM ÍZLÉS: ez az egyetlen összefüggő szakasz, ahol tíz
+//* árnyalat elfér úgy, hogy a tizenkét szerepkör EGYIKÉT SEM kell a böngészőnek
+//* visszavágnia. A `c` ezt a fokonként eltérő plafont követi.
+//*
+//! A `l` KÉT MÉLYSÉGBE RENDEZI A SORT, és ez nem dísz: a szűk ívvel elveszített
+//! elválasztást szerzi vissza. Nélküle a legszorosabb pár 0,039-nél lenne (a
+//! `ciklus` 0,056-ja alatt), vele 0,054 — vagyis tíz rekesszel is annyit
+//! választ el, mint a teljes körre szórt tizenkettő.
+const ALKONY: Accent[] = [
+  { h: 250, c: 0.8, l: -0.045 }, //* éjkék
+  { h: 268, c: 0.74, l: -0.005 }, //* indigó
+  { h: 286, c: 0.78, l: -0.04 }, //* ametiszt
+  { h: 304, c: 0.84, l: 0 }, //* orgona
+  { h: 322, c: 0.9, l: -0.035 }, //* szilva
+  { h: 340, c: 0.92, l: 0.005 }, //* málna
+  { h: 356, c: 0.9, l: -0.03 }, //* rózsa
+  { h: 14, c: 0.84, l: 0.008 }, //* vörösréz
+  { h: 30, c: 0.84, l: -0.025 }, //* parázs
+  { h: 46, c: 0.8, l: 0.015 }, //* borostyán
+];
+
+//! ─── 5. NYÁR — A KÖR MÁSIK FELE ────────────────────────────────────────────
+//! AMIT AZ ALKONY MEGHAGY. 8°-tól 226°-ig: dinnye, korall, mandarin, citrom,
+//! fűzöld, pálma, menta, lagúna, tenger, mélyvíz. A kettő nem versenyez — a
+//! színkört osztják ketté, és egyik sem lép a másik területére.
+//*
+//! ITT AZ `l` NEM FINOMHANGOLÁS, HANEM A PALETTA GERINCE. A napsárga és a
+//! türkiz pont az a két szín, amit a képernyő ezeken a világosságokon a
+//! legkevésbé tud: a sárga csak 0,8 fölött telített, a türkiz sehol, és a
+//! `.acc-text` 0,5-ös világosságán a tiszta sárgából olívazöld lesz. Ezért ül
+//! a citrom és a pálma feljebb, a dinnye pedig lejjebb, ahol a mély korallvörös
+//! a legerősebb.
+//*
+//! AMIT EZÉRT FELADUNK: a szorzók itt szélesebb sávban mozognak (0,53–0,95),
+//! mint az `alkony`-nál (0,74–0,95). A tenger egyszerűen nem tud annyi színt
+//! adni, mint a dinnye — a víz a valóságban is halkabb, mint a görögdinnye héja.
+const NYAR: Accent[] = [
+  { h: 8, c: 0.95, l: -0.03 }, //* dinnye
+  { h: 30, c: 0.84, l: 0.005 }, //* korall
+  { h: 50, c: 0.76, l: 0.03 }, //* mandarin
+  { h: 76, c: 0.72, l: 0.055 }, //* citrom
+  { h: 104, c: 0.68, l: 0.02 }, //* fűzöld
+  { h: 132, c: 0.9, l: 0.045 }, //* pálma
+  { h: 154, c: 0.78, l: 0.01 }, //* menta
+  { h: 180, c: 0.61, l: 0.045 }, //* lagúna
+  { h: 202, c: 0.53, l: 0.01 }, //* tenger
+  { h: 226, c: 0.64, l: 0.045 }, //* mélyvíz
+];
+
 /**
- * A három képlet, palettánként. Mindegyik ugyanazt a szerződést tartja:
- * ugyanaz a mag MINDIG ugyanazt a fokot adja, hálózat és állapot nélkül.
+ * Az öt képlet. Mindegyik ugyanazt a szerződést tartja: ugyanaz a mag MINDIG
+ * ugyanazt az árnyalatot adja, hálózat és állapot nélkül.
  */
-export const PALETTE_HUE: Record<Palette, (seed: string) => number> = {
-  ciklus: (seed) => CIKLUS_HUES[accentSeedHash(seed) % CIKLUS_HUES.length],
-  prizma: (seed) => Math.round((accentSeedHash(seed) * GOLDEN_ANGLE) % 360),
-  nyugodt: (seed) => NYUGODT_HUES[accentSeedHash(seed) % NYUGODT_HUES.length],
+export const PALETTE_ACCENT: Record<Palette, (seed: string) => Accent> = {
+  ciklus: (seed) =>
+    plain(CIKLUS_HUES[accentSeedHash(seed) % CIKLUS_HUES.length]),
+  prizma: (seed) =>
+    plain(Math.round((accentSeedHash(seed) * GOLDEN_ANGLE) % 360)),
+  nyugodt: (seed) =>
+    plain(NYUGODT_HUES[accentSeedHash(seed) % NYUGODT_HUES.length]),
+  alkony: (seed) => ALKONY[accentSeedHash(seed) % ALKONY.length],
+  nyar: (seed) => NYAR[accentSeedHash(seed) % NYAR.length],
 };
+
+/**
+ * Csak a fok — a CSS-t nem használó fogyasztóknak (`accentHue`). A szorzót és
+ * az eltolást ezek nem tudják hova tenni; a fénykamra a maga vásznán amúgy is
+ * saját világossággal fest.
+ */
+export const PALETTE_HUE: Record<Palette, (seed: string) => number> =
+  Object.fromEntries(
+    PALETTES.map((palette) => [
+      palette,
+      (seed: string) => PALETTE_ACCENT[palette](seed).h,
+    ]),
+  ) as Record<Palette, (seed: string) => number>;
 
 //! ─── A TÁROLÓ ──────────────────────────────────────────────────────────────
 //! Ugyanaz a minta, mint a `last-view.ts`-ben és az `identity.ts`-ben: ismeretlen
