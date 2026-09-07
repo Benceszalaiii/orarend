@@ -747,6 +747,31 @@ export function TimetableCalendar({
   //! példányból, mert a forrás nem volt elérhető. A rács ezt KIÍRJA: egy régi
   //! órarendet igazként mutatni rosszabb, mint hibát mutatni.
   const [stale, setStale] = useState<CachedWeek | null>(initialStale);
+
+  //! ─── A LAP MOST MÁR MENET KÖZBEN IS SZÓLHAT ────────────────────────────────
+  //! EZ AZ ÁLLAPOT EDDIG EGYSZER, A BELÉPÉSKOR VETTE ÁT A `initialStale`-t — és
+  //! ez helyes is volt, amíg a lap CSAK KÉSZ nézettel léptette be a rácsot: a
+  //! `TimetablePage` megvárta a hálózatot, tehát mire idáig jutottunk, már
+  //! eldőlt, mentett-e a hét.
+  //!
+  //! MOSTANTÓL NEM ÍGY ÉRKEZIK. A lap a készüléken tárolt hetet AZONNAL
+  //! kirajzolja, és a frisset alatta cseréli ki — vagyis a `initialStale`
+  //! ÉLETBEN VÁLTOZIK: előbb a mentett példány, majd `null`, amikor a friss
+  //! adat megjött. A kezdőérték ezt nem vette észre, és a rács azután is azt
+  //! írta ki, hogy „mentett órarend", hogy már a friss hetet mutatta —
+  //! ráadásul a mentett állapothoz tartozó újrapróbáló figyelők is fent
+  //! maradtak, örökre.
+  //*
+  //! A PROP VÁLTOZÁSÁT KÖVETJÜK, NEM A PROPOT MAGÁT. A rács a saját lapozásán
+  //! is állítja ezt az állapotot (`load`), és azt egy vak szinkron eltörölné.
+  //! Ezért csak akkor nyúlunk hozzá, ha a KÜLDÖTT érték tényleg más lett, mint
+  //! amit legutóbb küldtek.
+  const sentStale = useRef(initialStale);
+  useEffect(() => {
+    if (sentStale.current === initialStale) return;
+    sentStale.current = initialStale;
+    setStale(initialStale);
+  }, [initialStale]);
   const [selectedSubject, setSelectedSubject] = useState<string>(
     initialView.subject?.short ?? "",
   );
@@ -1204,13 +1229,14 @@ export function TimetableCalendar({
   //!     lapozott. Megoldás: a lépték a KIS viewporthoz (`100svh`) igazodik,
   //!     tehát a rács magassága görgetés közben meg sem mozdul (lásd `svhRef`).
   //!
-  //!  2. Ahol a nap tényleg nem fér ki (fekvő telefon, nagyon hosszú nap), ott
-  //!     függőlegesen is görögni kell — és a felfelé húzás sosem tökéletesen
-  //!     függőleges. A pár képpontos vízszintes elcsúszást a `mandatory`
-  //!     kötelezően kiigazítja a szomszéd napra. Megoldás lentebb: a tapadás a
-  //!     függőleges görgetés IDEJÉRE szünetel, majd visszakapcsol — és mivel
-  //!     közben a vízszintes pozíció nem mozdult el érdemben, a visszakapcsolás
-  //!     ugyanarra a napra igazít vissza, ahol voltál.
+  //!  2. Ahol a nap tényleg nem fér ki (fekvő telefon, nagyon hosszú nap, a
+  //!     rács fölé beúszó sor), ott függőlegesen is görögni kell — és a felfelé
+  //!     húzás sosem tökéletesen függőleges. A megoldás NEM az, hogy ilyenkor
+  //!     elengedjük a tapadást: pont az volt a hiba. Lásd lentebb, „A TAPADÁST
+  //!     NEM KAPCSOLJUK KI. SOHA." — a `mandatory` végig él, a doboz a saját
+  //!     vízszintes lendületének végén tapad, a lap függőleges görgetésétől
+  //!     függetlenül. A függőleges görgetés így LÉTEZHET anélkül, hogy a
+  //!     lapozásból bármit elvenne.
   const colStyle: React.CSSProperties | undefined = paging
     ? { width: colWidth ?? undefined, flex: "0 0 auto" }
     : undefined;
@@ -1407,40 +1433,27 @@ export function TimetableCalendar({
     return () => cancelAnimationFrame(id);
   }, [variant, cols]);
 
-  //! A TAPADÁS SZÜNETELTETÉSE FÜGGŐLEGES GÖRGETÉS ALATT.
-  //! A lap görgetése közben a doboz nem tapad, tehát a mozdulat vízszintes
-  //! összetevője nem visz sehova; a görgetés elülte után visszakapcsol, és a
-  //! legközelebbi naphoz igazít — ez az az egy nap, ahol amúgy is álltál.
+  //! ─── A TAPADÁST NEM KAPCSOLJUK KI. SOHA. ─────────────────────────────────
+  //! Itt korábban egy „védőháló" ült: a `window` görgetésére kikapcsolta a
+  //! tapadást, és 140 ms csend után vissza. MÉRVE, iPhone-on, ez maga volt a
+  //! hiba, két egymást erősítő okból:
   //!
-  //! EZ KORÁBBAN A `vScroll`-ON LÓGOTT, ÉS EZ VOLT A HIBA. A `vScroll` csak azt
-  //! mondja meg, hogy a RÁCS nem fér ki a lépték-határ alatt — de a függőleges
-  //! görgetést nem csak a rács tudja nyitni: elég egyetlen sor a rács FÖLÖTT
-  //! (offline jelzés, üres hét felirata), és a lap görgethetővé válik, miközben
-  //! `vScroll` hamis marad. Ilyenkor a figyelő fel sem került, a `mandatory`
-  //! tapadás viszont ott volt — pont ez tette „lehetetlenné" a napok közti
-  //! görgetést. A védőháló ezért mindig fel van téve, ahol egyáltalán van
-  //! lapozás; ahol a lap nem görget, ott sosem fut le.
-  //* A `scrollSnapType` közvetlenül a stíluson, nem állapotban: egy görgetés
-  //* több száz eseményt ad, és ebből egyetlen React-újrarajzolás sem kell.
-  useEffect(() => {
-    if (variant !== "fullscreen" || !paging) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    let restore: number | undefined;
-    const onScroll = () => {
-      el.style.scrollSnapType = "none";
-      window.clearTimeout(restore);
-      restore = window.setTimeout(() => {
-        el.style.scrollSnapType = "";
-      }, 140);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.clearTimeout(restore);
-      el.style.scrollSnapType = "";
-    };
-  }, [variant, paging]);
+  //!  1. A 140 ms a lap UTOLSÓ görgetés-eseményétől számolt, a lendület viszont
+  //!     a felengedés után még fél-két másodpercig ontja az eseményeket —
+  //!     mindegyik újraindította az időzítőt. A tapadás tehát a FÜGGŐLEGES
+  //!     lendület teljes hosszán ki volt kapcsolva.
+  //!
+  //!  2. És ami ennél is fontosabb: a WebKit a `scroll-snap-type` VISSZAÍRÁSÁRA
+  //!     magától NEM tapad újra. Álló dobozon a tulajdonság megváltoztatása nem
+  //!     görgetés — vagyis a nap ott maradt, ahol a kifutás hagyta, két nap
+  //!     között, és csak egy KÉSŐBBI görgetés vagy elrendezés-változás
+  //!     igazította a helyére. Innen jött a „sokáig tart, mire átvált".
+  //!
+  //! A tapadás ezért végig él. A kompozitor a doboz SAJÁT vízszintes
+  //! lendületének végén tapad, a lap függőleges lendületétől függetlenül —
+  //! vagyis a ferde mozdulat is azonnal egész napra áll be. A pár képpontos
+  //! elcsúszás pedig nem visz sehova: a tapadás a lendület vetületéből számol,
+  //! és egy megbillent függőleges húzás visszaáll arra a napra, ahol voltál.
 
   //! ─── A HÉTHATÁR ÁTHÚZÁSA ─────────────────────────────────────────────────
   //! A szalag SZÉLÉN a görgetés nem visz tovább — de a hét igen. Ez a mozdulat

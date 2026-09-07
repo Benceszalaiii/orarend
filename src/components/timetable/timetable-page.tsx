@@ -26,7 +26,11 @@ import {
   type TimetableSubjectKind,
   type TimetableView,
 } from "@/lib/timetable";
-import { type CachedWeek, loadWeekOrCached } from "@/lib/timetable-cache";
+import {
+  type CachedWeek,
+  loadCachedWeek,
+  loadWeekOrCached,
+} from "@/lib/timetable-cache";
 
 //! ═══════════════════════════════════════════════════════════════════════════
 //! A HETI RÁCS LAPJA — KÉT ALANYRA, EGY PÉLDÁNYBAN
@@ -195,39 +199,101 @@ export function TimetablePage({
     [subjects, mode],
   );
 
+  //! ═════════════════════════════════════════════════════════════════════════
+  //! AZ INDULÁS SORRENDJE — MÉRÉS UTÁN ÍRVA
+  //! ═════════════════════════════════════════════════════════════════════════
+  //! EZ A HATÁS EDDIG EGY LÁNC VOLT, ÉS MINDEN SZEME EGY ODA-VISSZA ÚT. A
+  //! `/orarend` hideg indításán mérve (helyi kiszolgáló, hálózati késleltetés
+  //! NÉLKÜL):
+  //!
+  //!     27 ms  classes       ← a lista
+  //!     89 ms  classes       ← ugyanaz még egyszer, a feloldáshoz
+  //!    107 ms  cards         ← CSAK EZUTÁN indulhatott az órarend
+  //!    133 ms  calendarplan
+  //!    245 ms  ─ eddig egy PÖRGŐ KARIKA állt a lapon
+  //!
+  //! A négy kérés EGYMÁST VÁRTA. Iskolai mobilhálózaton egy-egy szem nem 20,
+  //! hanem 100-200 ms — a rács ott másfél másodperccel a lap megjelenése UTÁN
+  //! rajzolódott ki, és a Vercel mezőadatában pontosan ez a különbség látszik
+  //! a `/tanari`-hoz képest (ami alany nélkül egyetlen kérést sem indít).
+  //!
+  //! HÁROM DOLGOT VÁLTOZTATTUNK, ÉS EGYIK SEM ÚJ FUNKCIÓ:
+  //!
+  //! 1. A LISTA MÁR NEM KAPU. Az osztály-lapon az alany a lista NÉLKÜL is
+  //!    tudható: vagy a készülék emlékszik rá, vagy a nyilvános
+  //!    alapértelmezés (`PUBLIC_DEFAULT_CLASS`). Ezért a kártyák kérése az
+  //!    ELSŐ pillanatban elindul, a listával PÁRHUZAMOSAN — a választó
+  //!    ugyanúgy megtelik, csak nem tartja fel a rácsot.
+  //! 2. A MENTETT HÉT AZ ELSŐ KÉPKOCKÁN OTT VAN. A `loadCachedWeek` a
+  //!    `localStorage`-ból olvas, tehát NEM KELL RÁ VÁRNI. Aki két óra között
+  //!    nyitja meg a lapot — vagyis a forgalom java —, a rácsot azonnal
+  //!    látja, és a friss adat alatta cserélődik ki. A pörgő karika így csak
+  //!    annak marad, akinél tényleg nincs mit mutatni.
+  //! 3. A LISTA EGYSZER MEGY KI. A kétszeres lekérést a `timetable.ts`
+  //!    oldotta meg (közös, még futó kérés) — itt annyi látszik belőle, hogy
+  //!    a `buildTimetableView` feloldása már nem indít újabb kört.
+  //!
+  //! AMI NEM VÁLTOZOTT: a tanári lap TOVÁBBRA SEM TIPPEL. Akinél nincs
+  //! emlékezett tanár, ott az alany csak a listából (és a belépés nevéből)
+  //! derülhet ki — ott a régi sorrend fut tovább, mert ott tényleg kell.
+  //! ═════════════════════════════════════════════════════════════════════════
   useEffect(() => {
     let cancelled = false;
+    const focusWeek = focusMondayKey();
+
+    //* Amit a lista nélkül is tudunk. Üres string = meg kell kérdezni.
+    const known = subjectWithoutList(mode);
+
+    //! A KÉT KÉRÉS EGYSZERRE INDUL, NEM EGYMÁS UTÁN.
+    const listPromise = fetchTimetableSubjects(mode);
+    const weekPromise = known
+      ? loadWeekOrCached(subjectStoreKey(mode, known), focusWeek, () =>
+          buildTimetableView({
+            kind: mode,
+            userClass: known,
+            weekStart: focusWeek,
+          }),
+        )
+      : null;
+
+    //! A KÉSZÜLÉKEN LÉVŐ PÉLDÁNY MÁR MOST KIRAJZOLHATÓ — a hatás a hidratálás
+    //! után fut, tehát ez nem okoz eltérést a kiszolgáló kimenetéhez képest.
+    if (known) {
+      const local = loadCachedWeek(subjectStoreKey(mode, known), focusWeek);
+      if (local) {
+        setView(local.view);
+        setInitialStale(local);
+      }
+    }
+
+    //* ── A VÁLASZTÓ ─────────────────────────────────────────────────────────
     (async () => {
+      const list = await listPromise;
+      if (cancelled) return;
+      setSubjects(list.subjects);
+      setSubjectsError(list.error);
+
+      //! Csak akkor dől el ITT az alany, ha a lista nélkül nem volt tudható —
+      //! a tanári lap első megnyitása. Az osztály-lapon a rács ekkorra már
+      //! régen elindult a saját útján.
+      if (known) return;
+
+      const wanted = initialSubject({
+        mode,
+        subjects: list.subjects,
+        sessionName,
+        sessionIsTeacher,
+      });
+
+      //! NINCS ALANY, NINCS KÉRÉS. A tanári lap nem tippel rá senkire: aki
+      //! először nyitja meg, a választót kapja, nem egy idegen órarendjét.
+      if (!wanted) {
+        setView((current) => current ?? emptyView(mode));
+        return;
+      }
+
       try {
-        const list = await fetchTimetableSubjects(mode);
-        if (cancelled) return;
-        setSubjects(list.subjects);
-        setSubjectsError(list.error);
-
-        const wanted = initialSubject({
-          mode,
-          subjects: list.subjects,
-          sessionName,
-          sessionIsTeacher,
-        });
-
-        //! NINCS ALANY, NINCS KÉRÉS. A tanári lap nem tippel rá senkire: aki
-        //! először nyitja meg, a választót kapja, nem egy idegen órarendjét.
-        if (!wanted) {
-          setView(emptyView(mode));
-          return;
-        }
-
-        //* A hét kulcsa ugyanaz, amit a `/ma` ír (alany + hétfő), tehát a két
-        //* lap UGYANAZT a mentett hetet találja meg.
-        //! ÉS HÉTVÉGÉN A KÖVETKEZŐ HÉT AZ ELSŐ. A mai hét szombaton már
-        //! végigfutott — aki akkor nyitja meg a lapot, a hétfőt keresi benne,
-        //! nem a lezárt keddet (lásd `focusMondayKey`). A `/ma` ugyanezt teszi
-        //! a nappal (`focusDayKey`), így a két lap ugyanazt a hetet nyitja.
-        //* A kért hét a kulcsban ÉS a kérésben is ugyanaz: a forrás
-        //* alapértelmezése a mai hét volna, ami hétvégén már nem a fókuszé.
-        const focusWeek = focusMondayKey();
-        const first = await loadWeekOrCached(
+        const late = await loadWeekOrCached(
           subjectStoreKey(mode, wanted),
           focusWeek,
           () =>
@@ -238,27 +304,40 @@ export function TimetablePage({
             }),
         );
         if (cancelled) return;
+        setView(late.view);
+        setInitialStale(late.cached);
+      } catch (err) {
+        if (cancelled) return;
+        setFatal(describeTimetableFailure(err));
+        setView((current) => current ?? emptyView(mode));
+      }
+    })();
+
+    //* ── A RÁCS ─────────────────────────────────────────────────────────────
+    (async () => {
+      if (!weekPromise) return;
+      try {
+        const first = await weekPromise;
+        if (cancelled) return;
         setView(first.view);
         setInitialStale(first.cached);
       } catch (err) {
         //! Ide csak váratlan kivétel jut (a hálózati hibákat a hívott
         //! függvények már nevesítve adják vissza) — a fajtáját akkor is
-        //! megőrizzük.
-        if (!cancelled) {
-          setFatal(describeTimetableFailure(err));
-          setView((current) => current ?? emptyView(mode));
-        }
+        //! megőrizzük. A mentett hetet NEM írjuk felül vele: ha fentebb már
+        //! kirajzoltuk, a diák inkább lásson egy régi hetet, mint egy hibát.
+        if (cancelled) return;
+        setFatal(describeTimetableFailure(err));
+        setView((current) => current ?? emptyView(mode));
       }
     })();
+
     return () => {
       cancelled = true;
     };
     //! A MUNKAMENET KÉSŐBB ÉRKEZIK, ÉS EZ SZÁNDÉKOSAN NEM INDÍT ÚJRA. A
     //! névből csak az ELSŐ megnyitás tippje lesz; ha a válasz a lista után
     //! futna be, egy már kiválasztott alanyt írna felül a szeme előtt.
-    //* Az első futásnál a munkamenet többnyire megvan (a sáv fiókgombja
-    //* ugyanezt a lekérdezést osztja meg), a tanári lap pedig amúgy is a
-    //* mentett választásból indul, ha volt már ilyen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
@@ -292,6 +371,19 @@ export function TimetablePage({
       )}
     </main>
   );
+}
+
+//! ─── AMIT A LISTA NÉLKÜL IS TUDUNK ─────────────────────────────────────────
+//! Ez az `initialSubject` első két lépése, kiemelve — mert ez a kettő NEM
+//! IGÉNYEL HÁLÓZATOT, és épp ezért nem szabad hálózatra várnia:
+//!   • a készüléken emlékezett alany (`localStorage`), bármelyik lapon;
+//!   • az osztály-lapon a nyilvános alapértelmezés.
+//! A tanári lap harmadik forrása (a belépés NEVE, a tanárlistához mérve) itt
+//! szándékosan nincs benne: ahhoz kell a lista, tehát az marad a lassú úton.
+function subjectWithoutList(mode: TimetableSubjectKind): string {
+  const remembered = loadCachedSubject(mode);
+  if (remembered) return remembered;
+  return mode === "class" ? PUBLIC_DEFAULT_CLASS : "";
 }
 
 //! ─── KIÉ AZ ELSŐ HÉT ───────────────────────────────────────────────────────

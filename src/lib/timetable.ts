@@ -532,7 +532,66 @@ export type TimetableClassList = {
 //! A LISTA HIBÁJA IS SZÁMÍT: ha nincs osztály- (vagy tanár-) lista, a választó
 //! üresen marad, és a felhasználónak tudnia kell, hogy ez sem az ő hibája.
 //! Ezért a hiba itt nem vész el — a hívó dönti el, mutatja-e.
-export async function fetchTimetableSubjects(
+//! ─── EGY LISTA, EGY KÉRÉS ──────────────────────────────────────────────────
+//! EZ A LISTA EDDIG HÁROMSZOR MENT KI EGYETLEN LAPBETÖLTÉSNÉL, ÉS KETTŐ
+//! KÖZÜLÜK EGYMÁS UTÁN. A mérés a `/orarend` hideg indításán:
+//!
+//!     27 ms  classes   ← a választó tölti (`TimetablePage` hatása)
+//!     89 ms  classes   ← a `buildTimetableView` kérdezi meg ÚJRA, hogy
+//!                        feloldja az alanyt (`resolveSubjectResult`)
+//!    801 ms  classes   ← a szomszédos hét előre lekérése
+//!
+//! A második nem indulhatott el, amíg az első be nem fejeződött, mert a
+//! `buildTimetableView` csak utána került sorra — vagyis a KÁRTYÁK KÉRÉSE EGY
+//! TELJES KÖRREL KÉSŐBB indult, mint kellett volna. Iskolai mobilhálózaton ez
+//! nem 20 ms, hanem egy egész oda-vissza út.
+//*
+//! A LISTA NEM VÁLTOZIK LAPBETÖLTÉS KÖZBEN. Az osztályok és a tanárok
+//! névsora tanévnyi állandó; egy megnyitáson belül újra megkérdezni nem
+//! óvatosság, hanem ismétlés. Ezért a SIKERES választ megtartjuk, a még
+//! futó kérést pedig megosztjuk a hívók között.
+//*
+//! AMIT SZÁNDÉKOSAN NEM TARTUNK MEG: a HIBÁT. Aki alagútban nyitotta meg a
+//! lapot, annál az első kérés elbukik — ha ezt eltennénk, a hálózat
+//! visszatérte után is a régi kudarcot kapná vissza minden hívó, és a lap
+//! magától soha nem gyógyulna meg. A sikertelen kör után a következő hívó
+//! újra próbálkozik.
+//*
+//! CSAK A BÖNGÉSZŐBEN. Szerveroldalon ez a modulszintű térkép KÉRÉSEK KÖZÖTT
+//! élne tovább, és egy látogató válaszát adná a következőnek — ott tehát
+//! nincs gyorsítótár, minden hívás friss.
+const subjectCache = new Map<TimetableSubjectKind, TimetableSubjectList>();
+const subjectInFlight = new Map<
+  TimetableSubjectKind,
+  Promise<TimetableSubjectList>
+>();
+
+export function fetchTimetableSubjects(
+  kind: TimetableSubjectKind,
+): Promise<TimetableSubjectList> {
+  if (typeof window === "undefined") return fetchSubjectsFresh(kind);
+
+  const done = subjectCache.get(kind);
+  if (done) return Promise.resolve(done);
+
+  const running = subjectInFlight.get(kind);
+  if (running) return running;
+
+  const promise = fetchSubjectsFresh(kind)
+    .then((result) => {
+      //* Csak a használható választ tesszük el — lásd fent.
+      if (result.subjects.length > 0) subjectCache.set(kind, result);
+      return result;
+    })
+    .finally(() => {
+      subjectInFlight.delete(kind);
+    });
+
+  subjectInFlight.set(kind, promise);
+  return promise;
+}
+
+async function fetchSubjectsFresh(
   kind: TimetableSubjectKind,
 ): Promise<TimetableSubjectList> {
   const words = SUBJECT_WORDS[kind];
