@@ -1,6 +1,7 @@
 # Órarend
 
-A Jedlik heti órarendje teljes képernyőn, bejelentkezés nélkül.
+A Jedlik heti órarendje teljes képernyőn: bejelentkezés nélkül is használható,
+opcionális iskolai belépéssel.
 
 A nyilvános órarend API-t olvassa, feloldja az osztály csoportbontásait arra a csoportra, ahová a
 diák tényleg jár, és a hetet teljes képernyős rácsként mutatja — ami egy A4-es
@@ -33,7 +34,8 @@ fekvő lapra is kinyomtatható.
 - Tailwind CSS 4, Radix UI primitívek, `motion`, `sonner`
 - TypeScript, [Biome](https://biomejs.dev) linthez és formázáshoz
 - [Bun](https://bun.sh) csomagkezelőnek
-- Nincs belépés és felhasználói fiók — az órarend kliensoldalon áll össze, Vercelen
+- Az órarend vendégként is működik; az opcionális iskolai belépést Better Auth +
+  Prisma kezeli
 - Két szerveroldali funkció: az osztályszintű használati számláló és a
   push-értesítések (Upstash Redis + VAPID)
 
@@ -69,6 +71,7 @@ kliens ezt a proxyt hívja:
 | Végpont | Mire kell |
 | --- | --- |
 | `GET timetable/classes` | Az osztálylista |
+| `GET timetable/teachers` | A tanárlista |
 | `POST timetable/cards` | Egy hét óráinak kártyái |
 
 A `timetable/substitutions` 404-et ad — az API-ban nincs helyettesítés-feed,
@@ -250,10 +253,16 @@ kapcsol be semmit — egy elfelejtett env-változó itt sem viheti el az óraren
 ```
 src/
   app/
+    home/          nyitóoldal
     orarend/       heti rács (alapértelmezett útvonal)
     ma/            a mai nap egy képernyőn
+    tanari/        tanári heti nézet
+    valtozasok/    változások listája
+    belepes/       opcionális iskolai belépés
     adatvedelem/   adatvédelmi tájékoztató
     statisztika/   jelszóval védett használati kimutatás (noindex)
+    api/auth/      bejelentkezés és passkey-végpontok
+    api/beallitasok/ beállítás-szinkron végpontok
     api/hasznalat/ osztályszintű használati számláló
     api/ertesites/ push-feliratkozás + az ütemezett kiküldő (`tick`)
   components/
