@@ -73,6 +73,7 @@ kliens ezt a proxyt hívja:
 | `GET timetable/classes` | Az osztálylista |
 | `GET timetable/teachers` | A tanárlista |
 | `POST timetable/cards` | Egy hét óráinak kártyái |
+| `GET hallmanagement/` | A folyosóügyeleti beosztás — lásd `lib/hall-duty.ts` |
 
 A `timetable/substitutions` 404-et ad — az API-ban nincs helyettesítés-feed,
 ezért az app sem mutat ilyet.
@@ -271,6 +272,7 @@ src/
   lib/
     timetable.ts        API-kliens, típusok, hibafajták
     timetable-merge.ts  ütközések klaszterezése, csoportbontás feloldása
+    hall-duty.ts        folyosóügyeleti beosztás, terület szerint csoportosítva
     dualis.ts           A/B hét-jelölés → munkahelyi vagy iskolai nap
     accent.ts           tantárgy neve → a 12 kiemelőszín egyike
     usage.ts            a kliens jelzése + napi deduplikáció

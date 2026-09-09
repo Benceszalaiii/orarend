@@ -1,7 +1,7 @@
 "use client";
 
 import { type MotionValue, motion, useTransform } from "motion/react";
-import type { WeekDay } from "@/components/ma/week";
+import type { DualStatus } from "@/lib/dualis";
 import { cn } from "@/lib/utils";
 
 //* ---------------------------------------------------------------------------
@@ -23,6 +23,18 @@ import { cn } from "@/lib/utils";
 //! A kettő nem ugyanaz a kérdés, ezért nem is ugyanaz a vezérlő; ami közös,
 //! az az adat, és mindkettő ugyanoda ír.
 
+//! A SÁVNAK A HÉT NAPJAI KELLENEK, NEM AZ ÓRAREND. Amíg a `days` a heti modell
+//! `WeekDay`-ét kérte, csak az órarendes lapok tudták használni — a
+//! folyosóügyelet (`/ugyelet`) ugyanezt az öt napot lapozza, csak nincs se
+//! óraszáma, se duális beosztása, amivel kitölthetné a mezőket. A sáv HÁROM
+//! mezőt olvas; csak azt a hármat kéri. A `WeekDay` változatlanul beleillik.
+export type StripDay = {
+  dateKey: string;
+  name: string;
+  /** Csak ahol értelmezhető: a duális nap a sávban is más színt kap. */
+  dual?: DualStatus;
+};
+
 export function DayStrip({
   days,
   index,
@@ -31,7 +43,7 @@ export function DayStrip({
   onPick,
   className,
 }: {
-  days: WeekDay[];
+  days: StripDay[];
   index: number;
   progress: MotionValue<number>;
   todayDateKey: string;

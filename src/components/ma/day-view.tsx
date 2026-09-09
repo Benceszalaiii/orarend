@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { CrestField, PAGE_COLUMNS } from "@/components/chrome/page-field";
 import { SITE_BAR_MAX, StandingLine } from "@/components/chrome/standing-line";
 import { SiteFooter } from "@/components/site-footer";
 import { dateFromKey } from "@/components/timetable/shared";
@@ -49,28 +50,9 @@ export type DayRenderContext = {
   restSpan: { fromMs: number; toMs: number } | null;
 };
 
-//! A FÉNYMEZŐ A LAPÉ, NEM A HERO DOBOZÁÉ. Az eredeti elrendezésben a negyedelt
-//! címer visszfénye a hero szekció háttere volt — itt a hero a napköteg
-//! belsejébe került, és vele együtt lapozna. Egy háttér, ami oldalra csúszik a
-//! tartalommal, nem háttér: ezért díszrétegként áll a lap tetején, rögzített
-//! magassággal, alsó elolvadással.
-function CrestField() {
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-x-0 top-0 h-[30rem] overflow-hidden"
-    >
-      <div className="absolute -top-40 -left-40 size-96 rounded-full bg-[radial-gradient(circle,oklch(0.55_0.2_27/0.14),transparent_70%)]" />
-      <div className="absolute -right-32 bottom-0 size-120 rounded-full bg-[radial-gradient(circle,var(--hero-crest-aura),transparent_70%)]" />
-      <div className="absolute inset-x-0 bottom-0 h-40 bg-linear-to-b from-transparent to-background" />
-    </div>
-  );
-}
-
-//* A tartalom hasábrácsa. Ugyanaz a definíció a napsáv, a „most" sor és a
-//* törzs fölött — az igazodás így szerkezetből következik, nem egyeztetésből.
-const COLUMNS =
-  "mx-auto w-full max-w-5xl px-4 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-8";
+//* A fénymező és a hasábrács a `chrome/page-field.tsx`-ben áll: a `/ugyelet`
+//* ugyanezt a burkot viseli, és egy lemásolt rács a két lapon külön csúszna el.
+const COLUMNS = PAGE_COLUMNS;
 
 export function DayView({
   dv,

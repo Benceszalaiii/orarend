@@ -33,6 +33,12 @@ export type SchoolDayPlan = {
   teaching: boolean;
   /** Az aznap érvényes csengetési rend azonosítója (tanítás nélküli napon `null`). */
   ringSystemId: number | null;
+  //! AZ A/B HÉT ITT A LEGOLCSÓBB. Az órarend is megmondja (`timetable/cards` →
+  //! `days[].week`), de csak úgy, ha egy OSZTÁLYT is megnevezünk hozzá — a
+  //! folyosóügyeletnek viszont nincs osztálya. A tanév rendje alanytalanul,
+  //! egyetlen havi kéréssel adja ugyanezt a betűt.
+  /** `"A"` vagy `"B"`; üres, ha a forrás nem mond hetet (pl. szünet). */
+  week: string;
   /** A napra kiírt iskolai bejegyzések, sorokra bontva. */
   notes: string[];
 };
@@ -99,6 +105,7 @@ async function getJson(path: string): Promise<unknown | null> {
 
 type RawPlanDay = {
   date?: string;
+  week?: string | null;
   teachingDay?: boolean;
   ringSystemId?: number | null;
   events?: string | null;
@@ -112,6 +119,9 @@ function parsePlanDay(raw: RawPlanDay): SchoolDayPlan | null {
     teaching: raw.teachingDay === true,
     ringSystemId:
       typeof raw.ringSystemId === "number" ? raw.ringSystemId : null,
+    //* Csak az „A"/„B" betűt fogadjuk el — a forrás üresen (vagy sehogy) hagyja
+    //* a hét nélküli napokat, és abból nem szabad hetet kitalálni.
+    week: raw.week === "A" || raw.week === "B" ? raw.week : "",
     //* A forrás egyetlen szövegmezőben, sortörésekkel adja a nap bejegyzéseit.
     notes: (raw.events ?? "")
       .split("\n")
