@@ -62,52 +62,15 @@ export const jedlikAd = () =>
   ({
     id: "jedlik-ad",
 
-    //! ─── A FELHASZNÁLÓ EXTRA MEZŐI ──────────────────────────────────────────
-    //! Itt deklaráljuk, nem a `user.additionalFields`-ben, mert ezek a
-    //! bővítményhez tartoznak — vele együtt jönnek és mennek. Ami fontosabb:
-    //! egyik sem `input`, tehát a Better Auth SOHA nem veszi át őket a kliens
-    //! kéréséből. Kizárólag ez a fájl írja őket, az iskolai válaszból.
-    //!
-    //! Ha ez nem így lenne, egy `/update-user` hívással bárki tanárrá vagy más
-    //! osztály tagjává tehetné magát.
-    schema: {
-      user: {
-        fields: {
-          username: {
-            type: "string",
-            required: true,
-            unique: true,
-            input: false,
-            returned: true,
-          },
-          displayUsername: {
-            type: "string",
-            required: false,
-            input: false,
-            returned: true,
-          },
-          class: {
-            type: "string",
-            required: false,
-            input: false,
-            returned: true,
-          },
-          isTeacher: {
-            type: "boolean",
-            required: false,
-            input: false,
-            returned: true,
-            defaultValue: false,
-          },
-          adCheckedAt: {
-            type: "date",
-            required: false,
-            input: false,
-            returned: false,
-          },
-        },
-      },
-    },
+    //! ─── A FELHASZNÁLÓ EXTRA MEZŐI MOSTANTÓL AZ `auth.ts`-BEN ÉLNEK ──────────
+    //! Korábban itt álltak, mert kizárólag ehhez a bővítményhez tartoztak.
+    //! Mióta a Google-belépés (`auth.ts`, `socialProviders.google`) is ír
+    //! `isTeacher`-t, ez már nem igaz — két hely deklarálná ugyanazt a mezőt,
+    //! ami a Better Authban ütközés. A mezők tulajdonosa ezért a KÖZÖS
+    //! `user.additionalFields` lett, hogy a bővítmény (jedlik-ad) törlésekor —
+    //! ami a migráció végén megtörténik — a mezők ne tűnjenek el vele együtt.
+    //! Az `input: false` védelem ugyanúgy megvan ott is: a kliens onnan sem
+    //! írhatja őket.
 
     endpoints: {
       signInJedlik: createAuthEndpoint(

@@ -5,13 +5,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { SheetItemBody, sheetItem } from "@/components/chrome/chrome-sheet";
+import { GoogleGlyph } from "@/components/google-glyph";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { authClient, signOut, useSession } from "@/lib/auth-client";
+import { GOOGLE_LINK_REASON } from "@/lib/ad-migration";
+import {
+  authClient,
+  hasGoogleLinked,
+  linkGoogleAccount,
+  signOut,
+  useSession,
+} from "@/lib/auth-client";
 import { forgetSyncState } from "@/lib/prefs-sync";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +72,6 @@ export function AccountMenu({
       className={className}
       variant={variant}
       name={session.user.name}
-      email={session.user.email}
       image={session.user.image}
       open={open}
       onOpenChange={setOpen}
@@ -134,7 +141,6 @@ function SignedIn({
   className,
   variant,
   name,
-  email,
   image,
   open,
   onOpenChange,
@@ -144,13 +150,29 @@ function SignedIn({
   className?: string;
   variant: "icon" | "row";
   name: string;
-  email: string;
   image?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   busy: boolean;
   setBusy: (busy: boolean) => void;
 }) {
+  //! EGY LEKÉRDEZÉS, KÉT FELHASZNÁLÁSI HELY. Ugyanez az állapot dönti el, hogy
+  //! a `GoogleLinkRow` megjelenjen-e a felugróban, ÉS hogy a sor-alakú
+  //! (fejléc-lap) trigger `hint`-je a szokásos „A beállításaid szinkronizálva"
+  //! helyett a teendőt mondja-e — enélkül két külön hívás menne a szerverre
+  //! ugyanazért a válaszért.
+  const [linkedGoogle, setLinkedGoogle] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void hasGoogleLinked().then((result) => {
+      if (!cancelled) setLinkedGoogle(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
@@ -166,7 +188,11 @@ function SignedIn({
                   className,
                 )
           }
-          title={`Bejelentkezve: ${name}`}
+          title={
+            linkedGoogle === false
+              ? `Bejelentkezve: ${name} — a Google-fiók összekötése ajánlott`
+              : `Bejelentkezve: ${name}`
+          }
         >
           {/*//* Sor-alakban a monogram egy kis korong a sor bal szélén — ugyanaz
               //* a hely, ahol a többi sor ikonja áll. */}
@@ -195,7 +221,19 @@ function SignedIn({
             )}
           </span>
           {variant === "row" ? (
-            <SheetItemBody label={name} hint="A beállításaid szinkronizálva" />
+            <SheetItemBody
+              label={name}
+              //! A HATÁRIDŐS TEENDŐ ITT LÁTHATÓ ANÉLKÜL, HOGY A FELUGRÓT MEG
+              //! KELLENE NYITNI — a fejléc-lap ezt a sort amúgy is mutatja,
+              //! tehát ez nem új felület, csak egy meglévő hely megváltozott
+              //! szövege. `null`-nál (még nem tudjuk) a megszokott szöveg
+              //! marad, nehogy egy pillanatra téves teendőt mutasson.
+              hint={
+                linkedGoogle === false
+                  ? "Google-fiók összekötése ajánlott"
+                  : "A beállításaid szinkronizálva"
+              }
+            />
           ) : (
             <span className="sr-only">Fiók: {name}</span>
           )}
@@ -208,6 +246,7 @@ function SignedIn({
         </div>
 
         <div className="flex flex-col p-1">
+          <GoogleLinkRow busy={busy} setBusy={setBusy} linked={linkedGoogle} />
           <PasskeyRow busy={busy} setBusy={setBusy} />
 
           <button
@@ -233,6 +272,77 @@ function SignedIn({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+//! ─── GOOGLE-FIÓK ÖSSZEKÖTÉSE ────────────────────────────────────────────────
+//! Az iskolai AD-belépés kivezetés alatt áll (lásd `/valtozasok`); aki eddig
+//! kizárólag azzal lépett be, annak a fiókja Google nélkül a leállás után
+//! ELÉRHETETLENNÉ válik — a beállításai nem jönnek át egy másik eszközre, és
+//! ha nincs passkey-je sem, MAGA A FIÓK sem nyitható meg többé. Ez a sor ezt
+//! előzi meg: egy kattintás, ami a JELENLEGI (már bejelentkezett) fiókhoz köt
+//! egy Google-fiókot — nem új fiókot hoz létre (lásd `auth.ts`,
+//! `account.accountLinking`).
+//!
+//! CSAK AKKOR JELENIK MEG, HA MÉG NINCS Google-fiók kötve. A lekérdezés
+//! (`listAccounts`) egyszer fut, a felugró láthatóságától függetlenül — ez a
+//! fiókgomb a leggyakoribb hely, ahonnan valaki egyáltalán megnyitja ezt a
+//! felugrót, tehát a döntést nem érdemes a nyitásig halasztani.
+function GoogleLinkRow({
+  busy,
+  setBusy,
+  linked,
+}: {
+  busy: boolean;
+  setBusy: (busy: boolean) => void;
+  //* A `SignedIn` kérdezi le, mert a válasz a fejléc-lap sorának `hint`-jét
+  //* IS befolyásolja — egy lekérdezés, két hely. `null` = még nem tudjuk,
+  //* addig nem mutatunk semmit, nehogy egy pillanatra tévesen felkínáljuk az
+  //* összekötést egy olyan fióknak, aminek már van Google-fiókja.
+  linked: boolean | null;
+}) {
+  const [error, setError] = useState<string | null>(null);
+
+  const link = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    const result = await linkGoogleAccount(
+      typeof window !== "undefined" ? window.location.pathname : "/orarend",
+    );
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    //* Sikeres ágon a böngésző elnavigál a Google felé — nincs mit tenni itt.
+  }, [setBusy]);
+
+  //* Amíg nem tudjuk, vagy már kötve van, nincs mit mutatni.
+  if (linked !== false) return null;
+
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void link()}
+        className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-muted-strong transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 motion-reduce:transition-none"
+      >
+        {busy ? (
+          <RefreshCw className="size-4 shrink-0 animate-spin" aria-hidden />
+        ) : (
+          <GoogleGlyph className="size-4 shrink-0" />
+        )}
+        Google-fiók összekötése
+      </button>
+      {error ? (
+        <p className="px-2 pb-1 text-xs text-destructive">{error}</p>
+      ) : (
+        <p className="px-2 pb-1 text-xs text-muted-foreground">
+          {GOOGLE_LINK_REASON}
+        </p>
+      )}
+    </div>
   );
 }
 

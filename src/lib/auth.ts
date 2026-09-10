@@ -8,6 +8,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { isBlockedAuthPath } from "./auth-blocked-paths";
 import { jedlikAd } from "./auth-jedlik";
 import prisma from "./prisma";
+import { schoolRoleForEmail } from "./school-domain";
 
 //! ═══════════════════════════════════════════════════════════════════════════
 //! BEJELENTKEZÉS — MIÉRT VAN, ÉS MIÉRT PONT ÍGY
@@ -67,6 +68,17 @@ export const auth = betterAuth({
   baseURL: BASE_URL,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
 
+  //! ─── HOVA IRÁNYÍTSUNK OAUTH-HIBÁNÁL ──────────────────────────────────────
+  //! ALAPBÓL `<baseURL>/error`-ra menne — olyan lap, ami ennél az appnál NEM
+  //! LÉTEZIK. Ez akkor futna le, ha a hívó (`signIn.social`, `linkSocial`)
+  //! nem adna meg saját `errorCallbackURL`-t, VAGY ha a hiba még azelőtt
+  //! történne, hogy a hívó URL-je egyáltalán számítana (pl. a domain-ellenőrzés
+  //! a `validateUserInfo`-ban — lásd lentebb — mindig ide redirekt, a `code`
+  //! és `error_description` lekérdezési paraméterekkel). A `/belepes` a lap
+  //! egyetlen olyan pontja, ami MEGTUDJA magyarázni, mi történt és mit lehet
+  //! tenni — ide irányítjuk tehát a tartalékot is.
+  onAPIError: { errorURL: "/belepes" },
+
   //! ─── MEGBÍZHATÓ EREDETEK ─────────────────────────────────────────────────
   //! Élesben CSAK a `baseURL` eredete megbízható (ezt a Better Auth magától
   //! hozzáadja), és ez így is helyes: a lista minden eleme egy hely, ahonnan
@@ -92,21 +104,196 @@ export const auth = betterAuth({
 
   //! AZ E-MAIL-CÍM NEM CSERÉLHETŐ, ÉS A FIÓK NEM TÖRÖLHETŐ A KLIENSBŐL.
   //! Mindkettő alapból ki van kapcsolva a Better Authban; azért áll itt kiírva,
-  //! hogy a bekapcsolásuk tudatos döntés legyen. A címünk amúgy is szintetikus
-  //! (`<felhasználónév>@jedlik-ad.invalid`) — átírni értelmetlen, és elrontaná
-  //! a fiók és az iskolai felhasználónév közötti kapcsolatot.
+  //! hogy a bekapcsolásuk tudatos döntés legyen. Az AD-fiók e-mail-címe amúgy
+  //! is szintetikus (`<felhasználónév>@jedlik-ad.invalid`) — átírni
+  //! értelmetlen lenne, és elrontaná a fiók és az iskolai felhasználónév
+  //! közötti kapcsolatot. A Google-fiókoké viszont a valódi iskolai címük —
+  //! azt meg pláne nem a mi appunk cserélgeti.
   user: {
     changeEmail: { enabled: false },
     deleteUser: { enabled: false },
+
+    //! ─── A FELHASZNÁLÓ EXTRA MEZŐI ──────────────────────────────────────────
+    //! Ezek régebben a `jedlikAd()` bővítmény saját `schema`-jában álltak.
+    //! Azóta a Google-belépés (lásd lentebb, `socialProviders.google` +
+    //! `validateUserInfo`) is ír `isTeacher`-t, tehát a mezők tulajdonosa a
+    //! KÖZÖS `user`, nem egyetlen bővítmény — két hely deklarálná ugyanazt a
+    //! mezőt, ami a Better Authban ütközés volna. Emellett ez a migráció
+    //! egyik célja is: hogy a `jedlikAd()` bővítmény (és vele a `schema`-ja)
+    //! a migráció végén nyomtalanul törölhető legyen, anélkül hogy elvinné
+    //! ezeket az oszlopokat.
+    //!
+    //! EGYIK SEM `input`, tehát a Better Auth SOHA nem veszi át őket a kliens
+    //! kéréséből — kizárólag az AD-belépés (`auth-jedlik.ts`) vagy a
+    //! Google-belépés `databaseHooks`-a írja őket. Enélkül egy `/update-user`
+    //! hívással bárki tanárrá vagy más osztály tagjává tehetné magát.
+    additionalFields: {
+      //* Az iskolai (AD) felhasználónév kisbetűsítve. `null` egy
+      //* Google-fiókkal érkezett felhasználónál — lásd `prisma/schema.prisma`.
+      username: {
+        type: "string",
+        required: false,
+        unique: true,
+        input: false,
+        returned: true,
+      },
+      //* Ugyanaz, ahogy a diák beírta (nagybetűkkel együtt) — csak AD-belépésnél
+      //* van értéke, csak megjelenítésre.
+      displayUsername: {
+        type: "string",
+        required: false,
+        input: false,
+        returned: true,
+      },
+      //* Csak az AD megmondja, melyik osztályba jár a diák — a Google-belépés
+      //* ezt nem tudja, `null` marad. Lásd `jedlik-ad.ts`.
+      class: {
+        type: "string",
+        required: false,
+        input: false,
+        returned: true,
+      },
+      //* AD-belépésnél az iskolai válasz mondja meg (és csak akkor írjuk
+      //* felül, ha nyilatkozott róla — lásd `jedlik-ad.ts`). Google-belépésnél
+      //* a `validateUserInfo` alatti `databaseHooks.user.create.before` írja,
+      //* a tantestületi (`jedlik.eu`) kontra diák (`students.jedlik.eu`)
+      //* domain alapján.
+      isTeacher: {
+        type: "boolean",
+        required: false,
+        input: false,
+        returned: true,
+        defaultValue: false,
+      },
+      //* Mikor néztük meg utoljára az AD-ban, hogy az osztály és a
+      //* tanár-státusz stimmel-e. Google-belépésnél nincs értelme: ott minden
+      //* belépés újraértékeli a szerepet a domainből (lásd lent).
+      adCheckedAt: {
+        type: "date",
+        required: false,
+        input: false,
+        returned: false,
+      },
+    },
+
+    //! ─── A KAPU: KI JOGOSULT EGYÁLTALÁN FIÓKOT KAPNI ────────────────────────
+    //! Ez fut le MINDEN fiók-létrehozásnál, fiók-összekötésnél, és — OAuth
+    //! esetén — MINDEN EGYES BELÉPÉSNÉL is (lásd a Better Auth
+    //! `oauth2/link-account.mjs`-ét: a `sign-in` ág is idehívja). Ez utóbbi
+    //! szándékos: ha valakinek időközben megváltozna vagy megszűnne az
+    //! iskolai Google-fiókja, a következő belépésekor újra megvizsgáljuk —
+    //! nem elég, hogy régen jogosult volt.
+    //!
+    //! AZ AD-BELÉPÉST NEM ÉRINTI. Az `auth-jedlik.ts` a saját kapuja: az
+    //! iskolai jelszó helyes ellenőrzése maga a jogosultság. Ez a függvény a
+    //! `method === "jedlik-ad"` esetben szándékosan nem dönt semmiről (a
+    //! `void` visszatérés = beengedés) — ha egyszer, a migráció végén, az
+    //! AD-bővítmény törlődik, ez az ág is elhagyható lesz.
+    validateUserInfo: ({ user, source }) => {
+      if (source.oauth?.providerId !== "google") return;
+      //! A GOOGLE `email_verified` MEZŐJE NEM ELÉG. A `hd: "*"` (lásd
+      //! `socialProviders.google`) csak azt zárja ki, hogy valaki SEMMILYEN
+      //! Workspace-domainnel ne jusson be — a MI két konkrét domainünket
+      //! (`jedlik.eu`, `students.jedlik.eu`) ez a hívás ellenőrzi, a
+      //! hitelesített e-mail-cím alapján.
+      if (!schoolRoleForEmail(user.email)) {
+        return {
+          error: "NOT_SCHOOL_ACCOUNT",
+          errorDescription:
+            "Csak iskolai Google-fiókkal (@jedlik.eu vagy @students.jedlik.eu) lehet belépni.",
+        };
+      }
+    },
+  },
+
+  //! ─── A GOOGLE-FIÓK BEÁLLÍTÁSA ISKOLAI SZEREPPÉ ────────────────────────────
+  //! A `user.validateUserInfo` már eldöntötte, hogy a domain elfogadható —
+  //! ez a hook csak azt írja be, MILYEN szerepet jelent. `databaseHooks`, nem
+  //! `validateUserInfo`, mert az utóbbi csak elfogad/elutasít, adatot nem
+  //! módosíthat.
+  //!
+  //! AZ AD-BELÉPÉST NEM ÉRINTI, ÉS EZ SZÁNDÉKOS ŐRZÉS, NEM MELLÉKHATÁS: az
+  //! AD szintetikus címe (`@jedlik-ad.invalid`) nem szerepel egyik iskolai
+  //! domainben sem, tehát a `role` itt `null` lesz, és a feltétel át sem fut
+  //! — az `auth-jedlik.ts` által a `directoryData`-ban már beállított
+  //! `isTeacher` érintetlen marad. Enélkül ez a hook minden AD-fiókot
+  //! csendben visszaminősítene diákká.
+  databaseHooks: {
+    user: {
+      create: {
+        //! `async`, MERT A HOOK TÍPUSA `Promise`-OT VÁR — a `validateUserInfo`
+        //! `Awaitable`-lel megelégszik szinkron visszatéréssel is, ez a hook
+        //! nem, tehát ez itt NEM stilisztikai, hanem fordítási kényszer.
+        before: async (user) => {
+          const role = schoolRoleForEmail(user.email);
+          if (!role) return;
+          return { data: { ...user, isTeacher: role === "teacher" } };
+        },
+      },
+    },
+  },
+
+  //! ─── A GOOGLE-BELÉPÉS ─────────────────────────────────────────────────────
+  //! A KLIENS-OLDALI KULCSOK NÉLKÜL EZ AZ EGÉSZ ÁG HIÁNYZIK, NEM HIBÁZIK. Ha a
+  //! `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` nincs beállítva (pl. helyi
+  //! fejlesztésnél), a `socialProviders` objektum üres marad — sem a
+  //! `/sign-in/social`, sem a `/callback/google` végpont nem regisztrálódik,
+  //! ahelyett hogy üres kulcsokkal próbálkozna és a Google 400-at adna.
+  //!
+  //! `hd: "*"`: MEGKÖVETELI, hogy a Google-fiók valamilyen Workspace-domainhez
+  //! tartozzon (tehát egy személyes `@gmail.com` cím már itt, a
+  //! Google-válaszban elbukik — nem kell a mi domain-listánkig eljutnia).
+  //! A KONKRÉT domaint (`jedlik.eu` / `students.jedlik.eu`) a fenti
+  //! `validateUserInfo` dönti el, mert a `hd` csak EGY domaint tudna
+  //! megkövetelni, nálunk pedig kettő van.
+  //!
+  //! `accessType: "online"`: NINCS `refreshToken`-t kérő ág. Az app soha nem
+  //! hív semmilyen Google API-t a bejelentkezésen túl — a `profile`/`email`
+  //! scope-on kívül semmit nem kérünk —, tehát nincs mit frissíteni. Egy
+  //! offline (refresh tokent adó) hozzáférés csak egy olyan titkot tárolna,
+  //! aminek soha nem vennénk hasznát.
+  socialProviders: {
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? {
+          google: {
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            hd: "*",
+            accessType: "online" as const,
+            prompt: "select_account",
+          },
+        }
+      : {}),
   },
 
   account: {
     accountLinking: {
-      //! NINCS AUTOMATIKUS FIÓK-ÖSSZEFŰZÉS. Egy felhasználóhoz egy iskolai
-      //! azonosság tartozik; az e-mail-cím egyezésére hivatkozó összefűzés
-      //! klasszikus fiókátvételi út, és nálunk nincs is rá szükség, mert csak
-      //! egyetlen szolgáltató van.
-      enabled: false,
+      //! A KÉZI ÖSSZEKÖTÉS MOSTANTÓL NYITOTT — ez teszi lehetővé, hogy egy
+      //! MÁR bejelentkezett AD-fiók Google-fiókot kössön magához
+      //! (`authClient.linkSocial`, lásd `account-menu.tsx` és
+      //! `belepes/sign-in-panel.tsx`). Enélkül minden Google-belépés ÚJ
+      //! fiókot hozna létre, és az AD-fiók beállításai (osztály,
+      //! csoportbontás) elveszne az átállásnál.
+      enabled: true,
+      //! AZ IMPLICIT (AUTOMATIKUS) ÖSSZEFŰZÉS VISZONT MARAD KIKAPCSOLVA. Az
+      //! implicit összefűzés akkor lépne be, ha egy beérkező Google-fiók
+      //! e-mail-címe VÉLETLENÜL egyezne egy meglévő fiók e-mail-címével — ez
+      //! klasszikus fiókátvételi út máshol, nálunk pedig eleve nem
+      //! fordulhatna elő (az AD-fiókok szintetikus `@jedlik-ad.invalid`
+      //! címén), tehát az implicit ág csak kockázat, haszon nélkül. A kézi
+      //! összekötés (fent) egy MÁR bejelentkezett munkamenetből indul — ott a
+      //! „ki vagy" kérdés már el van döntve, ez a kapcsoló arra nem vonatkozik.
+      disableImplicitLinking: true,
+      //! `allowDifferentEmails: true` KÖTELEZŐ, KÜLÖNBEN A KÉZI ÖSSZEKÖTÉS
+      //! MINDIG ELUTASÍTVA VISSZATÉRNE. Az AD-fiók e-mail-címe szintetikus
+      //! (`<felhasználónév>@jedlik-ad.invalid`), a Google-fióké a valódi
+      //! iskolai cím — a kettő SOSEM egyezhet, tehát az alapértelmezett
+      //! „csak azonos e-mail-lel köthető össze" szabály itt mindig bukna.
+      //! A kockázat, amit ez a kapcsoló egyébként hordozna (valaki egy
+      //! IDEGEN fiókhoz köt egy saját Google-fiókot), itt nem áll fenn: a
+      //! `linkSocial` a MUNKAMENET felhasználójához köt, a hívó nem
+      //! választhatja meg, MELYIK helyi fiókhoz csatlakozik.
+      allowDifferentEmails: true,
     },
   },
 
@@ -261,7 +448,7 @@ export const auth = betterAuth({
       //! szól. Élesbe menet előtt ezt meg kell nevezni ott (`/adatvedelem`).
       activityTracking: { enabled: true },
     }),
-    sentinel()
+    sentinel(),
   ],
 });
 

@@ -35,6 +35,15 @@ type Entry = {
 
 const ENTRIES: readonly Entry[] = [
   {
+    date: "2026-09-10",
+    title: "Google-belépés — az iskolai jelszó kivezetése",
+    items: [
+      "Belépni mostantól az iskolai Google-fiókoddal (@jedlik.eu vagy @students.jedlik.eu) is lehet — jelszó begépelése nélkül.",
+      "Az iskolai jelszavas belépés hamarosan megszűnik. Aki eddig azzal lépett be, a fiókgombon (vagy a /belepes lapon) tudja összekötni a fiókját a Google-fiókjával — érdemes minél előbb megtenni, hogy a beállításai (és a gyors belépés, ha van) ne vesszenek el.",
+      "A korábban beállított gyors belépés (ujjlenyomat) változatlanul működik.",
+    ],
+  },
+  {
     date: "2026-09-04",
     title: "Lábléc",
     items: [

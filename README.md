@@ -72,11 +72,21 @@ kliens ezt a proxyt hívja:
 | --- | --- |
 | `GET timetable/classes` | Az osztálylista |
 | `GET timetable/teachers` | A tanárlista |
+| `GET timetable/classrooms` | A teremlista — lásd `lib/free-rooms-source.ts` |
 | `POST timetable/cards` | Egy hét óráinak kártyái |
 | `GET hallmanagement/` | A folyosóügyeleti beosztás — lásd `lib/hall-duty.ts` |
 
 A `timetable/substitutions` 404-et ad — az API-ban nincs helyettesítés-feed,
 ezért az app sem mutat ilyet.
+
+A `timetable/cards` HÁROM szűrőt ismer (`class`, `teacher`, `classroom`), és
+PONTOSAN EGYET szabad kitölteni: mindhármat üresen hagyva a válasz csendben az
+első osztály órarendje lesz. A kártya két alsó sarkának jelentése a szűrőtől
+függ — a részletek a `lib/timetable.ts` és a `lib/free-rooms.ts` fejlécében.
+
+Az üres termeket a szerver keresi ki (`GET /api/termek?nap=&ido=`), mert egy hét
+teremfoglaltsága annyi kérés, ahány terem van; a `lib/free-rooms-source.ts`
+fejléce írja le, mi tartja ezt kordában.
 
 Minden állapot a `localStorage`-ban van:
 

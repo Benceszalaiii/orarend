@@ -258,6 +258,61 @@ export default function AdatvedelemPage() {
             </p>
           </section>
 
+          {/*//! A GOOGLE-BELÉPÉS ÚJ ADATFELDOLGOZÓT VON BE — MAGÁT A GOOGLE-T.
+            //! Ez a szakasz azért áll ITT, az iskolai fiókos szakasz UTÁN, mert
+            //! ez a belépési mód került be másodikként: a diákok egy része már
+            //! ismerte az iskolai belépést, amikor ez megjelent. Mire a
+            //! kivezetés véget ér, ez a szakasz kerül előre. */}
+          <section className="flex flex-col gap-2">
+            <h2 className="text-base font-semibold text-foreground">
+              Belépés Google-fiókkal (opcionális)
+            </h2>
+            <p>
+              A belépéshez az iskolai Google-fiókodat használjuk (
+              <span className="font-mono text-xs">@jedlik.eu</span> vagy{" "}
+              <span className="font-mono text-xs">@students.jedlik.eu</span>) —
+              más domainű, például személyes Gmail-fiókkal a belépés
+              elutasításra kerül. A Google csak azt igazolja vissza, hogy
+              tényleg te vagy;{" "}
+              <span className="font-medium text-foreground">
+                a jelszavadat mi soha nem látjuk
+              </span>{" "}
+              — az a Google és közted marad.
+            </p>
+            <p>
+              Amit a Google átad, és amit ebből eltárolunk: a neved, az iskolai
+              e-mail-címed és a profilképed (ha van). Nem kérünk és nem kapunk
+              hozzáférést a leveleidhez, a naptáradhoz, a meghajtódhoz vagy
+              bármi máshoz a Google-fiókodban, és a belépésen túl soha nem
+              küldünk kérést a Google felé — nincs olyan jogosultságunk
+              (hozzáférési token), amivel ezt megtehetnénk.
+            </p>
+            <p>
+              A Google ebből NEM tudja megmondani, melyik osztályba jársz — ezt
+              csak az iskola saját (Jedlikinfo) rendszere adja meg, lásd fent.
+              Google-belépés után ezért kézzel kell kiválasztanod az osztályod,
+              ahogy bejelentkezés nélkül is tennéd. Azt viszont a Google-fiókod
+              domainjéből (<span className="font-mono text-xs">@jedlik.eu</span>{" "}
+              a tantestület,{" "}
+              <span className="font-mono text-xs">@students.jedlik.eu</span> a
+              diákok címe) megállapítjuk, hogy tanárként vagy diákként lépsz-e
+              be — ez dönti el, kaphatsz-e tanári órarend-értesítést.
+            </p>
+            <p>
+              Ebben a folyamatban a Google (Google Ireland Limited)
+              adatfeldolgozóként/harmadik félként jár el, a saját{" "}
+              <a
+                href="https://policies.google.com/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline underline-offset-2"
+              >
+                adatvédelmi szabályzata
+              </a>{" "}
+              szerint.
+            </p>
+          </section>
+
           {/*//! A BEJELENTKEZÉST KISZOLGÁLÓ HÁTTÉRSZOLGÁLTATÓ (Better Auth
             //! Infra: `dash()` + `sentinel()`) EGY ÖNÁLLÓ ADATFELDOLGOZÓ, NEM
             //! CSAK EGY KÖNYVTÁR. A `dash()` minden belépésről, kilépésről és

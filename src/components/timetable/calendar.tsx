@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
+  type TouchEvent as ReactTouchEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -1642,6 +1643,131 @@ export function TimetableCalendar({
     };
   }, [variant, paging, reduce, pinLeft]);
 
+  //! ─── A NAP-FEJLÉCEN HÚZVA HETET LAPOZUNK ─────────────────────────────────
+  //! A rácson indított mozdulat NAPOKAT lapoz, és hetet csak a szalag széléről
+  //! visz (fentebb, a héthatár gumiszalagja). A fejléc-sor viszont nem görget
+  //! sehova: ott az egész sáv magát a hetet jelöli, tehát a rajta induló
+  //! oldalirányú mozdulatnak egy dolga lehet — hetet váltani, bárhonnan indult.
+  //! Így a hét-lapozásnak van egy célpontja telefonon is, ahol a nyilak a nem
+  //! ragadó eszköztárban maradnak: a fejléc viszont mindig kéznél van.
+  //*
+  //* A visszajelzés ugyanabból a telítődő képletből jön, mint a héthatáré, és
+  //* a küszöbei is ugyanazok — a két mozdulat egyformán „fog meg".
+  const headerSwipeRef = useRef<HTMLDivElement | null>(null);
+  const headerSwipe = useRef({
+    tracking: false,
+    engaged: false,
+    dir: 1 as 1 | -1,
+    startX: 0,
+    startY: 0,
+    pull: 0,
+    settling: undefined as number | undefined,
+  });
+
+  const paintHeaderSwipe = () => {
+    const track = headerSwipeRef.current;
+    if (!track) return;
+    const g = headerSwipe.current;
+    const off = EDGE_PULL_MAX * (1 - Math.exp(-g.pull / EDGE_PULL_MAX));
+    track.style.transform = `translateX(${-g.dir * off}px)`;
+  };
+
+  //* Elengedés: a sor visszaáll a helyére. A hét cseréjét már NEM ez animálja
+  //* — azt a `weekTransition` viszi, ahogy a nyilaknál is.
+  const settleHeaderSwipe = () => {
+    const g = headerSwipe.current;
+    window.clearTimeout(g.settling);
+    const track = headerSwipeRef.current;
+    if (!track) return;
+    const ms = reduce ? 0 : 260;
+    track.style.transition = ms
+      ? `transform ${ms}ms cubic-bezier(0.22, 1, 0.36, 1)`
+      : "";
+    track.style.transform = "";
+    g.settling = window.setTimeout(() => {
+      track.style.transition = "";
+    }, ms + 60);
+  };
+
+  useEffect(() => () => window.clearTimeout(headerSwipe.current.settling), []);
+
+  //! A FIGYELŐK A REACT-EN KERESZTÜL ÜLNEK FEL, mert itt nem kell
+  //! `preventDefault` a mozgás közben: a fejléc vízszintesen nem görget, tehát
+  //! nincs mit elvenni a böngészőtől. A `touchend` viszont már nem passzív —
+  //! ott vissza KELL tartani a koppintást (lásd lentebb).
+  const headerSwipeHandlers = {
+    onTouchStart: (event: ReactTouchEvent<HTMLDivElement>) => {
+      const g = headerSwipe.current;
+      g.tracking = false;
+      g.engaged = false;
+      g.pull = 0;
+      if (event.touches.length !== 1 || pending) return;
+      window.clearTimeout(g.settling);
+      const track = headerSwipeRef.current;
+      if (track) track.style.transition = "";
+      g.startX = event.touches[0].clientX;
+      g.startY = event.touches[0].clientY;
+      g.tracking = true;
+    },
+    onTouchMove: (event: ReactTouchEvent<HTMLDivElement>) => {
+      const g = headerSwipe.current;
+      if (!g.tracking) return;
+      const touch = event.touches[0];
+      if (!touch) return;
+      const dx = touch.clientX - g.startX;
+      const dy = touch.clientY - g.startY;
+      if (!g.engaged) {
+        //* A függőleges mozdulat a lapé, nem a hété.
+        if (Math.abs(dy) > Math.abs(dx)) {
+          g.tracking = false;
+          return;
+        }
+        if (Math.abs(dx) < EDGE_PULL_ACTIVATE) return;
+        g.dir = dx < 0 ? 1 : -1;
+        g.engaged = true;
+      }
+      //* Menet közben elkanyarodó ujj: a hét visszaenged, a lap görget tovább.
+      if (Math.abs(dy) > EDGE_PULL_ABORT) {
+        g.tracking = false;
+        g.engaged = false;
+        g.pull = 0;
+        settleHeaderSwipe();
+        return;
+      }
+      g.pull = Math.max(0, (g.dir === 1 ? -dx : dx) - EDGE_PULL_ACTIVATE);
+      paintHeaderSwipe();
+    },
+    onTouchEnd: (event: ReactTouchEvent<HTMLDivElement>) => {
+      const g = headerSwipe.current;
+      if (!g.engaged) {
+        g.tracking = false;
+        return;
+      }
+      //! EZ MÁR NEM KOPPINTÁS VOLT. A fejléc napjai kattinthatók (a `goToDay`
+      //! odagörget) — a mozdulat végén keletkező kattintás tehát elrántaná a
+      //! lapot egy olyan napra, amit a hüvelykujj csak útközben érintett.
+      event.preventDefault();
+      const commit = g.pull >= EDGE_PULL_TRIGGER && !pending;
+      const dir = g.dir;
+      g.tracking = false;
+      g.engaged = false;
+      g.pull = 0;
+      settleHeaderSwipe();
+      if (commit) step(dir);
+    },
+    onTouchCancel: () => {
+      const g = headerSwipe.current;
+      if (!g.engaged) {
+        g.tracking = false;
+        return;
+      }
+      g.tracking = false;
+      g.engaged = false;
+      g.pull = 0;
+      settleHeaderSwipe();
+    },
+  };
+
   const goToDay = (index: number) => {
     const container = scrollRef.current;
     const el = dayRefs.current[index];
@@ -2290,72 +2416,81 @@ export function TimetableCalendar({
                   //! is — a fejléc-sor itt csak megismételné azt az egy napot,
                   //! amit már úgyis nézel. */}
               {effCols === 1 && (
-                <div className="flex shrink-0 gap-1 border-b border-border px-2 py-1 print:hidden">
-                  {gridDays.map((d, i) => (
-                    <button
-                      key={d.dateKey}
-                      type="button"
-                      onClick={() => goToDay(i)}
-                      aria-current={activeDay === i ? "true" : undefined}
-                      className={cn(
-                        "flex min-w-0 flex-1 touch-target flex-col items-center justify-center rounded-lg px-1 py-1 text-center transition-colors",
-                        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                        activeDay === i
-                          ? "bg-primary/12 text-foreground"
-                          : "text-muted-strong hover:bg-muted",
-                      )}
-                    >
-                      <span className="text-[13px] font-semibold leading-tight">
-                        {DAY_SHORT[i] ?? d.name.slice(0, 2)}
-                      </span>
-                      <span className="text-[10px] leading-tight tabular-nums">
-                        {d.dateLabel.replace(/\.$/, "")}
-                      </span>
-                      {/*//! TELEFONON EZ AZ EGYETLEN NAP-FEJLÉC: az `effCols === 1`
+                //! A SÁV EGYBEN CSÚSZIK, A KERETE NEM: a gumiszalag a napokat
+                //! viszi, az alsó vonal és a háttér a helyén marad. A
+                //! `touch-pan-y` a böngésző saját oldalirányú mozdulatát
+                //! (lapszéli „vissza") tartja távol a hét-lapozástól.
+                <div
+                  className="shrink-0 touch-pan-y overflow-hidden border-b border-border px-2 py-1 print:hidden"
+                  {...headerSwipeHandlers}
+                >
+                  <div ref={headerSwipeRef} className="flex gap-1">
+                    {gridDays.map((d, i) => (
+                      <button
+                        key={d.dateKey}
+                        type="button"
+                        onClick={() => goToDay(i)}
+                        aria-current={activeDay === i ? "true" : undefined}
+                        className={cn(
+                          "flex min-w-0 flex-1 touch-target flex-col items-center justify-center rounded-lg px-1 py-1 text-center transition-colors",
+                          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                          activeDay === i
+                            ? "bg-primary/12 text-foreground"
+                            : "text-muted-strong hover:bg-muted",
+                        )}
+                      >
+                        <span className="text-[13px] font-semibold leading-tight">
+                          {DAY_SHORT[i] ?? d.name.slice(0, 2)}
+                        </span>
+                        <span className="text-[10px] leading-tight tabular-nums">
+                          {d.dateLabel.replace(/\.$/, "")}
+                        </span>
+                        {/*//! TELEFONON EZ AZ EGYETLEN NAP-FEJLÉC: az `effCols === 1`
                           //! ág helyett nem fut a `DayHeadCell` sor, tehát a
                           //! duális jelölésnek ITT kell megjelennie — különben a
                           //! lapozgatás közben sehol nem látszana. */}
-                      {(() => {
-                        const status = dualOf(d.dayOfWeek);
-                        if (!status) return null;
-                        return (
-                          <span
-                            className={cn(
-                              "mt-0.5 rounded-[4px] px-1 text-[9px] font-semibold leading-[1.5]",
-                              status === "dual"
-                                ? "bg-primary/15 text-primary"
-                                : status === "school"
-                                  ? "bg-muted text-muted-strong"
-                                  : "text-muted-foreground/60",
-                            )}
-                          >
-                            {DUAL_LABEL[status]}
-                          </span>
-                        );
-                      })()}
-                      {/*//* A sávban egyetlen pötty fér el: azt mondja meg,
+                        {(() => {
+                          const status = dualOf(d.dayOfWeek);
+                          if (!status) return null;
+                          return (
+                            <span
+                              className={cn(
+                                "mt-0.5 rounded-[4px] px-1 text-[9px] font-semibold leading-[1.5]",
+                                status === "dual"
+                                  ? "bg-primary/15 text-primary"
+                                  : status === "school"
+                                    ? "bg-muted text-muted-strong"
+                                    : "text-muted-foreground/60",
+                              )}
+                            >
+                              {DUAL_LABEL[status]}
+                            </span>
+                          );
+                        })()}
+                        {/*//* A sávban egyetlen pötty fér el: azt mondja meg,
                           //* hogy van-e ezen a napon mondanivaló (esemény,
                           //* eltérő csengetés, tanítás nélküli nap). A szöveg a
                           //* sáv alatt, a KIVÁLASZTOTT napra áll ki. */}
-                      {(d.bells ||
-                        d.notes.length > 0 ||
-                        d.teaching === false) && (
-                        <span
-                          className={cn(
-                            "mt-0.5 size-1 rounded-full",
-                            d.bells ? "bg-brand" : "bg-muted-foreground/60",
-                          )}
-                          aria-hidden
-                        />
-                      )}
-                      {d.isToday && (
-                        <span
-                          className="mt-0.5 h-0.5 w-4 rounded-full bg-primary"
-                          aria-hidden
-                        />
-                      )}
-                    </button>
-                  ))}
+                        {(d.bells ||
+                          d.notes.length > 0 ||
+                          d.teaching === false) && (
+                          <span
+                            className={cn(
+                              "mt-0.5 size-1 rounded-full",
+                              d.bells ? "bg-brand" : "bg-muted-foreground/60",
+                            )}
+                            aria-hidden
+                          />
+                        )}
+                        {d.isToday && (
+                          <span
+                            className="mt-0.5 h-0.5 w-4 rounded-full bg-primary"
+                            aria-hidden
+                          />
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -2372,20 +2507,28 @@ export function TimetableCalendar({
                   //! blokkban ül, függőleges görgetéskor is fent marad. A
                   //! vízszintes lapozást a sínje `pinLeft`-ből követi le. */}
               {effCols >= 2 && (
-                <div className="flex shrink-0 border-b border-border bg-card">
-                  <div className="w-12 shrink-0 bg-card" aria-hidden />
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <div ref={headerTrackRef} data-day-track className="flex">
-                      {gridDays.map((d, i) => (
-                        <DayHeadCell
-                          key={d.dateKey}
-                          day={d}
-                          style={colStyle}
-                          paging={paging}
-                          onJump={() => goToDay(i)}
-                          dualStatus={dualOf(d.dayOfWeek)}
-                        />
-                      ))}
+                //! A HÚZÁS A SORT VISZI, A VONALÁT NEM — és a kilógó napokat a
+                //! keret vágja le, különben a lap vízszintesen görgethetővé
+                //! válna a mozdulat közben.
+                <div
+                  className="shrink-0 touch-pan-y overflow-hidden border-b border-border bg-card"
+                  {...headerSwipeHandlers}
+                >
+                  <div ref={headerSwipeRef} className="flex">
+                    <div className="w-12 shrink-0 bg-card" aria-hidden />
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <div ref={headerTrackRef} data-day-track className="flex">
+                        {gridDays.map((d, i) => (
+                          <DayHeadCell
+                            key={d.dateKey}
+                            day={d}
+                            style={colStyle}
+                            paging={paging}
+                            onJump={() => goToDay(i)}
+                            dualStatus={dualOf(d.dayOfWeek)}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -59,9 +59,16 @@ model User {
   //! tehetné magát egy `/update-user` hívással (az a végpont emiatt is zárva
   //! van, lásd `src/lib/auth.ts`).
 
-  //* Az iskolai felhasználónév kisbetűsítve — ez a fiók valódi kulcsa. Egyedi:
-  //* egy iskolai fiókhoz pontosan egy helyi fiók tartozhat.
-  username String @unique
+  //* Az iskolai felhasználónév kisbetűsítve — ennek a mezőnek AZ AD-BELÉPÉS AD
+  //* értéket. Egyedi: egy iskolai AD-fiókhoz pontosan egy helyi fiók
+  //* tartozhat.
+  //!
+  //! `null`-LAL ENGEDÉLYEZETT (Postgres az egyedi indexben több `NULL`-t is
+  //! megenged): egy Google-fiókkal érkező felhasználónak nincs AD
+  //! felhasználóneve, és nem is találgatunk rá egyet az e-mail helyi
+  //! részéből — az összefűzés/import erre a `link-social` folyamat vagy egy
+  //! külön migrációs script, nem ez a mező (lásd `src/lib/auth.ts`).
+  username String? @unique
 
   //* Ugyanaz, ahogy a diák beírta (nagybetűkkel együtt) — csak megjelenítésre.
   displayUsername String?
@@ -73,9 +80,13 @@ model User {
   //* `null` = tanár, vagy az iskolai válasz nem adta meg.
   class String?
 
-  //! `false` az alapértelmezés, de a mező értékét CSAK akkor írjuk felül, ha az
-  //! iskolai válasz ténylegesen nyilatkozott róla. Hiányzó adatból nem
-  //! minősítünk vissza senkit tanárból diákká — lásd `src/lib/jedlik-ad.ts`.
+  //! `false` az alapértelmezés. AD-belépésnél a mezőt CSAK akkor írjuk felül,
+  //! ha az iskolai válasz ténylegesen nyilatkozott róla (lásd
+  //! `src/lib/jedlik-ad.ts`) — hiányzó adatból nem minősítünk vissza senkit
+  //! tanárból diákká. Google-belépésnél nincs ilyen bizonytalanság: a
+  //! tantestületi cím (`@jedlik.eu`) kontra diákcím (`@students.jedlik.eu`)
+  //! egyértelműen eldönti, és minden belépéskor újraértékelődik (lásd
+  //! `src/lib/auth.ts`, `validateUserInfo`).
   isTeacher Boolean @default(false)
 
   //* Mikor néztük meg utoljára az iskolai rendszerben, hogy az osztály és a

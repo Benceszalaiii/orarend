@@ -31,10 +31,16 @@ export default function BelepesPage() {
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-strong">
           Az órarend megtekintéséhez <strong>nem kell belépni</strong> — enélkül
-          is minden működik. A belépés két dolgot ad: az iskola megmondja,
-          melyik osztályba jársz (így nem kell kiválasztanod), és a beállításaid
-          (összevont csoportbontások, duális beosztás) átjönnek a telefonodról a
+          is minden működik. A belépés azt adja, hogy a beállításaid (osztály,
+          összevont csoportbontások, duális beosztás) átjönnek a telefonodról a
           gépedre és vissza.
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-muted-strong">
+          Az iskolai <strong>Google-fiókoddal</strong> (
+          <span className="whitespace-nowrap">@jedlik.eu</span> vagy{" "}
+          <span className="whitespace-nowrap">@students.jedlik.eu</span>)
+          léphetsz be — ez lesz az egyetlen út, miután az alább még elérhető,
+          iskolai jelszavas belépés megszűnik.
         </p>
 
         <div className="mt-8">
@@ -53,8 +59,48 @@ export default function BelepesPage() {
             //! olvasná el a döntés pillanatában. */}
         <section className="mt-10 flex flex-col gap-3 border-t border-border pt-6 text-sm leading-relaxed text-muted-strong">
           <h2 className="text-base font-semibold text-foreground">
-            Mi történik belépéskor
+            Mi történik Google-belépéskor
           </h2>
+          <p>
+            A Google csak azt igazolja vissza, hogy tényleg te vagy — a{" "}
+            <strong className="text-foreground">
+              neved, iskolai e-mail-címed és profilképed
+            </strong>{" "}
+            kerül át hozzánk, semmi más. Nem kapunk hozzáférést a leveleidhez, a
+            naptáradhoz vagy bármi máshoz a Google-fiókodban, és a Google felé
+            sem küldünk soha semmilyen kérést a belépésen túl.
+          </p>
+          <p>
+            Csak a{" "}
+            <span className="whitespace-nowrap font-mono text-xs">
+              @jedlik.eu
+            </span>{" "}
+            és a{" "}
+            <span className="whitespace-nowrap font-mono text-xs">
+              @students.jedlik.eu
+            </span>{" "}
+            címekkel lehet belépni — egy személyes Gmail-cím nem elég, ezt a
+            szerverünk minden belépésnél ellenőrzi.
+          </p>
+          <p>
+            Az iskola rendszere (a Jedlikinfo) ebből NEM tudja megmondani,
+            melyik osztályba jársz — ezt eddig csak az alábbi, kivezetés alatt
+            álló iskolai jelszavas belépés adta meg. Google-belépés után ezért
+            kézzel kell kiválasztanod az osztályod, ahogy bejelentkezés nélkül
+            is tennéd.
+          </p>
+        </section>
+
+        <section className="mt-10 flex flex-col gap-3 border-t border-border pt-6 text-sm leading-relaxed text-muted-strong">
+          <h2 className="text-base font-semibold text-foreground">
+            Mi történik iskolai jelszavas belépéskor
+          </h2>
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-foreground">
+            Ez a belépési mód <strong>hamarosan megszűnik</strong> — az itt
+            leírtak addig érvényesek, amíg elérhető. Utána a fenti Google-gomb
+            marad az egyetlen belépési út (a korábban beállított gyors belépés
+            mellett).
+          </p>
           <p>
             A felhasználóneved és a jelszavad ugyanaz, amivel a Jedlikinfóba
             belépsz. A szerverünk ezeket{" "}
@@ -71,9 +117,9 @@ export default function BelepesPage() {
           <p>
             Az iskola rendszere a sikeres belépéskor azt is megmondja, melyik{" "}
             <strong className="text-foreground">osztályba</strong> jársz. Ez az
-            egyetlen ok, amiért egyáltalán az iskolai fiókot használjuk: így a
-            lap belépés után rögtön a te órarendedet mutatja, anélkül hogy
-            kézzel kellene kiválasztanod.
+            egyetlen ok, amiért ez a belépési mód egyáltalán létezik: így a lap
+            belépés után rögtön a te órarendedet mutatja, anélkül hogy kézzel
+            kellene kiválasztanod.
           </p>
           {/*//! EZT KI KELL MONDANI, MERT AZ OLDAL NEM AZ ISKOLÁÉ. Egy nem
               //! hivatalos lap, ami iskolai jelszót kér, pontosan úgy néz ki,
