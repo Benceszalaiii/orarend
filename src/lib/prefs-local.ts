@@ -10,6 +10,7 @@ import {
 import { loadAllDualSchedules, saveDualSchedule } from "./dual-schedule";
 import { loadIdentity, saveIdentity } from "./identity";
 import { loadLastView, saveLastView } from "./last-view";
+import { loadHiddenMenu, saveHiddenMenu } from "./menu-items";
 import { type SyncedPrefs, sanitizePrefs } from "./prefs-shared";
 import {
   loadCachedClass,
@@ -55,6 +56,7 @@ export function collectLocalPrefs(): SyncedPrefs {
     palette: loadPalette(),
     merge: loadAllLocalPreferences(),
     dual: loadAllDualSchedules(),
+    hiddenMenu: loadHiddenMenu(),
   });
 }
 
@@ -95,6 +97,14 @@ export function applyLocalPrefs(prefs: SyncedPrefs): void {
   for (const [storeKey, schedule] of Object.entries(prefs.dual)) {
     saveDualSchedule(storeKey, schedule);
   }
+
+  //! AZ ÜRES LISTA IS ÉRTÉK, EZÉRT `!== null` A FELTÉTEL. „Megnéztem, és
+  //! mindent meghagytam" nem ugyanaz, mint „még sosem nyúltam hozzá" — az
+  //! elsőt át kell hozni a másik készülékre is, különben egy visszakapcsolt
+  //! sor a következő szinkronban újra eltűnne.
+  //* A `saveHiddenMenu` maga jelez (`notifyPrefsChanged`), tehát a lap a
+  //* szinkron pillanatában áll át: nem kell hozzá újratöltés.
+  if (prefs.hiddenMenu !== null) saveHiddenMenu(prefs.hiddenMenu);
 }
 
 //! ─── AZ ÖSSZEFÉSÜLÉS ───────────────────────────────────────────────────────
@@ -135,6 +145,12 @@ export function mergePrefs(
     //* A vesztes oldal bejegyzései alapként; a győztesé fölé írva.
     merge: { ...loser.merge, ...winner.merge },
     dual: { ...loser.dual, ...winner.dual },
+    //! EZ EGY LISTA, NEM BEJEGYZÉSEK HALMAZA — ezért NEM egyesítjük. Az
+    //! egyesítés itt csak egy irányba tudna dolgozni: két készülék elrejtett
+    //! sorainak az UNIÓJA sosem hozna vissza egy sort, vagyis a
+    //! „visszakapcsoltam" művelet a másik készülék régi listájából mindig
+    //! visszaszivárogna. A lista egészében egy döntés; a frissebb oldalé nyer.
+    hiddenMenu: winner.hiddenMenu ?? loser.hiddenMenu,
   };
 }
 

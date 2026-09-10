@@ -224,7 +224,7 @@ export function MergedBadge({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        align="end"
+        align="center"
         className="w-[min(21rem,calc(100vw-1.5rem))] p-3"
       >
         <p className="text-sm font-semibold text-foreground">Összevont sáv</p>

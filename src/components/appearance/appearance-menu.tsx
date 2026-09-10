@@ -2,7 +2,11 @@
 
 import { Check, Monitor, Moon, Palette, Sun } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SheetItemBody, sheetItem } from "@/components/chrome/chrome-sheet";
+import {
+  SHEET_POPOVER,
+  SheetItemBody,
+  sheetItem,
+} from "@/components/chrome/chrome-sheet";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -266,7 +270,7 @@ export function AppearanceMenu({ className }: { className?: string }) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" className={sheetItem(className)}>
+        <Button variant="ghost" data-key="m" className={sheetItem(className)}>
           <Palette
             className="size-4 shrink-0 text-muted-foreground"
             aria-hidden
@@ -282,7 +286,7 @@ export function AppearanceMenu({ className }: { className?: string }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        align="end"
+        {...SHEET_POPOVER}
         className="w-[min(20rem,calc(100vw-1.5rem))] p-0"
       >
         {/*//! ─── A LAP FELÜLETE ───────────────────────────────────────────── */}

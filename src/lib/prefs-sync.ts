@@ -42,11 +42,24 @@ function stableStringify(prefs: SyncedPrefs): string {
     Object.keys(record)
       .sort()
       .map((key) => [key, record[key]] as const);
+  //! MINDEN SZINKRONIZÁLT MEZŐ BENNE VAN, ÉS EZ NEM TELJESSÉGI IGÉNY. Amit ez
+  //! a lenyomat kihagy, arról a `syncPrefs` azt hiszi, hogy „a szerver már
+  //! pontosan ezt tartalmazza", és NEM tölti fel — a mező így csak akkor jut
+  //! át a másik készülékre, ha történetesen valami MÁS is változott vele
+  //! együtt. Az alany, a megjelenés és az elrejtett sorok önmagukban is
+  //! állíthatók, tehát önmagukban is fel kell tudniuk menni.
   return JSON.stringify([
     prefs.class,
+    prefs.teacher,
     prefs.lastView,
+    prefs.identity,
+    prefs.theme,
+    prefs.palette,
     sortedRecord(prefs.merge),
     sortedRecord(prefs.dual),
+    //* A lista rendezett és duplikátummentes (`sanitizeHiddenMenu`), tehát
+    //* ugyanaz a halmaz két készüléken ugyanazt a szöveget adja.
+    prefs.hiddenMenu,
   ]);
 }
 

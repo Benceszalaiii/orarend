@@ -2,7 +2,11 @@
 
 import { EyeOff, Merge, RotateCcw, Undo2 } from "lucide-react";
 import { useState } from "react";
-import { SheetItemBody, sheetItem } from "@/components/chrome/chrome-sheet";
+import {
+  SHEET_POPOVER,
+  SheetItemBody,
+  sheetItem,
+} from "@/components/chrome/chrome-sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -97,7 +101,7 @@ export function PreferencesMenu({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" className={sheetItem(className)}>
+        <Button variant="ghost" data-key="o" className={sheetItem(className)}>
           <Merge
             className={cn(
               "size-4 shrink-0",
@@ -116,7 +120,7 @@ export function PreferencesMenu({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        align="end"
+        {...SHEET_POPOVER}
         className="w-[min(22rem,calc(100vw-1.5rem))] p-0"
       >
         <div className="border-b border-border px-3 py-2.5">

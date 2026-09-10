@@ -1,11 +1,12 @@
 "use client";
 
-import { Briefcase, GraduationCap } from "lucide-react";
+import { Briefcase, Check, GraduationCap } from "lucide-react";
 import { useState } from "react";
 import { DAY_NAMES, DAY_SHORT } from "@/components/timetable/shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -22,6 +23,7 @@ import {
   isDualDay,
   toggleDualDay,
 } from "@/lib/dual-schedule";
+import type { TimetableSubjectKind } from "@/lib/timetable";
 import { cn } from "@/lib/utils";
 
 //* ---------------------------------------------------------------------------
@@ -294,41 +296,117 @@ export function DualPanel({
         schedule={schedule ?? EMPTY_DUAL_SCHEDULE}
         weekLetter={weekLetter}
         todayDow={todayDow}
+        subjectShort={classShort}
         onChange={onChange}
       />
     </section>
   );
 }
 
-//! A VÁLTOZÁS AZONNAL ÉL. Nincs „Mentés" gomb: a rács koppintásra ír, és a
-//! lap mögötte át is áll rá. Így a beállítás nem vak — a diák a párbeszéd
-//! bezárása előtt látja, mit csinált.
-function DualSetupDialog({
+//! ─── A BEÁLLÍTÓ PÁRBESZÉD ──────────────────────────────────────────────────
+//! EGY PÁRBESZÉD, KÉT HORDOZÓ. A `/ma` panelje és az `/orarend` eszköztára
+//! UGYANEZT nyitja ki — aki az egyik helyen beállította magát, a másikon ne
+//! találkozzon egy MÁSIK beállítóval.
+//!
+//! A VÁLTOZÁS AZONNAL ÉL, DE A BEÁLLÍTÁSNAK VÉGE IS VAN. A rács koppintásra ír,
+//! a lap mögötte át is áll rá — így a beállítás nem vak. Ez viszont eddig azt
+//! is jelentette, hogy a párbeszédnek NEM VOLT VÉGE: a diák bejelölte a
+//! napjait, és ott maradt egy ablakban, aminek nincs kimenete. A „Kész" nem
+//! ment (nincs mit menteni), hanem KIMONDJA, hogy készen van — és a mellette
+//! álló mondat megmondja, miért nincs Mentés gomb.
+//!
+//! A HÁROM RÉTEG SORRENDJE A MUNKA SORRENDJE: gyors kitöltés (a többség egy
+//! koppintással kész), rács (aki nem a többség), majd a kivonat — az, amit a
+//! diák épp beállított, mondatban. A két ajánlat ezért KERÜLT FEL a rács fölé:
+//! a lábban a „Kész" mellett úgy néztek ki, mint a párbeszéd kimenetei, pedig
+//! a bemenetei.
+export function DualSetupDialog({
   open,
   onOpenChange,
+  mode = "class",
   schedule,
   weekLetter,
   todayDow,
+  subjectShort,
   onChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  //* Kinek a beosztása — ettől függ, mit MOND a párbeszéd; a rács és a tárolás
+  //* mindkét ágon ugyanaz.
+  mode?: TimetableSubjectKind;
   schedule: DualSchedule;
   weekLetter: string;
   todayDow: number | null;
+  /** Az alany jele (osztály vagy tanár) — a párbeszéd kimondja, mire vonatkozik. */
+  subjectShort?: string;
   onChange: (next: DualSchedule) => void;
 }) {
+  const classic = sameSchedule(schedule, CLASSIC_DUAL_SCHEDULE);
+  const none = !hasAnyDualDay(schedule);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Mikor vagy duálison?</DialogTitle>
           <DialogDescription className="text-pretty">
-            Koppints azokra a napokra, amelyeket a munkahelyen töltesz. A duális
-            blokk kéthetente ismétlődik, ezért külön kell megadni az A és a B
-            hetet — hogy melyik hét van éppen, azt a suli rendszeréből tudjuk.
+            {mode === "teacher"
+              ? //! A TANÁRNÁL A KÉRDÉS UGYANAZ, A KÖVETKEZMÉNY MÁS. A duális nap
+                //! nem „az osztály órarendje helyett" áll: azon a napon a
+                //! tanárnak nincs órája a rácson, mert a képzés a munkahelyen
+                //! folyik.
+                "Koppints azokra a napokra, amelyeken nem az iskolai órarended szerint dolgozol — azokra a napokra a rács nem tanórákat mutat."
+              : "Koppints azokra a napokra, amelyeket a munkahelyen töltesz — azok a napok nem az osztály órarendjét mutatják."}{" "}
+            A blokk kéthetente ismétlődik, ezért az A és a B hetet külön kell
+            megadni; hogy melyik hét van éppen, azt a suli rendszeréből tudjuk.
+            {subjectShort && (
+              //* A beosztás alanyonként külön áll (lásd `dual-schedule.ts`):
+              //* ki kell mondani, MIRE vonatkozik, amit most beállít.
+              <>
+                {" "}
+                A beállítás a(z){" "}
+                <span className="font-medium text-foreground">
+                  {subjectShort}
+                </span>{" "}
+                órarendjére vonatkozik.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
+
+        {/*//! A SZOKÁSOS BEOSZTÁS EGY KOPPINTÁS, DE NEM AZ ALAPÉRTELMEZÉS. A
+            //! Jedlik duális osztályainak többsége teljes B hetet jár; aki nem,
+            //! annak ott a rács alatta. Mindkét ajánlat MEGNYOMOTT állapotot
+            //! mutat, ha épp az áll a rácson — különben a diák nem tudja, hogy
+            //! amit lát, az az ajánlat-e vagy a saját munkája. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">Gyors kitöltés</span>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-pressed={classic}
+            className={cn(
+              "touch-target",
+              classic && "border-primary/40 bg-primary/12 text-primary",
+            )}
+            onClick={() => onChange(CLASSIC_DUAL_SCHEDULE)}
+          >
+            Teljes B hét
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-pressed={none}
+            className={cn(
+              "touch-target",
+              none && "border-primary/40 bg-primary/12 text-primary",
+            )}
+            onClick={() => onChange(EMPTY_DUAL_SCHEDULE)}
+          >
+            Nincs duális napom
+          </Button>
+        </div>
 
         <DualScheduleGrid
           value={schedule}
@@ -337,28 +415,64 @@ function DualSetupDialog({
           onChange={onChange}
         />
 
-        <DialogFooter className="sm:justify-start">
-          {/*//! A SZOKÁSOS BEOSZTÁS EGY KOPPINTÁS, DE NEM AZ ALAPÉRTELMEZÉS. A
-              //! Jedlik duális osztályainak többsége így jár; aki nem, annak a
-              //! rács ott van mellette. */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="touch-target"
-            onClick={() => onChange(CLASSIC_DUAL_SCHEDULE)}
-          >
-            Szokásos blokk (teljes B hét)
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="touch-target"
-            onClick={() => onChange(EMPTY_DUAL_SCHEDULE)}
-          >
-            Egyik sem
-          </Button>
+        {/*//! A KIVONAT A VISSZAJELZÉS. A rács ikonokból áll; hogy MI LETT
+            //! belőle, azt egy mondat mondja meg — ugyanaz a mondat, amit a
+            //! párbeszéd bezárása után a panel is mutat. Így a „Kész" nem
+            //! ugrás a sötétbe. */}
+        <div
+          aria-live="polite"
+          className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs"
+        >
+          {none ? (
+            <p className="text-muted-strong">
+              Nincs duális napod — minden nap az órarend szerint megy.
+            </p>
+          ) : (
+            <ul className="space-y-0.5">
+              {DUAL_WEEK_LETTERS.map((letter) => (
+                <li key={letter} className="flex gap-2">
+                  <span className="w-12 shrink-0 font-medium text-foreground">
+                    {letter} hét
+                  </span>
+                  <span className="min-w-0 flex-1 text-muted-strong">
+                    {daysLabel(schedule[letter])}
+                  </span>
+                  {letter === weekLetter && (
+                    <span className="shrink-0 text-muted-foreground">
+                      ez a hét
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <DialogFooter className="sm:items-center sm:justify-between">
+          {/*//! AMIÉRT NINCS MENTÉS GOMB, AZT KI KELL MONDANI. A rács
+              //! koppintásra ír; egy „Mentés" itt hazudna egy lépést, ami már
+              //! megtörtént. Helyette a párbeszédnek VÉGE lesz. */}
+          <p className="text-xs text-muted-foreground">
+            A beállítás azonnal érvénybe lép.
+          </p>
+          <DialogClose asChild>
+            <Button className="touch-target">
+              <Check aria-hidden />
+              Kész
+            </Button>
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+//* Két beosztás akkor azonos, ha ugyanazok a napok állnak benne — a tárolt
+//* tömbök rendezettek és duplikátummentesek (lásd `dual-schedule.ts`).
+function sameSchedule(a: DualSchedule, b: DualSchedule): boolean {
+  return DUAL_WEEK_LETTERS.every(
+    (letter) =>
+      a[letter].length === b[letter].length &&
+      a[letter].every((day, i) => day === b[letter][i]),
   );
 }

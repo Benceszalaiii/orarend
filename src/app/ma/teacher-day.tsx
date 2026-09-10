@@ -34,6 +34,7 @@ import {
   saveCachedTeacher,
   type TimetableSubject,
 } from "@/lib/timetable";
+import { useHiddenMenu } from "@/lib/use-hidden-menu";
 import { cn } from "@/lib/utils";
 
 //* ---------------------------------------------------------------------------
@@ -151,6 +152,9 @@ export function TeacherDay() {
     />
   );
 
+  //* Melyik sorokat hagyta meg a tanár a fejléc lapjában (`use-hidden-menu.ts`).
+  const menu = useHiddenMenu();
+
   const sheet = (
     <>
       <SheetSection title="Kit nézel">
@@ -158,7 +162,12 @@ export function TeacherDay() {
           {picker}
         </SheetRow>
       </SheetSection>
-      {sessionIsTeacher && (
+      {/*//! KÉT FELTÉTEL, KÉT KÜLÖNBÖZŐ OKBÓL. A tanári harang belépéshez kötött
+          //! (a végpont is csak igazolt tanártól fogad el feliratkozást), a
+          //! testreszabó pedig arról szól, hogy a tanár KÉRI-E ezt a sort. A
+          //! szakasz a soránál nem élhet tovább: egy üres cím a hajszálvonal
+          //! alatt nem nevez meg semmit. */}
+      {sessionIsTeacher && menu.shows("notify") && (
         <>
           <SheetDivider />
           <SheetSection title="Beállítások">

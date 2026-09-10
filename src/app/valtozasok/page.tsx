@@ -39,7 +39,8 @@ const ENTRIES: readonly Entry[] = [
     title: "Google-belépés — az iskolai jelszó kivezetése",
     items: [
       "Belépni mostantól az iskolai Google-fiókoddal (@jedlik.eu vagy @students.jedlik.eu) is lehet — jelszó begépelése nélkül.",
-      "Az iskolai jelszavas belépés hamarosan megszűnik. Aki eddig azzal lépett be, a fiókgombon (vagy a /belepes lapon) tudja összekötni a fiókját a Google-fiókjával — érdemes minél előbb megtenni, hogy a beállításai (és a gyors belépés, ha van) ne vesszenek el.",
+      "Iskolai jelszóval új fiók már nem hozható létre. Ha még sosem léptél be, a Google-gombot használd; a korábban létrehozott fiókok egyelőre változatlanul be tudnak lépni vele.",
+      "Aki eddig iskolai jelszóval lépett be, a fiókgombon (vagy a /belepes lapon) tudja összekötni a fiókját a Google-fiókjával — érdemes minél előbb megtenni, hogy a beállításai (és a gyors belépés, ha van) ne vesszenek el, mire az iskolai jelszavas belépés is teljesen megszűnik.",
       "A korábban beállított gyors belépés (ujjlenyomat) változatlanul működik.",
     ],
   },

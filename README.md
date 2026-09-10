@@ -21,6 +21,10 @@ fekvő lapra is kinyomtatható.
 - **Értesítések.** 10 perccel az óra kezdése előtt, és ha megváltozik az órarend.
   Osztályonként kapcsolható, és a böngésző engedélyét CSAK a harang ikon utáni
   saját párbeszédből kérjük — soha oldalbetöltéskor.
+- **Naptár-feliratkozás.** Az órarend felvehető a telefon naptárába
+  (`webcal://`), és **pontosan azokat az órákat tartalmazza, amiket a rácson is
+  látsz** — az elrejtett csoportok órái nem kerülnek bele. Az adat óránként
+  frissül; a linket egy kattintással vissza lehet vonni.
 - **Nyomtatás.** `@page { size: A4 landscape }`, saját világos palettával, ami
   megtartja a tantárgyak színeit: a szín itt információ, nem dekoráció.
 - **Megnevezett hibák.** Az órarend adatai nem a mieink, ezért minden hibafajtának
@@ -95,6 +99,7 @@ Minden állapot a `localStorage`-ban van:
 | `orarend:class:v1` | Az utoljára választott osztály |
 | `orarend:merge-prefs:v1` | A csoportbontás-választások, osztályonként |
 | `orarend:usage:v1` | Mely osztályokat jelezte ma ez az eszköz (helyi, sosem küldjük el) |
+| `orarend:calendar:v1` | A kiadott naptár-linkek (jegy + lenyomat), alanyonként |
 
 ## Használati statisztika
 
@@ -259,6 +264,46 @@ Kulcspár generálása: `bunx web-push generate-vapid-keys`.
 VAPID-kulcs vagy Redis nélkül az app változatlanul működik, csak a harang nem
 kapcsol be semmit — egy elfelejtett env-változó itt sem viheti el az órarendet.
 
+## Naptár-feliratkozás (webcal)
+
+Az órarend iCalendar-feedként is kiszolgálható, hogy a telefon naptárában
+megjelenjen. A funkció egyetlen ígérete: **a feed azt mutatja, amit a rács** —
+ugyanaz a `resolveDay` fut rajta (`lib/timetable-merge.ts`), ugyanazzal a
+döntés-listával, tehát az elrejtett csoportok órái a naptárba sem kerülnek be.
+
+| Végpont | Mire kell |
+| --- | --- |
+| `POST /api/naptar` | Link készítése vagy frissítése → `{token, webcal, https, google}` |
+| `DELETE /api/naptar?token=…` | Visszavonás — a sor azonnal törlődik |
+| `GET /api/naptar/<jegy>.ics` | Maga a feed. Ismeretlen jegyre `404` |
+
+**A jegy maga a jogosultság.** A naptáralkalmazás süti nélkül kérdez, tehát nincs
+mihez kötni: a link 16 bájt véletlen (base64url, 22 karakter), kitalálhatatlan és
+visszavonható. Aki ismeri, látja azt az órarendet — ez a felületen és az
+`/adatvedelem`-en is ki van írva. Tanári feedet csak iskolai belépéssel, tanári
+fiókkal lehet létrehozni; ugyanaz a határ, mint az értesítéseknél.
+
+**Ez az a funkció, amitől a csoportbontás-döntés elhagyja a böngészőt.** Nem
+elkerülhető: a szűrést a kiszolgálónak kell elvégeznie. Ezért kizárólag a diák
+explicit kérésére jön létre, és a visszavonás az adatot is törli.
+
+**Frissesség.** Alanyonként (nem feliratkozónként) tartunk egy öt hetes ablakot
+(előző hét + 3 hét előre) a Redisben, óránkénti frissességgel: száz feliratkozó
+ugyanarra az osztályra ugyanannyi Jedlikinfo-kérés, mint egy. A lejárt ablakot
+azonnal kiszolgáljuk, és a frissítés a válasz UTÁN fut (`after()`), foglalás
+mögött. Amit **soha nem adunk vissza**, az az üres feed egy külső kimaradás
+miatt: a feliratkozásos naptár az üres listát TÖRLÉSNEK érti, vagyis egy
+ötperces üzemzavarból a diák telefonjáról eltűnne az egész órarendje.
+
+**Amit a naptár csinál, arról mi nem döntünk.** A `REFRESH-INTERVAL` és az
+`X-PUBLISHED-TTL` óránkénti újraolvasást javasol; az Apple Naptár és az Outlook
+figyeli, a Google Naptár viszont a maga (jóval ritkább) ütemében olvas újra. Ezért
+a felület a MI oldalunkról beszél („az adat óránként frissül"), és a
+változásokról továbbra is a push-értesítés szól időben.
+
+Redis nélkül a funkció `503`-at ad, és a felületen sem ígér semmit — ugyanaz a
+szabály, mint az értesítéseknél.
+
 ## Felépítés
 
 ```
@@ -276,6 +321,7 @@ src/
     api/beallitasok/ beállítás-szinkron végpontok
     api/hasznalat/ osztályszintű használati számláló
     api/ertesites/ push-feliratkozás + az ütemezett kiküldő (`tick`)
+    api/naptar/    naptár-link készítése, visszavonása és maga az `.ics` feed
   components/
     timetable/     rács, óra-blokkok, most sáv, összevonás-vezérlők
     ui/            Radix-alapú primitívek
@@ -295,6 +341,12 @@ src/
     push-plan.ts        mikor és miről szóljunk — tiszta számítás
     push-store.ts       feliratkozások, foglalások, heti lenyomatok (csak szerveren)
     push-send.ts        VAPID-aláírás és kiküldés (csak szerveren)
+    ics.ts              iCalendar-szöveg: escape, 75 oktettes hajtás, VTIMEZONE
+    calendar-feed.ts    a feed tartalma — ugyanaz a szűrés, mint a rácson
+    calendar-shared.ts  a naptár-link közös szerződése (kliens + szerver)
+    calendar-local.ts   a kiadott linkek a készüléken + a frissen tartásuk
+    calendar-store.ts   jegyek és az öt hetes ablak (csak szerveren)
+    calendar-source.ts  a feed adatforrása: óránként egyszer, alanyonként (szerver)
 ```
 
 ## Ha hozzányúlsz

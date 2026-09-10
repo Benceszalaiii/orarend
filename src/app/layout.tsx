@@ -2,14 +2,15 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Geist } from "next/font/google";
 import { AppearanceScript } from "@/components/appearance/appearance-script";
 import { ThemeStyle } from "@/components/appearance/theme-style";
+import { CalendarSync } from "@/components/calendar-sync";
 import { PrefsSync } from "@/components/prefs-sync";
 import { AddToHomeScreen } from "@/components/pwa/add-to-home-screen";
 import { RegisterSW } from "@/components/register-sw";
 import { cn } from "@/lib/utils";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -142,6 +143,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             //! Aki nincs bejelentkezve, annál ezen az egy kérésen túl semmi nem
             //! történik: se szinkron, se további hálózati forgalom. */}
         <PrefsSync />
+        {/*//! A NAPTÁR-LINK FRISSEN TARTÁSA. Ugyanaz a helye és ugyanaz az
+            //! indoka, mint a beállítás-szinkronnak: a csoportbontás-döntés a lap
+            //! MINDEN nézetéből átállítható (a rácson, a kártyán, a `/ma`
+            //! paneljén), a naptár-feliratkozásnak viszont mindegyikről tudnia
+            //! kell — különben a telefon naptára egy olyan órarendet mutat, amit
+            //! a rácson már nem így lát.
+            //*
+            //! AKI NEM KÉRT NAPTÁR-LINKET, ANNÁL EGYETLEN KÉRÉST SEM INDÍT: a
+            //! kör első lépése egy `localStorage`-olvasás, és üres tárolónál
+            //! azonnal visszatér. */}
+        <CalendarSync />
         {/*//* A telepítés tippje csak iOS-en, csak egyszer — a döntést maga a
             //* komponens hozza meg (lásd `lib/a2hs.ts`). */}
         <AddToHomeScreen />

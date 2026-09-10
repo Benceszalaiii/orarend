@@ -7,6 +7,7 @@ import {
   TEACHER_MAX_LENGTH,
 } from "./known-class";
 import { VIEW_ROUTES, type ViewRoute } from "./last-view";
+import { type MenuItemId, sanitizeHiddenMenu } from "./menu-items";
 
 //! ═══════════════════════════════════════════════════════════════════════════
 //! A SZINKRONIZÁLT BEÁLLÍTÁSOK — A KÖZÖS SZERZŐDÉS
@@ -63,6 +64,13 @@ export type SyncedPrefs = {
   merge: Record<string, MergePrefEntry[]>;
   /** Duális beosztás alanyonként (`orarend:dual-schedule:v1`). */
   dual: Record<string, DualScheduleEntry>;
+  //! AMIT A DIÁK KIVETT A LAPBÓL, AZ IS ÁTJÖN A MÁSIK KÉSZÜLÉKRE. Ugyanaz az
+  //! érv, mint a megjelenésnél: aki kimondta, hogy neki nincs duális napja,
+  //! nem a TELEFONJÁRÓL mondott valamit, hanem magáról — a gépén ugyanaz a sor
+  //! ugyanúgy halott. A `null` itt „még sosem nyúlt hozzá", az üres lista
+  //! pedig „megnézte, és mindent meghagyott" (lásd `menu-items.ts`).
+  /** A lapból elrejtett sorok (`orarend:menu-hidden:v1`). */
+  hiddenMenu: MenuItemId[] | null;
 };
 
 /**
@@ -91,6 +99,7 @@ export const EMPTY_PREFS: SyncedPrefs = {
   palette: null,
   merge: {},
   dual: {},
+  hiddenMenu: null,
 };
 
 //! ─── A KORLÁTOK ─────────────────────────────────────────────────────────────
@@ -150,7 +159,13 @@ function sanitizeIdentity(value: unknown): string | null {
   return trimmed;
 }
 
-function sanitizeMergeList(value: unknown): MergePrefEntry[] {
+//! ─── AZ ÖSSZEVONÁS-LISTA ELLENŐRZÉSE KÉT VÉGPONTOT SZOLGÁL ─────────────────
+//! A beállítás-szinkron (`/api/beallitasok`) és a naptár-feed
+//! (`/api/naptar`) UGYANEZT a listát veszi át a böngészőtől, ugyanazokkal a
+//! korlátokkal. Ezért exportált: két külön ellenőrzésből előbb-utóbb az egyik
+//! lazább lenne, és az lenne a nyitott ajtó — pont az a hiba, amit ennek a
+//! fájlnak a fejléce kimond.
+export function sanitizeMergeList(value: unknown): MergePrefEntry[] {
   if (!Array.isArray(value)) return [];
   const out: MergePrefEntry[] = [];
   for (const raw of value) {
@@ -166,7 +181,8 @@ function sanitizeMergeList(value: unknown): MergePrefEntry[] {
   return out;
 }
 
-function sanitizeDual(value: unknown): DualScheduleEntry | null {
+/** Ugyanaz a megfontolás, mint a `sanitizeMergeList`-nél: két végpont, egy szabály. */
+export function sanitizeDual(value: unknown): DualScheduleEntry | null {
   if (!isRecord(value)) return null;
   const days = (input: unknown): number[] =>
     Array.isArray(input)
@@ -238,6 +254,18 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
     }
   }
 
+  //! A ZÁRT HALMAZ ITT IS A HATÁR, ÉS ITT KÜLÖNÖSEN OLCSÓ: a jelek listája
+  //! rögzített (`MENU_ITEMS`), tehát a mező mérete FELÜLRŐL korlátos —
+  //! bármekkora tömböt küld is fel valaki, legfeljebb annyi jel marad belőle,
+  //! ahány elrejthető sor van. Külön darabszám-korlát ezért nem kell.
+  //* A hiányzó mező `null` marad: egy régi verzióból érkező csomag ettől nem
+  //* „mindent mutass" utasítás lesz, hanem „nem nyilatkozott" — a
+  //* `mergePrefs` így nem törli a másik készüléken beállított listát.
+  const hiddenMenu =
+    input.hiddenMenu === undefined || input.hiddenMenu === null
+      ? null
+      : sanitizeHiddenMenu(input.hiddenMenu);
+
   return {
     class: cls,
     teacher,
@@ -247,6 +275,7 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
     palette,
     merge,
     dual,
+    hiddenMenu,
   };
 }
 
@@ -260,7 +289,8 @@ export function hasAnyPrefs(prefs: SyncedPrefs): boolean {
     prefs.theme !== null ||
     prefs.palette !== null ||
     Object.keys(prefs.merge).length > 0 ||
-    Object.keys(prefs.dual).length > 0
+    Object.keys(prefs.dual).length > 0 ||
+    prefs.hiddenMenu !== null
   );
 }
 

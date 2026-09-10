@@ -4,7 +4,11 @@ import { Check, Fingerprint, LogOut, RefreshCw, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { SheetItemBody, sheetItem } from "@/components/chrome/chrome-sheet";
+import {
+  SHEET_POPOVER,
+  SheetItemBody,
+  sheetItem,
+} from "@/components/chrome/chrome-sheet";
 import { GoogleGlyph } from "@/components/google-glyph";
 import { Button } from "@/components/ui/button";
 import {
@@ -118,6 +122,7 @@ function SignedOut({
     >
       <Link
         href={`/belepes?tovabb=${encodeURIComponent(next)}`}
+        data-key={row ? "f" : undefined}
         title="Belépés az iskolai fiókkal — a beállításaid átjönnek a többi eszközödre"
       >
         <User
@@ -178,6 +183,7 @@ function SignedIn({
       <PopoverTrigger asChild>
         <button
           type="button"
+          data-key={variant === "row" ? "f" : undefined}
           className={
             variant === "row"
               ? sheetItem(className)
@@ -240,7 +246,15 @@ function SignedIn({
         </button>
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-64 p-0">
+      {/*//! A FIÓK KÉT ALAKBAN ÁLL, ÉS A BUBORÉKNAK IS KÉT HELYE VAN. Sor-
+          //! alakban a lap (vagy a sáv) egyik sora nyitja: ott a buborék a sor
+          //! alá tartozik, mint minden más soré (`SHEET_POPOVER`). Ikon-alakban
+          //! viszont a monogram a fejléc JOBB szélén ül — ott a jobb szélhez
+          //! igazítás nem választás, hanem az egyetlen irány, amerre van hely. */}
+      <PopoverContent
+        {...(variant === "row" ? SHEET_POPOVER : { align: "end" as const })}
+        className="w-64 p-0"
+      >
         <div className="flex flex-col gap-0.5 border-b border-border px-3 py-2.5">
           <p className="truncate text-sm font-medium text-foreground">{name}</p>
         </div>

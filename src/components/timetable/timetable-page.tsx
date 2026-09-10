@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { NotificationMenu } from "@/components/pwa/notification-menu";
 import { TimetableCalendar } from "@/components/timetable/calendar";
+import { CalendarFeedMenu } from "@/components/timetable/calendar-feed-menu";
 import { DualSetupButton } from "@/components/timetable/dual-menu";
 import { focusMondayKey } from "@/components/timetable/shared";
 import { MorphingInfinity } from "@/components/ui/morphing-infinity";
@@ -31,6 +32,7 @@ import {
   loadCachedWeek,
   loadWeekOrCached,
 } from "@/lib/timetable-cache";
+import type { MergePreference } from "@/lib/timetable-merge";
 
 //! ═══════════════════════════════════════════════════════════════════════════
 //! A HETI RÁCS LAPJA — KÉT ALANYRA, EGY PÉLDÁNYBAN
@@ -199,6 +201,48 @@ export function TimetablePage({
     [subjects, mode],
   );
 
+  //! ─── A NAPTÁR-FELIRATKOZÁS UGYANAZT A HATÁRT KAPJA, MINT A HARANG ────────
+  //! Egy naptár-feed EGY EMBER munkanapját teszi be egy idegen alkalmazásba,
+  //! folyamatosan frissülve — tanári órarendnél ez akkor is követés, ha minden
+  //! adata nyilvános. A végpont ezért tanári feedet csak igazolt tanári
+  //! fióktól fogad el (`/api/naptar`), és a felület ugyanitt húzza meg a
+  //! határt: belépés nélkül a tanári lapon a sor meg sem jelenik, ahelyett
+  //! hogy egy gombot kínálnánk, ami utána elutasítást kap.
+  //*
+  //! A FELTÖLTÉST NEM A RÁCS ADATÁBÓL VÉGEZZÜK, ÉS EZ SZÁNDÉKOS. A döntések a
+  //! készülék tárolójában élnek, és a feltöltés ONNAN olvas
+  //! (`calendar-local.ts`) — ugyanabból, amit a rács is ír. Két átadott példány
+  //! előbb-utóbb elcsúszna egymástól (pl. egy épp mentés alatt lévő döntésnél).
+  //*
+  //! AMIT A RÁCS MÉGIS MEGMOND: VAN-E EGYÁLTALÁN DÖNTÉS. Aki még egyetlen
+  //! csoportbontást sem oldott fel, annak a naptárába az osztály MINDEN
+  //! párhuzamos csoportja bekerülne — és pont az ellenkezőjét kapná annak,
+  //! amiért feliratkozott. Ezt a link elkészítése ELŐTT kell kimondani.
+  const calendarSetup = useCallback(
+    ({
+      subjectShort,
+      prefs,
+    }: {
+      subjectShort: string;
+      prefs: MergePreference[];
+    }) => (
+      //! AZ ALANYVÁLTÁS ÚJ FELIRATKOZÁST JELENT: a párbeszéd ne az előzőével
+      //! nyíljon ki tovább (ugyanaz a megfontolás, mint a duális beállítónál).
+      //! A KULCS ELŐTAGOT KAP, ÉS EZ NEM DÍSZ: a duális beállító ugyanebben a
+      //! szakaszban, ugyanennek a `<div>`-nek a gyerekeként áll, és ő is a
+      //! puszta alany-jelet használja kulcsnak — két testvér azonos kulccsal
+      //! pedig React-hiba („two children with the same key"), aminek a
+      //! következménye némán elmaradó újrarajzolás.
+      <CalendarFeedMenu
+        key={`calendar-${subjectShort}`}
+        mode={mode}
+        subjectShort={subjectShort}
+        hasDecisions={prefs.length > 0}
+      />
+    ),
+    [mode],
+  );
+
   //! ═════════════════════════════════════════════════════════════════════════
   //! AZ INDULÁS SORRENDJE — MÉRÉS UTÁN ÍRVA
   //! ═════════════════════════════════════════════════════════════════════════
@@ -356,6 +400,9 @@ export function TimetablePage({
           dualStatusForDay={dualStatusForDay}
           dualSetup={dualSetup}
           notifySetup={notifyAllowed ? notifySetup : undefined}
+          //* Ugyanaz a feltétel, mint a harangnál: az osztályos lapon nincs
+          //* kapu, a tanárin igazolt tanári fiók kell hozzá.
+          calendarSetup={notifyAllowed ? calendarSetup : undefined}
           //* A „Ma: Duális/Iskola" jelvényt a rács rajzolja a cím mellé — ott
           //* ismert az ÉPPEN nézett hét és alany (lásd `TimetableCalendar`).
           heading={

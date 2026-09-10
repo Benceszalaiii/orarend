@@ -22,6 +22,8 @@ import {
   SheetSection,
   sheetItem,
 } from "@/components/chrome/chrome-sheet";
+import { MenuVisibilityMenu } from "@/components/chrome/menu-visibility";
+import { RailTips } from "@/components/chrome/rail-tips";
 import {
   DEFAULT_IDENTITY,
   type Identity,
@@ -31,6 +33,7 @@ import {
 } from "@/lib/identity";
 import { isViewRoute, saveLastView } from "@/lib/last-view";
 import { onPrefsChanged } from "@/lib/prefs-events";
+import { useHiddenMenu } from "@/lib/use-hidden-menu";
 import { cn } from "@/lib/utils";
 
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -172,9 +175,32 @@ const IDENTITY_OF: Record<string, Identity> = {
 //*
 //! TELEFONON VISZONT MARAD AZ EGY SOR + LAP. Ott a második sor abból a 812
 //! px-ből menne el, amiből az órarendnek kell élnie — ez volt az eredeti baj.
-//! A küszöb mért: a műveletsor 1033 px, oldalmargóval 1065 — 80rem-től fér ki — ugyanaz a React-elem, két alak,
-//! egyetlen példányban (ezért kell a médialekérdezés JS-ben: két párhuzamos
-//! példány két állapotot és két azonos `id`-t jelentene).
+//! A küszöb mért, nem választott — ugyanaz a React-elem, két alak, egyetlen
+//! példányban (ezért kell a médialekérdezés JS-ben: két párhuzamos példány két
+//! állapotot és két azonos `id`-t jelentene).
+//*
+//! ─── A KÜSZÖB MARAD 80rem, MERT A SÁV MÁR NEM A FELIRATOKBÓL ÉL ───────────
+//! MÉRVE 2026-09-10-ÉN, 1280 px-es ablakban, az `/orarend`-en: a kiírt
+//! feliratú műveletsor 1351 px — 71 px a képernyőn kívül, és a jobb szélén a
+//! „Belépés" felirata vágódik le. A küszöb megemelése (85rem) ezt egyszer
+//! elfedte volna, de nem oldja meg: minden ÚJ képesség újabb 100–150 px, és a
+//! küszöb nem emelhető a végtelenségig — a laptopok többségétől venné el a
+//! sávot.
+//*
+//! EZÉRT NEM A KÜSZÖB NŐTT, HANEM A SÁV LETT ESZKÖZTÁR. A pirulák felirata a
+//! szem elől kikerül (a fában marad, lásd
+//! `.chrome-rail .sheet-item-text` a `globals.css`-ben), a gomb az ikonjára
+//! zsugorodik, és amit a felirat mondott, azt KÉSLELTETÉS NÉLKÜL a buborék
+//! mondja meg, a gyorsbillentyűjével együtt (`chrome/rail-tips.tsx`). Ugyanaz
+//! a sor 1351-ről ~690 px-re esett: a sáv szélessége innentől nem a képességek
+//! SZÁMÁVAL nő, hanem az ikonjaikéval.
+//*
+//! AMIÉRT EZ NEM A 2026 ELŐTTI IKONSOR VISSZATÉRÉSE. A régi eszköztár baja nem
+//! az volt, hogy ikonokból állt, hanem hogy a diák NEM TUDTA MEG, melyik mit
+//! nyit: se felirat, se buborék, csak `aria-label`. Itt mindhárom megvan —
+//! azonnali buborék névvel és magyarázattal, gyorsbillentyű, és a felirat
+//! olvasónévként. Telefonon és táblagépen pedig változatlanul a névvel kiírt
+//! lap fut, mert ott sem egér, sem billentyű nincs hozzá.
 //*
 //* Mobil-első alapérték: kiszolgálón és az első képkockán a keskeny alak fut,
 //* és csak utána vált — így a hidratálás nem talál eltérést.
@@ -229,10 +255,18 @@ export function StandingLine({
   const floating = surface === "floating";
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  //* Az eszköztár-alak doboza. A buborék és a gyorsbillentyűk EZEN belül
+  //* keresik a vezérlőket (`chrome/rail-tips.tsx`) — a lap-alakban nincs mit
+  //* keresni, ott a sorok ki vannak írva.
+  const railRef = useRef<HTMLDivElement>(null);
   const sheetId = useId();
   const wide = useWideChrome();
   //* Sáv-alakban nincs mit kinyitni: a tartalom kint van.
   const collapsible = Boolean(sheet) && !wide;
+  //! A LAP SAJÁT SORAIT IS A DIÁK SZABJA MEG. Ugyanaz a horog, amit a rács és a
+  //! `/ma` is megkérdez a maga soraira — a döntés egy helyen áll, a szűrés ott,
+  //! ahol a sor születik (lásd `lib/use-hidden-menu.ts`).
+  const menu = useHiddenMenu();
 
   //! A FIÓK MINDKÉT ALAKBAN UGYANONNAN JÖN. Amíg csak a buborékba volt
   //! beágyazva, sáv-alakban NYOMTALANUL eltűnt — a belépés elérhetetlenné vált
@@ -262,18 +296,16 @@ export function StandingLine({
             //! nyitólapra vezető hivatkozás is. A szakasz sorrendje pedig itt
             //! is gyakoriság szerinti: a témát váltogatják, a nyitólapra
             //! félévente mennek vissza. */}
-        <AppearanceMenu />
-        <Link
-          href="/home"
-          title="Nyitólap — mit tud ez az órarend"
-          className={sheetItem()}
-        >
-          <House
-            aria-hidden
-            className="size-4 shrink-0 text-muted-foreground"
-          />
-          <SheetItemBody label="Nyitólap" hint="Mit tud ez az órarend" />
-        </Link>
+        {menu.shows("appearance") && <AppearanceMenu />}
+        {menu.shows("home") && (
+          <Link href="/home" data-key="n" className={sheetItem()}>
+            <House
+              aria-hidden
+              className="size-4 shrink-0 text-muted-foreground"
+            />
+            <SheetItemBody label="Nyitólap" hint="Mit tud ez az órarend" />
+          </Link>
+        )}
         {/*//! A KÉT MELLÉKLAP A NYITÓLAP ALÁ KERÜL, NEM A VÁLTÓBA. Az ügyelet
             //! és a teremkereső NEM ugyanarra az adatra néző NÉZET — nem az a
             //! kérdés, kinek és melyik hetét mutatják, hanem az iskoláról
@@ -286,33 +318,37 @@ export function StandingLine({
             //! vezetett rájuk hivatkozás — csak a beírt cím. Ugyanaz az érv,
             //! amiért a nyitólap is ide került, egy sorral feljebb.
             //*
-            //! `sheet-item-aside`: A SÁV-ALAKBÓL VISZONT KIMARADNAK. A két
-            //! pirula 240 px, amitől az `/orarend` műveletsora 1280 px-en
-            //! 1212-ről 1452-re nőne — 172 px a képernyőn kívül. A lap
-            //! (80rem alatt) mindkettőt viszi; a szabály és az ára a
-            //! `globals.css`-ben, a `.chrome-rail .sheet-item-aside`-nál. */}
-        <Link
-          href="/ugyelet"
-          title="Ügyelet — ki ügyel most, és melyik folyosón"
-          className={sheetItem("sheet-item-aside")}
-        >
-          <ShieldCheck
-            aria-hidden
-            className="size-4 shrink-0 text-muted-foreground"
-          />
-          <SheetItemBody label="Ügyelet" hint="Ki ügyel most, és hol" />
-        </Link>
-        <Link
-          href="/teremkereso"
-          title="Teremkereső — melyik terem üres most"
-          className={sheetItem("sheet-item-aside")}
-        >
-          <DoorOpen
-            aria-hidden
-            className="size-4 shrink-0 text-muted-foreground"
-          />
-          <SheetItemBody label="Teremkereső" hint="Melyik terem üres most" />
-        </Link>
+            //! ÉS MOSTANTÓL A SÁVBAN IS OTT VANNAK. Kiírt felirattal nem fértek
+            //! bele (a két pirula 240 px, a sor 1452-re nőtt volna), ezért
+            //! viselték eddig a `sheet-item-aside`-ot. Az eszköztár-alakban a
+            //! pirula az ikonjára zsugorodik: a kettő együtt ~84 px, és a
+            //! `globals.css` régi megjegyzésének a feltétele („kivéve, ha
+            //! közben felszabadul 240 px") teljesült. Ezzel megszűnt az az ára
+            //! is, amit az a megjegyzés tudott hiányként vállalt. */}
+        {menu.shows("duty") && (
+          <Link href="/ugyelet" data-key="u" className={sheetItem()}>
+            <ShieldCheck
+              aria-hidden
+              className="size-4 shrink-0 text-muted-foreground"
+            />
+            <SheetItemBody label="Ügyelet" hint="Ki ügyel most, és hol" />
+          </Link>
+        )}
+        {menu.shows("rooms") && (
+          <Link href="/teremkereso" data-key="k" className={sheetItem()}>
+            <DoorOpen
+              aria-hidden
+              className="size-4 shrink-0 text-muted-foreground"
+            />
+            <SheetItemBody label="Teremkereső" hint="Melyik terem üres most" />
+          </Link>
+        )}
+        {/*//! A TESTRESZABÓ A SZAKASZ VÉGÉN ÁLL, ÉS SOSEM REJTHETŐ EL. Ez a
+            //! szakasz utolsó sora, mert ez az, amihez a legritkábban nyúlnak —
+            //! de ott KELL lennie mindenhol, ahol lap van: ez az EGYETLEN út
+            //! vissza egy elrejtett sorhoz — a sávban is, ahol egy ikonnyit
+            //! vesz el, és akárhányat vissza tud adni. */}
+        <MenuVisibilityMenu menu={menu} />
       </SheetSection>
       <SheetDivider />
       {/*//! A FIÓK IS EGY SOR, NEM SORBA TETT GOMB: a gomb veszi fel a sor
@@ -537,12 +573,14 @@ export function StandingLine({
           //! Ettől olvasható a sáv anélkül, hogy bármit el kellene rejteni. */}
       {sheet && wide && (
         <div
+          ref={railRef}
           className={cn(
             "chrome-rail h-10 w-full border-t border-border/60",
             SITE_BAR_METRICS,
           )}
         >
           {sheetBody}
+          <RailTips railRef={railRef} />
         </div>
       )}
 

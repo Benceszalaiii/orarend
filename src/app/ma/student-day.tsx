@@ -48,6 +48,7 @@ import {
   saveCachedClass,
   type TimetableClass,
 } from "@/lib/timetable";
+import { useHiddenMenu } from "@/lib/use-hidden-menu";
 import { cn } from "@/lib/utils";
 
 //* ---------------------------------------------------------------------------
@@ -103,6 +104,9 @@ export function StudentDay() {
 
   const [allGroups, setAllGroups] = useState(false);
 
+  //* Melyik sorokat hagyta meg a diák a fejléc lapjában (`use-hidden-menu.ts`).
+  const menu = useHiddenMenu();
+
   const sheet = (
     <>
       <SheetSection title="Kit nézel">
@@ -120,13 +124,24 @@ export function StudentDay() {
           />
         </SheetRow>
       </SheetSection>
-      <SheetDivider />
-      <SheetSection title="Beállítások">
-        {/*//! A VEZÉRLŐ MAGA A SOR — nincs köré csomagolt `SheetRow`. Amíg
-            //! volt, a felirat KÉTSZER jelent meg: egyszer a csomagolón,
-            //! egyszer a gombon belül. Lásd `sheetItem`. */}
-        <NotificationMenu subjects={classes} currentSubject={selectedClass} />
-      </SheetSection>
+      {/*//! A SZAKASZ EGYETLEN SORBÓL ÁLL, EZÉRT EGYÜTT IS TŰNIK EL VELE. Ha a
+          //! diák kikapcsolta az értesítést a testreszabóban (lásd
+          //! `lib/menu-items.ts`), egy üres „Beállítások" cím maradna itt egy
+          //! hajszálvonal alatt — cím anélkül, amit megnevezne. */}
+      {menu.shows("notify") && (
+        <>
+          <SheetDivider />
+          <SheetSection title="Beállítások">
+            {/*//! A VEZÉRLŐ MAGA A SOR — nincs köré csomagolt `SheetRow`. Amíg
+                //! volt, a felirat KÉTSZER jelent meg: egyszer a csomagolón,
+                //! egyszer a gombon belül. Lásd `sheetItem`. */}
+            <NotificationMenu
+              subjects={classes}
+              currentSubject={selectedClass}
+            />
+          </SheetSection>
+        </>
+      )}
     </>
   );
 

@@ -245,6 +245,7 @@ export function NotificationMenu({
     <>
       <Button
         variant="ghost"
+        data-key="e"
         onClick={openDialog}
         className={sheetItem(className)}
       >
@@ -290,7 +291,7 @@ export function NotificationMenu({
                 </>
               ) : (
                 <>
-                  Szólunk, ha {" "}
+                  Szólunk, ha{" "}
                   <span className="font-medium text-foreground">
                     megváltozik az órarend
                   </span>{" "}

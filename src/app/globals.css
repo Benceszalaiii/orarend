@@ -326,30 +326,60 @@
     border-top: 0;
     border-left: 1px solid var(--border);
   }
-  /*//! AMI NEM FÉR BELE, AZ NEM CSORDULHAT KI. A sáv-alak szélessége mért,
-      //! nem becsült: az `/orarend` műveletsora — a lap legtöbb vezérlőjével —
-      //! 1280 px-en 1212 px, vagyis a 80rem-es küszöb pont rá van szabva. Az
-      //! ügyelet és a teremkereső pirulája együtt 240 px: velük a sor 1452
-      //! px-re nőne, és 172 px-nyi vezérlő állna a képernyőn kívül — pontosan
-      //! az a túlcsordulás, ami elől ez az egész szerkezet megszületett.
+  /*//! A KÉT MELLÉKLAP MOSTANTÓL A SÁVBAN IS OTT VAN. Eddig nem volt: kiírt
+      //! felirattal a két pirula 240 px-et kért, amitől az `/orarend` sora
+      //! 1212-ről 1452-re nőtt volna — 172 px a képernyőn kívül. A régi
+      //! szabály ki is mondta a feltételt, ami alól visszajöhetnek: „kivéve,
+      //! ha közben felszabadul 240 px a sorban."
       //*
-      //! EZÉRT A KÉT MELLÉKLAP A LAPBAN MARAD, A SÁVBÓL VISZONT KIMARAD.
-      //! Ez tudott ára: 80rem fölött nem vezet rájuk hivatkozás. Ha egyszer
-      //! kell oda is út, a küszöböt kell megemelni (~91rem), nem ezt a
-      //! szabályt kivenni — kivéve, ha közben felszabadul 240 px a sorban. */
-  .chrome-rail .sheet-item-aside {
-    display: none;
-  }
-  /*//! A SORBÓL PIRULA LESZ. Ugyanaz a gomb, ugyanaz az ikon és felirat —
-      //! csak a szélessége a tartalmáé, nem a lapé. */
+      //! FEL IS SZABADULT. Az eszköztár-alakban a pirula az ikonjára zsugorodik
+      //! (lásd lentebb, `.sheet-item-text`), vagyis a kettő már nem 240, hanem
+      //! ~84 px — a sor pedig 1351-ről ~690-re esett. Ezzel megszűnt az az ára
+      //! is, amit a régi megjegyzés tudott hiányként vállalt: 80rem fölött
+      //! eddig SEMMI nem vezetett az ügyeletre és a teremkeresőre, csak a
+      //! beírt cím.
+      //*
+      //* Az osztály maradt: ez a fogódzó a lap-alaknak nem mond semmit, a
+      //* sávnak viszont már nem tilt semmit — ha egyszer megint fogy a hely,
+      //* itt kell újra megvonni a határt. */
+  /*//! ─── A SORBÓL ESZKÖZTÁR-GOMB LESZ ────────────────────────────────────
+      //! A SÁV-ALAK NEM „KESKENYEBB LAP", HANEM ESZKÖZTÁR. A kiírt feliratú
+      //! pirulasor mérhetően nem fér el: az `/orarend` sora 1351 px-en állt, és
+      //! MINDEN új képesség (a naptárfeliratkozás, a testreszabó) 100–150
+      //! px-szel tolta tovább — vagyis a felirat nem egyszeri túllépés volt,
+      //! hanem egy olyan költség, ami minden bővítésnél újra jelentkezik. Egy
+      //! sáv, ami a képességek számával nő, előbb-utóbb megint levágja a
+      //! szélén állót.
+      //*
+      //! A FELIRAT EZÉRT ELTŰNIK A SZEM ELŐL — DE SEHONNAN MÁSHONNAN. Nem
+      //! `display: none`: a szöveg a fában marad, olvasható marad a
+      //! képernyőolvasónak, és ő adja a gomb olvasónevét is. A szemnek a
+      //! buborék mondja meg ugyanezt, KÉSLELTETÉS NÉLKÜL, a gyorsbillentyűvel
+      //! együtt (`chrome/rail-tips.tsx`). Ez a különbség a mai ikonsor és a
+      //! 2026 előtti között: az régen SEMMIT nem mondott, ez azonnal mindent.
+      //*
+      //! A LAP-ALAK VÁLTOZATLAN. 85rem alatt továbbra is a teljes szélességű,
+      //! névvel kiírt sor fut — az eszköztár kizárólag ott van, ahol egér és
+      //! billentyű is van hozzá. */
   .chrome-rail .sheet-item {
     width: auto;
     min-height: 2.25rem;
-    padding-inline: 0.625rem;
+    padding-inline: 0.5rem;
     border-radius: 9999px;
   }
-  .chrome-rail .sheet-hint {
-    display: none;
+  /*//* Ugyanaz, amit a Tailwind `sr-only`-ja csinál: kikerül a képből, bent
+      //* marad a fában. A `position: absolute` egyben a rugalmas dobozból is
+      //* kiveszi, tehát a gomb szélessége az ikoné lesz. */
+  .chrome-rail .sheet-item-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    clip-path: inset(50%);
+    border-width: 0;
   }
   /*//! AMI A SORBAN MÁR OTT ÁLL, AZ A SÁVBAN NEM ISMÉTLŐDIK. Mérve 1440
       //! px-en: a „Melyik hetet" csoport 337 px-t vitt el pusztán azért, hogy

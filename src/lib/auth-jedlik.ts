@@ -15,7 +15,6 @@ import {
   adLogin,
   LOGIN_NAME_MAX_LENGTH,
   normalizeLoginName,
-  syntheticEmail,
 } from "./jedlik-ad";
 
 //! ═══════════════════════════════════════════════════════════════════════════

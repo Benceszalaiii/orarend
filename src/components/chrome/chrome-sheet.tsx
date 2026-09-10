@@ -162,6 +162,30 @@ export const sheetItem = (extra?: string) =>
     extra,
   );
 
+//! ─── AMI A SORBÓL NYÍLIK, AZ A SOR ALATT NYÍLJON ──────────────────────────
+//! EZ A LAP KÉT ALAKBAN FUT, ÉS EGY RÖGZÍTETT IGAZÍTÁS CSAK AZ EGYIKBEN JÓ. A
+//! lap-alakban a sor 340 px széles, a buborék 350 — a kettő gyakorlatilag
+//! fedi egymást, tehát mindegy, melyik széléhez igazítunk. A sáv-alakban
+//! (`.chrome-rail`) viszont ugyanaz a sor egy 32 px-es ikonná zsugorodik, és
+//! ott az `align="end"` azt jelenti, hogy a 350 px-es buborék JOBB széle ül az
+//! ikon jobb szélére: a tartalom teljes egészében az ikontól BALRA nyílik ki,
+//! a legbaloldalibb ikonnál pedig a képernyő széléig csúszik vissza. MÉRVE
+//! 1280 px-es ablakban: az „Összevonások" ikonja a 270–302 px sávban áll, a
+//! buboréka a 0–352-ben — a gomb a buborék jobb szélénél, 270 px-re a
+//! tartalom elejétől. A diák nem ott keresi, ahova kattintott.
+//!
+//! A KÖZÉPRE IGAZÍTÁS MINDKÉT ALAKBAN AZT MONDJA, AMIT KELL: a buborék a
+//! MEGNYOMOTT dolog alatt van. Széles sornál ez pár képpont eltérés a
+//! korábbihoz képest, ikonnál viszont ez a különbség aközött, hogy a buborék a
+//! gombhoz tartozik-e vagy csak úgy megjelent valahol.
+//*
+//* A ráhagyás (`sideOffset`) itt egy hajszállal nagyobb az alapértéknél: a
+//* buborék a sáv alsó éle alól nyílik, és nem szabad egybefolynia vele.
+export const SHEET_POPOVER = {
+  align: "center",
+  sideOffset: 6,
+} as const;
+
 //! A GOMB BELSEJE. Felirat és magyarázat egy blokkban, hogy a gomb
 //! olvasónevébe MINDKETTŐ beleessen: a képernyőolvasó így „Duális beosztás,
 //! mely napokon vagy a munkahelyen" néven hallja, nem csak egy ikont.
@@ -176,7 +200,15 @@ export function SheetItemBody({
 }) {
   return (
     <>
-      <span className="min-w-0 flex-1">
+      {/*//! `sheet-item-text`: A SÁV-ALAKBAN EZ A BLOKK NÉMÁVÁ VÁLIK, DE NEM
+          //! TŰNIK EL. Az eszköztár-alak (`.chrome-rail`, lásd `globals.css`)
+          //! a feliratot képernyőolvasó-láthatóra állítja: a szem ikont lát, a
+          //! képernyőolvasó és a gomb olvasóneve viszont TOVÁBBRA IS „Duális
+          //! beosztás, mely napokon vagy a munkahelyen". `display: none` ezt
+          //! elvágná — egy néma ikonsor pont az lenne, amit ez a lap egyszer
+          //! már lecserélt. Amit a szem elveszít, azt a buborék adja vissza
+          //! (`chrome/rail-tips.tsx`). */}
+      <span className="sheet-item-text min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-foreground">
           {label}
         </span>

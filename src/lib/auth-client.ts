@@ -127,6 +127,11 @@ function describeSignInError(error: {
     case "INVALID_LOGIN_NAME":
     case "SCHOOL_SYSTEM_UNAVAILABLE":
     case "ORPHANED_ACCOUNT":
+    //* Az iskolai jelszóval már nem indítható új fiók (lásd
+    //* `auth-jedlik.ts`) — a szerver üzenete elmondja, mit tegyen: meglévő
+    //* fióknál a felhasználónevét ellenőrizze, egyébként a Google-gombot
+    //* használja.
+    case "AD_SIGNUP_DISABLED":
       //* Ezeket mi írtuk, magyarul, a diáknak szánva.
       return (
         error.message ||

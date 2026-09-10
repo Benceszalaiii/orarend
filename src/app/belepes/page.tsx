@@ -96,10 +96,13 @@ export default function BelepesPage() {
             Mi történik iskolai jelszavas belépéskor
           </h2>
           <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-foreground">
-            Ez a belépési mód <strong>hamarosan megszűnik</strong> — az itt
-            leírtak addig érvényesek, amíg elérhető. Utána a fenti Google-gomb
-            marad az egyetlen belépési út (a korábban beállított gyors belépés
-            mellett).
+            Ez a belépési mód <strong>megszűnőben van</strong>. Iskolai
+            jelszóval mostantól <strong>új fiók nem hozható létre</strong> — ha
+            még sosem léptél be itt, a fenti Google-gombot használd. Ha korábban
+            már volt fiókod, ezzel most is be tudsz lépni; az itt leírtak addig
+            érvényesek, amíg ez a belépési mód teljesen el nem tűnik, és a fenti
+            Google-gomb marad az egyetlen út (a korábban beállított gyors
+            belépés mellett).
           </p>
           <p>
             A felhasználóneved és a jelszavad ugyanaz, amivel a Jedlikinfóba

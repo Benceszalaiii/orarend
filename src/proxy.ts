@@ -1,5 +1,36 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { isAiBotUserAgent } from "@/lib/ai-bots";
 import { isViewRoute, LAST_VIEW_COOKIE } from "@/lib/last-view";
+
+//! ─── AZ AI-ROBOTOK KAPUJA ──────────────────────────────────────────────────
+//! A `robots.txt` KÉR, ez a néhány sor BETARTAT. A kettő ugyanabból a
+//! névsorból dolgozik (`lib/ai-bots.ts`), hogy ne csúszhassanak szét: ami ki
+//! van írva, az történik is.
+//*
+//! MIÉRT NEM ELÉG A ROBOTS.TXT: mert az egy udvarias kérés, aminek nincs
+//! foganatja. Aki betartja, ide se jön — ezekre a sorokra pont az a robot fut
+//! rá, amelyik nem tartotta be. A 403 még a lap kirajzolása előtt megszületik:
+//! nincs adatbázis-lekérdezés, nincs Jedlik-API hívás, nincs kirajzolt HTML.
+//*
+//! 403 ÉS NEM 404. A 404 azt hazudná, hogy nincs itt semmi — mire a robot
+//! holnap újra megkérdezi. A 403 azt mondja, ami igaz: van, de nem a tiéd.
+//*
+//! EZT A VÁLASZT SENKI NE TEGYE EL. A tiltás a `User-Agent`-en múlik, tehát
+//! ugyanannak a címnek KÉT válasza van. Egy köztes gyorsítótár, ami csak a
+//! címet nézi, a robotnak szánt 403-at a következő látogatónak is kiadná.
+function blockAiBot(): NextResponse {
+  return new NextResponse(
+    "403 — Ez a lap egy iskola órarendje, nem tanítóanyag. Az AI-robotokat a /robots.txt is kizárja.\n",
+    {
+      status: 403,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "private, no-store",
+        Vary: "User-Agent",
+      },
+    },
+  );
+}
 
 //! ─── A GYÖKÉR KAPUJA ───────────────────────────────────────────────────────
 //! Egyetlen kérdést tesz fel, a lap kirajzolása ELŐTT: járt-e már ez a
@@ -21,6 +52,13 @@ import { isViewRoute, LAST_VIEW_COOKIE } from "@/lib/last-view";
 //! átirányítást a böngésző és a kereső is elraktározna, és a nyitólap
 //! elérhetetlenné válna.
 export function proxy(request: NextRequest) {
+  if (isAiBotUserAgent(request.headers.get("user-agent"))) return blockAiBot();
+
+  //! A TÖBBI ÚTVONALON NINCS MÁS DOLGUNK. A süti-kapu csak a gyökérre szól; a
+  //! matcher azért tágabb nála, mert a robotszűrőnek az EGÉSZ lapot kell
+  //! őriznie, nem egyetlen címet.
+  if (request.nextUrl.pathname !== "/") return NextResponse.next();
+
   const lastView = request.cookies.get(LAST_VIEW_COOKIE)?.value;
   if (!isViewRoute(lastView)) return NextResponse.next();
 
@@ -32,6 +70,22 @@ export function proxy(request: NextRequest) {
   return response;
 }
 
-//! CSAK A GYÖKÉRRE. A proxy minden találata egy futtatás a kérés útjában —
-//! itt egyetlen cím kapuját őrzi, a többi útvonal hozzá se ér.
-export const config = { matcher: "/" };
+//! ─── MIRE FUSSON, ÉS MIRE NE ──────────────────────────────────────────────
+//! A robotszűrő miatt a proxy már nem egyetlen címet őriz, hanem minden lapot
+//! és minden `/api` hívást. Ennek ára van: ez a néhány sor most MINDEN kérés
+//! útjába beáll — ezért nincs benne se adatbázis, se `await`.
+//*
+//! AMI KIMARAD, ÉS MIÉRT:
+//! - `robots.txt`, `sitemap.xml` — EZEKET A ROBOTNAK EL KELL ÉRNIE. Aki 403-at
+//!   kap a robots.txt-re, sosem tudja meg, hogy ki van tiltva; a kiírt szabály
+//!   csak akkor ér valamit, ha olvasható. Ez a két sor a legfontosabb az egész
+//!   listában.
+//! - `_next/static`, `_next/image` — a váz, a kép, a betűkészlet. Nincs bennük
+//!   tartalom, amit érdemes lenne félteni, viszont belőlük van a legtöbb.
+//! - `sw.js`, `offline.html`, `manifest` és a `public/` ikonjai — a telepített
+//!   alkalmazás darabjai. Ezeket a böngésző kéri le, néha `User-Agent` nélkül.
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|robots\\.txt|sitemap\\.xml|sw\\.js|offline\\.html|manifest\\.webmanifest|.*\\.(?:png|ico|ttf|svg)$).*)",
+  ],
+};

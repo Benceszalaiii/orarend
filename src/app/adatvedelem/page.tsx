@@ -50,15 +50,20 @@ export default function AdatvedelemPage() {
             <p>
               Az órarend megtekintéséhez semmilyen adat megadására nincs
               szükség: regisztráció nincs, és bejelentkezés nélkül az oldal
-              minden funkciója használható. Két olyan lehetőség van, amely
-              adatkezeléssel jár, és mindkettő kizárólag akkor lép működésbe, ha
+              minden funkciója használható. Három olyan lehetőség van, amely
+              adatkezeléssel jár, és mindhárom kizárólag akkor lép működésbe, ha
               te magad kéred: az{" "}
               <span className="font-medium text-foreground">Értesítések</span>{" "}
-              (a böngésződ push-címe) és a{" "}
+              (a böngésződ push-címe), a{" "}
+              <span className="font-medium text-foreground">
+                Naptár-feliratkozás
+              </span>{" "}
+              (az órarended és a csoportválasztásaid, hogy a naptáralkalmazásod
+              le tudja kérni) és a{" "}
               <span className="font-medium text-foreground">
                 Belépés az iskolai fiókkal
               </span>{" "}
-              (a beállításaid átvitele másik eszközre). Mindkettőről külön
+              (a beállításaid átvitele másik eszközre). Mindháromról külön
               szakasz szól lentebb.
             </p>
           </section>
@@ -193,6 +198,69 @@ export default function AdatvedelemPage() {
               értesítéseket a harangnál, a sor azonnal törlődik; ugyanez
               történik akkor is, ha a böngészőben vonod vissza az engedélyt,
               vagy törlöd az oldal adatait.
+            </p>
+          </section>
+
+          {/*//! A NAPTÁR-FEED MEGTÖRI EGY EDDIGI ÍGÉRETÜNKET, ÉS EZT KI KELL
+            //! MONDANI. A lap eddig végig azt írta — és az igaz is volt —, hogy
+            //! a csoportbontás-döntés a böngészőben marad. Egy naptár-feednél ez
+            //! LEHETETLEN: a naptáralkalmazás süti nélkül, a készülékedtől
+            //! függetlenül kéri le a fájlt, tehát a szűrést csak a kiszolgáló
+            //! végezheti el. Elhallgatva a fenti mondat valótlanná válna;
+            //! ezért itt nevesítve áll, mi kerül a tárolóba, meddig, ki láthatja,
+            //! és hogyan lehet visszavonni. */}
+          <section className="flex flex-col gap-2">
+            <h2 className="text-base font-semibold text-foreground">
+              Naptár-feliratkozás (opcionális)
+            </h2>
+            <p>
+              Az órarended felvehető a telefonod (vagy a géped) naptárába. Ez
+              kizárólag a te döntésed: a link akkor és csak akkor jön létre,
+              amikor a Naptár ablakban megnyomod a{" "}
+              <span className="font-medium text-foreground">
+                Link készítése
+              </span>{" "}
+              gombot. Amíg ezt nem teszed meg, semmi nem kerül a kiszolgálóra.
+            </p>
+            <p>
+              A link elkészítésekor a kiszolgálóra kerül a választott osztály
+              (vagy tanári jel), a{" "}
+              <span className="font-medium text-foreground">
+                csoportbontás-választásaid
+              </span>{" "}
+              és — ha beállítottad — a duális beosztásod. Erre azért van
+              szükség, mert a naptáralkalmazásod a saját nevében, bejelentkezés
+              nélkül kéri le a fájlt: a kiszolgálónak magának kell tudnia, mely
+              órák a tieid. Ez az egyetlen funkció, amelynél ezek a beállítások
+              elhagyják a böngésződet. Nevet, e-mail-címet, IP-címet vagy
+              eszközleírót nem tárolunk mellé, és nem vezetünk naplót arról,
+              mikor kérte le a naptárad a fájlt.
+            </p>
+            <p>
+              A link egy hosszú, véletlen azonosítót tartalmaz, amit nem lehet
+              kitalálni és nem lehet visszafejteni belőle, kié.{" "}
+              <span className="font-medium text-foreground">
+                Aki viszont megkapja a linket, látja ezt az órarendet
+              </span>{" "}
+              — jelszót nem lehet hozzá kérni, mert egy naptáralkalmazásnak
+              nincs hova beírnia. Ezért a linket úgy kezeld, mint egy
+              magánügyet; ha mégis kikerült, vond vissza, és kérj újat.
+            </p>
+            <p>
+              Tanár órarendjéhez csak az készíthet naptár-linket, aki iskolai
+              belépéssel, tanári fiókkal jelentkezett be — ugyanaz a feltétel,
+              mint az értesítéseknél, és ugyanazért: egy folyamatosan frissülő
+              link egy konkrét ember munkanapjáról akkor is követés, ha minden
+              adata nyilvános.
+            </p>
+            <p>
+              A tárolt sor legfeljebb 400 napig él, és minden lekéréssel
+              újraindul; ha a naptárad többé nem kérdezi, magától törlődik. A{" "}
+              <span className="font-medium text-foreground">
+                Link visszavonása
+              </span>{" "}
+              gomb azonnal és véglegesen törli: a link ettől kezdve nem ad
+              órarendet senkinek.
             </p>
           </section>
 
@@ -376,9 +444,14 @@ export default function AdatvedelemPage() {
               csoportbontások, duális beosztás) és az utoljára megnyitott nézet
               a böngésző saját, helyi tárolójában (localStorage) mentődnek,
               kizárólag a te eszközödön. Bejelentkezés nélkül ezek a beállítások
-              nem kerülnek elküldésre semmilyen szerverre — az egyetlen kivétel
-              a fentebb leírt osztályszintű statisztika, amely magát az osztály
-              nevét (és semmi mást) továbbítja. Ha bejelentkezel, ugyanezek a
+              nem kerülnek elküldésre semmilyen szerverre — két kivétellel: a
+              fentebb leírt osztályszintű statisztika magát az osztály nevét (és
+              semmi mást) továbbítja, a{" "}
+              <span className="font-medium text-foreground">
+                naptár-feliratkozás
+              </span>{" "}
+              pedig — ha te magad kéred — a csoportbontás-választásaidat is
+              (lásd a saját szakaszát fentebb). Ha bejelentkezel, ugyanezek a
               beállítások a fiókodhoz is mentődnek, hogy másik eszközön is
               megjelenjenek — lásd a{" "}
               <span className="font-medium text-foreground">

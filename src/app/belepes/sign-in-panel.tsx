@@ -257,19 +257,23 @@ export function SignInPanel() {
         <span className="h-px flex-1 bg-border" />
       </div>
 
-      {/*//! ─── AZ AD-BELÉPÉS — DEMOTÁLVA, DE VÁLTOZATLANUL MŰKÖDIK ──────────
-          //! A kisebb cím és a figyelmeztető sor jelzi, hogy ez az út
-          //! kivezetés alatt áll — DE az űrlap maga, a mögötte futó
-          //! `/sign-in/jedlik` végpont és a jelszókezelés szabályai
-          //! (lásd a fájl tetején) egy karakterrel sem változtak. */}
+      {/*//! ─── AZ AD-BELÉPÉS — CSAK MEGLÉVŐ FIÓKNAK, DEMOTÁLVA ──────────────
+          //! A MIGRÁCIÓ MÁSODIK SZAKASZA: az űrlap maga, a jelszókezelés
+          //! szabályai (lásd a fájl tetején) változatlanok, DE a mögötte futó
+          //! `/sign-in/jedlik` végpont már ELUTASÍTJA az új fiókot — lásd
+          //! `auth-jedlik.ts`. Aki még sosem lépett be itt, egy magyarázó
+          //! hibaüzenetet kap az űrlap kitöltése után, NEM sikeres belépést.
+          //! A lenti szöveg ezt előre jelzi, hogy erre ne kelljen az
+          //! elutasításból rájönnie. */}
       <div className="flex flex-col gap-3">
         <div>
           <h2 className="text-sm font-medium text-muted-strong">
             Iskolai fiókkal
           </h2>
           <p className="text-xs text-muted-foreground">
-            Ez a belépési mód hamarosan megszűnik — érdemes inkább a fenti
-            Google-gombot használni.
+            Ez a belépési mód megszűnőben van: ÚJ fiók vele már nem hozható
+            létre — ha még sosem léptél be, a fenti Google-gombot használd. Ha
+            korábban már volt itt fiókod, ezzel most is be tudsz lépni.
           </p>
         </div>
 

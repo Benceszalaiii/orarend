@@ -3,7 +3,6 @@ import { hu } from "date-fns/locale/hu";
 import {
   AlertTriangle,
   BellRing,
-  Briefcase,
   CalendarDays,
   Check,
   ChevronDown,
@@ -27,6 +26,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import {
+  SHEET_POPOVER,
   SheetDisclosure,
   SheetDivider,
   SheetItemBody,
@@ -73,11 +73,13 @@ import {
 import {
   type GhostBlock,
   type LessonRun,
+  type MergePreference,
   preferenceRows,
   preferencesHiding,
   resolveDay,
 } from "@/lib/timetable-merge";
 import { reportClassUse } from "@/lib/usage";
+import { useHiddenMenu } from "@/lib/use-hidden-menu";
 import { cn } from "@/lib/utils";
 import { EventCard, LessonBlock } from "./lesson-block";
 import { type FocusTarget, LessonSheet } from "./lesson-sheet";
@@ -724,6 +726,7 @@ export function TimetableCalendar({
   dualStatusForDay,
   dualSetup,
   notifySetup,
+  calendarSetup,
   initialStale = null,
 }: {
   initialView: TimetableView;
@@ -774,6 +777,15 @@ export function TimetableCalendar({
   //! itt is hívás, nem komponens; ami nem ad vissza semmit, annál a sáv
   //! változatlan.
   notifySetup?: (ctx: { subjectShort: string }) => React.ReactNode;
+  //! A NAPTÁR-FELIRATKOZÁS UGYANEZEN A HATÁRON ÁLL, EGY KÜLÖNBSÉGGEL: ITT A
+  //! DÖNTÉSEKET IS ÁTADJUK. A feednek pontosan azt kell mutatnia, amit a rács —
+  //! és a döntések listája ITT él (`useMergePreferences`), nem a lapon. A
+  //! duális beosztást és a hálózati hívást viszont a lap intézi; ezért a rács a
+  //! döntéseket ADJA, nem értelmezi.
+  calendarSetup?: (ctx: {
+    subjectShort: string;
+    prefs: MergePreference[];
+  }) => React.ReactNode;
   //! AZ ELSŐ HÉT IS JÖHET A MENTETT PÉLDÁNYBÓL. Az `initialView`-t a lap tölti
   //! be (`/orarend`), tehát csak Ő tudja, hálózatból jött-e vagy a készülékről
   //! — a rács enélkül elhallgatná a legelső, hidegen megnyitott hét korát.
@@ -868,6 +880,10 @@ export function TimetableCalendar({
     storeKey,
   });
   const { prefs, choose, hide, undo, undoMany, reset } = prefsApi;
+
+  //* Melyik sorokat hagyta meg a diák a fejléc lapjában — a szűrés ott
+  //* történik, ahol a sor születik (lásd `lib/use-hidden-menu.ts`).
+  const menu = useHiddenMenu();
 
   //* Aktuális perc (a "most" vonalhoz) — csak a kliensen, hydration-biztosan.
   const [nowMin, setNowMin] = useState<number | null>(null);
@@ -2178,18 +2194,39 @@ export function TimetableCalendar({
     pinLeft();
   }, [pinLeft, weekStart, selectedSubject]);
 
-  //* A „ma" csak akkor kérdés, ha a mai nap a nézett hétben van; a bizonytalan
-  //* („unknown", jelöletlen hét) állapotról pedig nem írunk ki jelvényt.
-  const todayDow = gridDays.find((d) => d.isToday)?.dayOfWeek;
-  const todayStatus = todayDow !== undefined ? dualOf(todayDow) : undefined;
-  const todayDual =
-    todayStatus === "dual" || todayStatus === "school" ? todayStatus : null;
-
   const hasSubject = Boolean(view.subject);
   //* A NYERS órákból: a duális blokkokat mi tettük a rácsra, azoktól a hét még
   //* ugyanolyan üres marad — a „nincs adat" jegyzet nem hazudhat róla.
   const noData = view.ok && view.lessons.length === 0 && events.length === 0;
   const isFocusWeek = weekStart === focusWeek;
+
+  //! ─── A LAP „BEÁLLÍTÁSOK" SZAKASZA ─────────────────────────────────────────
+  //! MIND A NÉGY SOR FELTÉTELES VOLT EDDIG IS, CSAK NEM UGYANAZÉRT. Az
+  //! összevonás és a duális alany nélkül értelmetlen (`hasSubject`), az
+  //! értesítés a tanári lapon belépéshez kötött (`notifySetup` ilyenkor nem
+  //! érkezik) — és mostantól bármelyiket KIVEHETI a diák is, ha neki nem szól
+  //! (lásd `lib/use-hidden-menu.ts`).
+  //*
+  //! EZÉRT A SZAKASZ IS FELTÉTELES LETT, A HAJSZÁLVONALÁVAL EGYÜTT. Egy üres
+  //! „Beállítások" cím két vonal között pont az a rendezetlenség, ami elől ez a
+  //! lap megszületett — és a sáv-alakban (`chrome-rail`) egy üres csoport két
+  //! válaszfala egymás mellett állna.
+  const showMerge = hasSubject && menu.shows("merge");
+  const showDual = hasSubject && menu.shows("dual") && Boolean(dualSetup);
+  const showNotify = hasSubject && menu.shows("notify") && Boolean(notifySetup);
+  //* A naptár-sor ugyanazon a három feltételen áll, mint a harang: kell alany,
+  //* a diák nem rejtette el, és a lap ad hozzá vezérlőt (tanári lapon belépés
+  //* nélkül nem ad — lásd `/api/naptar`).
+  const showCalendar =
+    hasSubject && menu.shows("calendar") && Boolean(calendarSetup);
+  const showLegend = menu.shows("legend");
+  const hasSettings =
+    showMerge ||
+    showDual ||
+    showNotify ||
+    showCalendar ||
+    showLegend ||
+    Boolean(trailing);
 
   //! ─── „MOST" NAPIREND ─────────────────────────────────────────────────────
   //! A „most" sáv és a rács UGYANARRA az adatra néz: a feloldott futamokra és a
@@ -2479,17 +2516,6 @@ export function TimetableCalendar({
                         </div>
                       </SheetRow>
                     )}
-                    {todayDual && (
-                      <SheetRow
-                        icon={<Briefcase className="size-4" />}
-                        label="Ma"
-                        hint={
-                          todayDual === "dual"
-                            ? "Duális nap — a munkahelyen"
-                            : "Iskolai nap"
-                        }
-                      />
-                    )}
                   </SheetSection>
 
                   <SheetDivider />
@@ -2543,30 +2569,37 @@ export function TimetableCalendar({
                     </SheetDisclosure>
                   </SheetSection>
 
-                  <SheetDivider />
+                  {hasSettings && (
+                    <>
+                      <SheetDivider />
 
-                  <SheetSection title="Beállítások">
-                    {/*//! MINDEGYIK VEZÉRLŐ MAGA A SORA. Nem sorba tett gomb:
-                        //! a gomb VESZI FEL a sor alakját, benne az ikonnal, a
-                        //! felirattal és a magyarázattal (lásd `sheetItem`).
-                        //! Így a teljes szélesség kattintható, és az ikon
-                        //! pontosan egyszer szerepel soronként. */}
-                    {hasSubject && (
-                      <PreferencesMenu
-                        rows={rows}
-                        onUndo={undo}
-                        onReset={reset}
-                      />
-                    )}
-                    {hasSubject &&
-                      dualSetup?.({
-                        subjectShort,
-                        weekLetter: abWeek ?? "",
-                      })}
-                    {hasSubject && notifySetup?.({ subjectShort })}
-                    <LegendMenu />
-                    {trailing}
-                  </SheetSection>
+                      <SheetSection title="Beállítások">
+                        {/*//! MINDEGYIK VEZÉRLŐ MAGA A SORA. Nem sorba tett
+                            //! gomb: a gomb VESZI FEL a sor alakját, benne az
+                            //! ikonnal, a felirattal és a magyarázattal (lásd
+                            //! `sheetItem`). Így a teljes szélesség
+                            //! kattintható, és az ikon pontosan egyszer
+                            //! szerepel soronként. */}
+                        {showMerge && (
+                          <PreferencesMenu
+                            rows={rows}
+                            onUndo={undo}
+                            onReset={reset}
+                          />
+                        )}
+                        {showDual &&
+                          dualSetup?.({
+                            subjectShort,
+                            weekLetter: abWeek ?? "",
+                          })}
+                        {showNotify && notifySetup?.({ subjectShort })}
+                        {showCalendar &&
+                          calendarSetup?.({ subjectShort, prefs })}
+                        {showLegend && <LegendMenu />}
+                        {trailing}
+                      </SheetSection>
+                    </>
+                  )}
                 </>
               }
             />
@@ -3346,7 +3379,7 @@ function LegendMenu() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" className={sheetItem()}>
+        <Button variant="ghost" data-key="j" className={sheetItem()}>
           <Info className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <SheetItemBody
             label="Jelmagyarázat"
@@ -3354,7 +3387,7 @@ function LegendMenu() {
           />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[17rem] p-3">
+      <PopoverContent {...SHEET_POPOVER} className="w-[17rem] p-3">
         <p className="text-sm font-semibold text-foreground">Jelmagyarázat</p>
         <div className="mt-2 flex flex-col gap-1.5 text-xs text-muted-strong">
           <LegendItems stacked />
@@ -3384,6 +3417,15 @@ function LegendMenu() {
             <Kbd>Esc</Kbd>
           </dt>
           <dd>Részletlap bezárása</dd>
+          {/*//! A SÁV GOMBJAINAK IS VAN BILLENTYŰJE, ÉS ITT SEM MARADHAT
+              //! KIMONDATLANUL — de tíz sorban felsorolni fölösleges: mindegyik
+              //! ott áll a saját buborékában, abban a pillanatban, amikor az
+              //! ember ránéz a gombra (`chrome/rail-tips.tsx`). Ez a sor csak
+              //! azt mondja meg, hogy ÉRDEMES odanézni. */}
+          <dt>
+            <Kbd>betű</Kbd>
+          </dt>
+          <dd>Az eszköztár gombjai — a betű a buborékban áll</dd>
         </dl>
         {/*//! ITT NINCS LÁBLÉC, MERT A LAP NEM GÖRDÜL. A heti rács
             //! szándékosan a teljes képernyőt tölti ki: alá tett lábléc csak
