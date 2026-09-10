@@ -4,9 +4,11 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  DoorOpen,
   GraduationCap,
   House,
   type LucideIcon,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -271,6 +273,45 @@ export function StandingLine({
             className="size-4 shrink-0 text-muted-foreground"
           />
           <SheetItemBody label="Nyitólap" hint="Mit tud ez az órarend" />
+        </Link>
+        {/*//! A KÉT MELLÉKLAP A NYITÓLAP ALÁ KERÜL, NEM A VÁLTÓBA. Az ügyelet
+            //! és a teremkereső NEM ugyanarra az adatra néző NÉZET — nem az a
+            //! kérdés, kinek és melyik hetét mutatják, hanem az iskoláról
+            //! mondanak valamit, amit az órarend rácsa nem tud. A `ViewMatrix`
+            //! négy cellája pont attól olvasható tengelynek, hogy CSAK az
+            //! alany és a nézet van benne; egy ötödik-hatodik cella
+            //! visszahozná a régi, rendezetlen pirulasort.
+            //*
+            //! ITT VISZONT KELL EGY ÚT HOZZÁJUK: eddig egyik lapról sem
+            //! vezetett rájuk hivatkozás — csak a beírt cím. Ugyanaz az érv,
+            //! amiért a nyitólap is ide került, egy sorral feljebb.
+            //*
+            //! `sheet-item-aside`: A SÁV-ALAKBÓL VISZONT KIMARADNAK. A két
+            //! pirula 240 px, amitől az `/orarend` műveletsora 1280 px-en
+            //! 1212-ről 1452-re nőne — 172 px a képernyőn kívül. A lap
+            //! (80rem alatt) mindkettőt viszi; a szabály és az ára a
+            //! `globals.css`-ben, a `.chrome-rail .sheet-item-aside`-nál. */}
+        <Link
+          href="/ugyelet"
+          title="Ügyelet — ki ügyel most, és melyik folyosón"
+          className={sheetItem("sheet-item-aside")}
+        >
+          <ShieldCheck
+            aria-hidden
+            className="size-4 shrink-0 text-muted-foreground"
+          />
+          <SheetItemBody label="Ügyelet" hint="Ki ügyel most, és hol" />
+        </Link>
+        <Link
+          href="/teremkereso"
+          title="Teremkereső — melyik terem üres most"
+          className={sheetItem("sheet-item-aside")}
+        >
+          <DoorOpen
+            aria-hidden
+            className="size-4 shrink-0 text-muted-foreground"
+          />
+          <SheetItemBody label="Teremkereső" hint="Melyik terem üres most" />
         </Link>
       </SheetSection>
       <SheetDivider />

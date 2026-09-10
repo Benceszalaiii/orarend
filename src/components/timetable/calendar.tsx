@@ -169,6 +169,42 @@ const EDGE_PULL_ACTIVATE = 10;
 const EDGE_PULL_ABORT = 44;
 //* A résbe belógó szomszéd nap sávjának szélessége (px).
 const EDGE_HINT_WIDTH = 60;
+
+//! ─── EGY MOZDULAT = EGY NAP ──────────────────────────────────────────────
+//! A natív lendület nem tud lapozni. A `scroll-snap-stop: always` papíron pont
+//! ezt ígéri — a kifutás nem szaladhat át tapadási ponton —, a mobil WebKit
+//! viszont a SAJÁT lendülete közben átfut rajta: egy határozott pöccintés két-
+//! három napot vitt, és a szomszéd napot csak óvatosan adagolt, apró
+//! mozdulatokkal lehetett eltalálni. Pont az ellenkezője annak, amiért a
+//! lapozás van.
+//!
+//! A vízszintes mozdulatot ezért MI visszük (lásd a `useEffect`-et lentebb): az
+//! ujj alatt a rács egy napnyi ablakban mozog, a felengedés pedig egész napra
+//! áll be. Lendület nincs, tehát túlfutás sincs. A tapadás CSS-ben MARAD —
+//! egér, érintőpad, billentyű, átméretezés mind abból él —, csak a húzás
+//! idejére engedjük el.
+//! A NAPI LAPOZÁS ÉS A HÉTHATÁR UGYANANNÁL A KÉPPONTNÁL DÖNT. Külön küszöbbel
+//! a kettő közötti sávban a lapozás már elmozdíthatná a rácsot, és a héthatár
+//! utána MÁS görgetés-állásból nézné meg, a szélén állunk-e — vagyis a két
+//! mozdulat egyszerre indulhatna el.
+const PAGE_ACTIVATE = EDGE_PULL_ACTIVATE;
+//* Az oszlop ekkora hányadát áthúzva jön a következő nap; alatta visszaáll.
+const PAGE_COMMIT_RATIO = 0.28;
+//! …VAGY ENNYINÉL GYORSABB PÖCCINTÉS (px/ms). A rövid, határozott mozdulat
+//! ugyanúgy szándék, mint a lassú áthúzás — enélkül a pöccintés érződne
+//! süketnek, és pont azt vennénk el, amiért az ember pöccint.
+const PAGE_COMMIT_VELOCITY = 0.4;
+//* A felengedés utáni beállás hossza (ms).
+const PAGE_SETTLE_MS = 300;
+//* Ennyi néma idő (ms) után a felengedés már nem pöccintés, csak elengedés.
+const PAGE_FLICK_STALE = 90;
+//! AZ EGY NAPOS ABLAKON TÚL A RÁCS TELÍTŐDVE ENGED. Ugyanaz a gumiszalag-
+//! képlet, mint a héthatáron, csak rövidebb úton: a húzás így magától mondja
+//! meg, hogy egy mozdulat egy napot visz — nem kell hozzá se ütközés, se
+//! magyarázat.
+const PAGE_RESIST_MAX = 44;
+const pageResist = (over: number) =>
+  PAGE_RESIST_MAX * (1 - Math.exp(-over / PAGE_RESIST_MAX));
 //! MEDDIG ÉL AZ ELŐRE LEKÉRT HÉT. A szomszéd hetet a szélső napra érve
 //! előre lekérjük, hogy a mozdulat ne hálózatot várjon — de az órarend menet
 //! közben is változhat (helyettesítés, elmaradt óra), ezért a példány nem él
@@ -1219,9 +1255,16 @@ export function TimetableCalendar({
   //* fér ki, tehát a fejléc sora is szűk, tehát rövid hét-címke megy ki.
   const narrowBar = variant === "fullscreen" && cols === 1;
   //! ─── A TAPADÁS ─────────────────────────────────────────────────────────
-  //! A `mandatory` az egyetlen jó lapozás: a félbehagyott swipe is egész napra
-  //! áll be, sosem maradsz két nap között, és sosem kell „pontosan" görgetni.
-  //! Ezért NEM gyengítjük — sem mutatóeszköz, sem görgetés miatt.
+  //! A `mandatory` az egyetlen jó igazítás: sosem maradsz két nap között, és
+  //! sosem kell „pontosan" görgetni. Ezért NEM gyengítjük — sem mutatóeszköz,
+  //! sem a lap görgetése miatt.
+  //!
+  //! DE A TAPADÁS NEM LAPOZ. Igazít. Hogy egy mozdulat pontosan egy napot
+  //! vigyen, ahhoz a lendületet kell elvenni, azt pedig CSS-ből nem lehet: a
+  //! `scroll-snap-stop: always` a mobil WebKit saját kifutása közben nem
+  //! tartja meg a napokat. Érintésre ezért a húzást mi visszük (lásd „A
+  //! VÍZSZINTES HÚZÁS A MIÉNK"), a tapadás pedig azt csinálja, amiben jó:
+  //! egér, érintőpad, billentyű és átméretezés után egész napra állít.
   //!
   //! A régi ütközésnek két oka volt, és mindkettőt a forrásánál oldjuk meg:
   //!
@@ -1234,10 +1277,9 @@ export function TimetableCalendar({
   //!     rács fölé beúszó sor), ott függőlegesen is görögni kell — és a felfelé
   //!     húzás sosem tökéletesen függőleges. A megoldás NEM az, hogy ilyenkor
   //!     elengedjük a tapadást: pont az volt a hiba. Lásd lentebb, „A TAPADÁST
-  //!     NEM KAPCSOLJUK KI. SOHA." — a `mandatory` végig él, a doboz a saját
-  //!     vízszintes lendületének végén tapad, a lap függőleges görgetésétől
-  //!     függetlenül. A függőleges görgetés így LÉTEZHET anélkül, hogy a
-  //!     lapozásból bármit elvenne.
+  //!     NEM A LAP GÖRGETÉSE KAPCSOLJA. SOHA." A ferde mozdulatot ma az
+  //!     irány-döntés zárja le: ami inkább függőleges, az a lapé, és marad
+  //!     natív — a lapozásból semmit nem vesz el.
   const colStyle: React.CSSProperties | undefined = paging
     ? { width: colWidth ?? undefined, flex: "0 0 auto" }
     : undefined;
@@ -1434,7 +1476,7 @@ export function TimetableCalendar({
     return () => cancelAnimationFrame(id);
   }, [variant, cols]);
 
-  //! ─── A TAPADÁST NEM KAPCSOLJUK KI. SOHA. ─────────────────────────────────
+  //! ─── A TAPADÁST NEM A LAP GÖRGETÉSE KAPCSOLJA. SOHA. ────────────────────
   //! Itt korábban egy „védőháló" ült: a `window` görgetésére kikapcsolta a
   //! tapadást, és 140 ms csend után vissza. MÉRVE, iPhone-on, ez maga volt a
   //! hiba, két egymást erősítő okból:
@@ -1450,11 +1492,257 @@ export function TimetableCalendar({
   //!     között, és csak egy KÉSŐBBI görgetés vagy elrendezés-változás
   //!     igazította a helyére. Innen jött a „sokáig tart, mire átvált".
   //!
-  //! A tapadás ezért végig él. A kompozitor a doboz SAJÁT vízszintes
-  //! lendületének végén tapad, a lap függőleges lendületétől függetlenül —
-  //! vagyis a ferde mozdulat is azonnal egész napra áll be. A pár képpontos
-  //! elcsúszás pedig nem visz sehova: a tapadás a lendület vetületéből számol,
-  //! és egy megbillent függőleges húzás visszaáll arra a napra, ahol voltál.
+  //! A tapadás ezért nem függ a lap görgetésétől, sem mutatóeszköztől, sem
+  //! időzítőtől. Egyetlen dolog engedi el: a SAJÁT vízszintes húzásunk, a
+  //! húzás pontos idejére (lásd rögtön lentebb) — és az mindig tapadási
+  //! pontra érkezik, tehát a 2. pont csapdájába sem léphet: a
+  //! visszakapcsoláskor nincs mit igazítani.
+
+  //! ─── A VÍZSZINTES HÚZÁS A MIÉNK ──────────────────────────────────────────
+  //! A miértje fentebb, a `PAGE_*` konstansoknál. A hogyanja:
+  //!
+  //! A FÜGGŐLEGES TENGELY VÉGIG NATÍV MARAD. A doboz `touch-action: pan-y`-t
+  //! kap, vagyis a böngésző vízszintesen el sem indul — nincs kompozitor-
+  //! görgetés, amit le kellene győznünk, és nincs két, egymás ellen mozgó
+  //! réteg sem. Függőlegesen viszont pontosan úgy görget, mint eddig.
+  //!
+  //! A `touchmove` figyelő EZÉRT nem passzív, és csak ezért: `preventDefault`
+  //! nélkül az iOS a bal képernyőszélről induló húzást a lap „vissza"
+  //! mozdulatának venné — eddig ezt a doboz saját vízszintes görgetése nyelte
+  //! el. A kezelő a MOZDULAT IRÁNYÁNAK ELDŐLTÉIG nem nyúl semmihez, és
+  //! függőleges mozdulatnál az első sorában kilép: a lap görgetése így nem
+  //! fizet a fő szálon semmit.
+  const pageAnimRef = useRef<number | null>(null);
+  //! A BEÁLLÁS BÁRMIKOR FÉLBESZAKÍTHATÓ. Új mozdulat, nap-sávra koppintás,
+  //! átméretezés és héthatár is ELŐBBRE való nála.
+  //!
+  //! A `restoreSnap` azért paraméter, mert a két hívó két különböző dolgot
+  //! akar. Aki NEM görget tovább (kilépő nézet, koppintás előtti takarítás),
+  //! annak vissza kell adni a tapadást. Aki viszont épp AZÉRT szakítja félbe,
+  //! mert most tesszük rá az ujjunkat, annak nem: a `mandatory` visszaírása a
+  //! Chrome-ot azonnal a legközelebbi napra rántja — vagyis a rács pont a
+  //! megfogás pillanatában ugrana egyet az ujj alatt.
+  const stopPageAnim = useCallback((restoreSnap = true) => {
+    if (pageAnimRef.current !== null) {
+      cancelAnimationFrame(pageAnimRef.current);
+      pageAnimRef.current = null;
+    }
+    if (!restoreSnap) return;
+    const el = scrollRef.current;
+    if (el) el.style.scrollSnapType = "";
+  }, []);
+
+  useEffect(() => {
+    if (variant !== "fullscreen" || !paging) return;
+    const el = scrollRef.current;
+    if (!el) return;
+
+    let tracking = false;
+    let horizontal = false;
+    //* Nálunk van-e ELENGEDVE a tapadás — a húzás és a félbeszakított beállás
+    //* is ezen az egy jelzőn keresztül adja vissza.
+    let released = false;
+    let startX = 0;
+    let startY = 0;
+    //* A húzás nulla pontja: az IRÁNY ELDŐLTEKOR mért ujjpozíció, nem a
+    //* koppintásé — különben a rács a küszöbnyi utat egy ugrással pótolná be.
+    let anchorX = 0;
+    //* A mozdulat kiindulási napja és a KÉT szomszédja, görgetés-koordinátában.
+    let base = 0;
+    let lower = 0;
+    let upper = 0;
+    let lastX = 0;
+    let lastT = 0;
+    let velocity = 0;
+
+    const release = () => {
+      if (!released) return;
+      released = false;
+      el.style.scrollSnapType = "";
+    };
+
+    //* A napok bal széle görgetés-koordinátában, a doboz határai közé zárva.
+    //* (Kikandikálós elrendezésben az utolsó nap „helye" a doboz végén túl
+    //* volna — oda görgetni nem lehet, tehát tapadási pontnak sem jó.)
+    const stopsOf = () => {
+      const limit = Math.max(0, el.scrollWidth - el.clientWidth);
+      const list: number[] = [];
+      for (const d of dayRefs.current) {
+        if (d) list.push(Math.min(limit, Math.max(0, d.offsetLeft - GUTTER)));
+      }
+      return { list, limit };
+    };
+
+    const settle = (to: number) => {
+      const from = el.scrollLeft;
+      const delta = to - from;
+      const done = () => {
+        pageAnimRef.current = null;
+        el.scrollLeft = to;
+        pinLeft();
+        release();
+      };
+      if (reduce || Math.abs(delta) < 0.5) {
+        done();
+        return;
+      }
+      const t0 = performance.now();
+      const step = (now: number) => {
+        const t = Math.min(1, (now - t0) / PAGE_SETTLE_MS);
+        //* Ugyanaz a kifutó görbe, amivel a héthatár gumiszalagja is visszaáll.
+        el.scrollLeft = from + delta * (1 - (1 - t) ** 5);
+        pinLeft();
+        if (t < 1) {
+          pageAnimRef.current = requestAnimationFrame(step);
+          return;
+        }
+        done();
+      };
+      pageAnimRef.current = requestAnimationFrame(step);
+    };
+
+    const onEnd = () => {
+      if (!tracking && !horizontal) {
+        release();
+        return;
+      }
+      tracking = false;
+      if (!horizontal) {
+        release();
+        return;
+      }
+      horizontal = false;
+      const moved = el.scrollLeft - base;
+      const dir = moved >= 0 ? 1 : -1;
+      const target = dir > 0 ? upper : lower;
+      const reach = Math.abs(target - base);
+      //! A MEGÁLLÍTOTT UJJ NEM PÖCCINT. A sebesség az utolsó `touchmove`-ból
+      //! való; aki áthúzta a napot, majd megállt és úgy engedte el, annak a
+      //! régi sebessége lapoztatna helyette.
+      const still = performance.now() - lastT > PAGE_FLICK_STALE;
+      //* Az ujj balra visz előre, a görgetés viszont jobbra nő — a pöccintés
+      //* iránya ezért a sebesség ELLENTETTJE.
+      const flick = !still && -velocity * dir >= PAGE_COMMIT_VELOCITY;
+      const commit =
+        reach > 1 && (Math.abs(moved) >= reach * PAGE_COMMIT_RATIO || flick);
+      settle(commit ? target : base);
+    };
+
+    const onStart = (event: TouchEvent) => {
+      //* Második ujj a húzás közepén: a lapozás lezárul ott, ahol tart.
+      if (horizontal) onEnd();
+      tracking = false;
+      horizontal = false;
+      //! A FÉLBEHAGYOTT BEÁLLÁS AZONNAL ELENGED, DE A TAPADÁST NEM ADJA
+      //! VISSZA: az ujj már a rácson van, és a visszaírás egy ugrással
+      //! kezdené a mozdulatot. Ha a mozdulat mégsem vízszintes lesz, a
+      //! kilépő ágak (`release`) rendezik el.
+      stopPageAnim(false);
+      if (event.touches.length !== 1 || pendingRef.current) {
+        release();
+        return;
+      }
+      //* Nincs mit lapozni: a hét kifér.
+      if (el.scrollWidth - el.clientWidth <= 0) {
+        release();
+        return;
+      }
+      const touch = event.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      lastX = startX;
+      lastT = event.timeStamp;
+      velocity = 0;
+      tracking = true;
+    };
+
+    const onMove = (event: TouchEvent) => {
+      if (!tracking) return;
+      const touch = event.touches[0];
+      if (!touch) return;
+      //* A felengedés sebességét a mozdulat UTOLSÓ szakaszából olvassuk — a
+      //* teljes útból számolt átlag a lassan induló, gyorsan záruló pöccintést
+      //* nem ismerné fel.
+      const dt = Math.max(1, event.timeStamp - lastT);
+      velocity = (touch.clientX - lastX) / dt;
+      lastX = touch.clientX;
+      lastT = event.timeStamp;
+
+      if (!horizontal) {
+        const dx = touch.clientX - startX;
+        const dy = touch.clientY - startY;
+        if (Math.abs(dx) < PAGE_ACTIVATE && Math.abs(dy) < PAGE_ACTIVATE) {
+          return;
+        }
+        //* A függőleges mozdulat a lapé — és marad natív.
+        if (Math.abs(dy) >= Math.abs(dx)) {
+          tracking = false;
+          release();
+          return;
+        }
+        const { list, limit } = stopsOf();
+        //! A SZALAG SZÉLÉRŐL KIFELÉ NEM MI VISZÜNK: onnan a héthatár
+        //! gumiszalagja következik (lásd lentebb). A két mozdulat ugyanezt a
+        //! feltételt, ugyanennél a küszöbnél nézi meg — sosem indulhat el
+        //! mindkettő.
+        const outward =
+          dx < 0 ? el.scrollLeft >= limit - 1 : el.scrollLeft <= 1;
+        if (outward) {
+          tracking = false;
+          release();
+          return;
+        }
+        base = list.reduce(
+          (acc, stop) =>
+            Math.abs(stop - el.scrollLeft) < Math.abs(acc - el.scrollLeft)
+              ? stop
+              : acc,
+          el.scrollLeft,
+        );
+        //* A SZOMSZÉDOS tapadási pont mindkét irányban: ez az egy napos ablak.
+        lower = list.reduce((acc, s) => (s < base - 1 && s > acc ? s : acc), 0);
+        upper = list.reduce(
+          (acc, s) => (s > base + 1 && s < acc ? s : acc),
+          limit,
+        );
+        anchorX = touch.clientX;
+        horizontal = true;
+        //! A HÚZÁS IDEJÉRE ELENGEDJÜK A TAPADÁST. `mandatory` mellett a
+        //! böngésző a KÉZI görgetés-írást is azonnal a legközelebbi pontra
+        //! rántja — a rács nem az ujjat követné, hanem ugrálna két nap között.
+        released = true;
+        el.style.scrollSnapType = "none";
+      }
+
+      //! INNENTŐL A MOZDULAT A MIÉNK. A `preventDefault` az iOS bal széli
+      //! „vissza" mozdulatát fogja meg; a vízszintes görgetést maga a
+      //! `touch-action: pan-y` zárta ki, még a mozdulat legelején.
+      if (event.cancelable) event.preventDefault();
+      const wanted = base - (touch.clientX - anchorX);
+      el.scrollLeft =
+        wanted > upper
+          ? upper + pageResist(wanted - upper)
+          : wanted < lower
+            ? lower - pageResist(lower - wanted)
+            : wanted;
+      //! A NAP-FEJLÉC UGYANEBBEN A KÉPKOCKÁBAN MOZDUL. A görgetés eseménye egy
+      //! képkockával később érkezne (`handleScroll` → rAF), és a fejléc pont
+      //! húzás közben válna el a saját oszlopától.
+      pinLeft();
+    };
+
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd, { passive: true });
+    el.addEventListener("touchcancel", onEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+      stopPageAnim();
+    };
+  }, [variant, paging, reduce, pinLeft, stopPageAnim]);
 
   //! ─── A HÉTHATÁR ÁTHÚZÁSA ─────────────────────────────────────────────────
   //! A szalag SZÉLÉN a görgetés nem visz tovább — de a hét igen. Ez a mozdulat
@@ -1772,6 +2060,9 @@ export function TimetableCalendar({
     const container = scrollRef.current;
     const el = dayRefs.current[index];
     if (!container || !el) return;
+    //* A koppintás megmondta, melyik nap kell — egy futó beállás már nem szól
+    //* bele. (A tapadást is ez adja vissza, mielőtt a sima görgetés indulna.)
+    stopPageAnim();
     //* Optimista jelölés: a kattintás eredménye ne a görgetés-eseményen múljon.
     setActiveDay(index);
     container.scrollTo({
@@ -1785,6 +2076,7 @@ export function TimetableCalendar({
     const el = dayRefs.current[index];
     if (!container || !el) return;
     if (container.scrollWidth <= container.clientWidth) return;
+    stopPageAnim();
     container.scrollTo({ left: el.offsetLeft - GUTTER, behavior: "auto" });
   };
 
@@ -1796,6 +2088,7 @@ export function TimetableCalendar({
   landRef.current = (edge: "start" | "end") => {
     const container = scrollRef.current;
     if (!container) return;
+    stopPageAnim();
     //* A FRISS DOM napjai közül a szélső; üres hétre nincs hova érkezni.
     const index =
       edge === "start"
@@ -1832,13 +2125,14 @@ export function TimetableCalendar({
       return;
     }
     jumpedRef.current = true;
+    stopPageAnim();
     container.scrollTo({ left: el.offsetLeft - GUTTER, behavior: "auto" });
     //* A ref-et is KÉZZEL írjuk: az elrendezés-változás utáni visszaigazítás
     //* (`alignRef`) egy rAF-ban ezt olvassa, és az még a React újrarajzolása
     //* előtt lefuthat — különben a nulladik napra igazítana vissza.
     activeDayRef.current = index;
     setActiveDay(index);
-  }, [variant, gridDays, colWidth]);
+  }, [variant, gridDays, colWidth, stopPageAnim]);
 
   //! ─── A SZOMSZÉD HÉT AKKOR KELL, AMIKOR A SZÉLÉRE ÉRSZ ────────────────────
   //! Nem minden hét megnyitásakor kérünk elő kettőt: az HÁROMSZOROSÁRA hizlalná
@@ -2608,8 +2902,19 @@ export function TimetableCalendar({
                         //! HÉTHATÁR ÁTHÚZÁSA").
                         "snap-x scroll-pl-12 overflow-x-auto overscroll-x-none",
                         //* Mindig kötelező tapadás — a részletes indoklás
-                        //* fentebb, „A TAPADÁS" szakaszban.
+                        //* fentebb, „A TAPADÁST NEM A LAP GÖRGETÉSE KAPCSOLJA".
                         "snap-mandatory",
+                        //! A VÍZSZINTES ÉRINTÉS NEM A BÖNGÉSZŐÉ. A napi
+                        //! lapozást mi visszük (lásd „A VÍZSZINTES HÚZÁS A
+                        //! MIÉNK"), mert a natív lendület átfut a napokon. A
+                        //! `pan-y` a böngészőnek szól: vízszintesen ne is
+                        //! induljon el — függőlegesen viszont ugyanúgy ő
+                        //! görget, a kompozitor szálán, mint eddig.
+                        //*
+                        //* A `pinch-zoom` KÜLÖN kell hozzá: a `pan-y` önmagában
+                        //* a nagyítást is elvenné, a rács pedig pont az, amire
+                        //* rá szoktak nagyítani.
+                        "touch-pan-y touch-pinch-zoom",
                       )
                   : "overflow-x-auto",
               )}
@@ -2760,9 +3065,11 @@ export function TimetableCalendar({
                           "relative min-w-0 border-l border-border/70",
                           fullscreen
                             ? paging
-                              ? //! `snap-always`: a lendületes swipe sem
-                                //! szaladhat át több napon. Egy mozdulat = egy
-                                //! nap, akármekkora a lendület.
+                              ? //! `snap-always`: egér és érintőpad mellett ez
+                                //! tartja meg az „egy lépés = egy nap"
+                                //! szabályt. Érintésre NEM elég — a mobil
+                                //! WebKit a saját lendülete közben átfut
+                                //! rajta —, ott a húzást mi visszük.
                                 "shrink-0 snap-start snap-always"
                               : "flex-1 shrink"
                             : "flex-1",

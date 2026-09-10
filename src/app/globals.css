@@ -326,6 +326,20 @@
     border-top: 0;
     border-left: 1px solid var(--border);
   }
+  /*//! AMI NEM FÉR BELE, AZ NEM CSORDULHAT KI. A sáv-alak szélessége mért,
+      //! nem becsült: az `/orarend` műveletsora — a lap legtöbb vezérlőjével —
+      //! 1280 px-en 1212 px, vagyis a 80rem-es küszöb pont rá van szabva. Az
+      //! ügyelet és a teremkereső pirulája együtt 240 px: velük a sor 1452
+      //! px-re nőne, és 172 px-nyi vezérlő állna a képernyőn kívül — pontosan
+      //! az a túlcsordulás, ami elől ez az egész szerkezet megszületett.
+      //*
+      //! EZÉRT A KÉT MELLÉKLAP A LAPBAN MARAD, A SÁVBÓL VISZONT KIMARAD.
+      //! Ez tudott ára: 80rem fölött nem vezet rájuk hivatkozás. Ha egyszer
+      //! kell oda is út, a küszöböt kell megemelni (~91rem), nem ezt a
+      //! szabályt kivenni — kivéve, ha közben felszabadul 240 px a sorban. */
+  .chrome-rail .sheet-item-aside {
+    display: none;
+  }
   /*//! A SORBÓL PIRULA LESZ. Ugyanaz a gomb, ugyanaz az ikon és felirat —
       //! csak a szélessége a tartalmáé, nem a lapé. */
   .chrome-rail .sheet-item {
