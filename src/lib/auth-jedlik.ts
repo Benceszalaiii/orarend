@@ -101,6 +101,41 @@ export const jedlikAd = () =>
             });
           }
 
+          //! ─── ÚJ FIÓK MÁR NEM SZÜLETIK ITT ─────────────────────────────────
+          //! A MIGRÁCIÓ MÁSODIK SZAKASZA: az iskolai belépés a MEGLÉVŐ
+          //! fiókoknak még működik, de újat nem hoz létre — az egyetlen út
+          //! innentől a Google-belépés (`auth.ts`, `socialProviders.google`).
+          //! Lásd `/valtozasok`.
+          //!
+          //! EZÉRT A TULAJDONOST MÉG A JELSZÓ ELKÜLDÉSE ELŐTT MEGKÉRDEZZÜK.
+          //! Ha nincs helyi fiók ehhez a felhasználónévhez, a kérés itt áll
+          //! meg — az iskola rendszeréhez EL SEM MEGY a jelszó. Ez nem csak
+          //! gyorsabb: annak a diáknak, aki most próbálna először (helyesen
+          //! vagy elgépelve) belépni, a jelszavát feleslegesen relézni felé
+          //! az iskolának pont az az érintettség-minimalizálás ellen menne,
+          //! amit ez a fájl a nyitó megjegyzésben vállal.
+          //!
+          //! A HIBAÜZENET NEM KÜLÖNBÖZTETI MEG az elgépelt felhasználónevet az
+          //! újonnan próbálkozótól — a kettő a mi oldalunkról nézve UGYANAZ az
+          //! állapot (nincs ilyen nevű helyi fiók), és a válasz mindkettőre
+          //! ugyanaz a helyes tanács: ha ez egy meglévő fiók, ellenőrizd a
+          //! felhasználóneved; ha még sosem léptél be, a Google-gombot
+          //! használd.
+          const owner = await ctx.context.internalAdapter.findAccountOwnerByKey(
+            {
+              issuer: ISSUER,
+              accountId: username,
+            },
+          );
+
+          if (!owner) {
+            throw new APIError("FORBIDDEN", {
+              code: "AD_SIGNUP_DISABLED",
+              message:
+                "Iskolai jelszóval új fiók már nem hozható létre. Ha még sosem léptél be, a Google-fiókoddal (@jedlik.eu vagy @students.jedlik.eu) tudsz belépni — ha korábban már jártál itt, ellenőrizd a felhasználóneved.",
+            });
+          }
+
           //! ─── ITT MEGY ÁT A JELSZÓ, ÉS SEHOL MÁSHOL ────────────────────────
           //! Az `adLogin` a jelszót az iskola API-jának adja, majd elengedi.
           //! Innentől a `password` változóra nincs több hivatkozás — nem
@@ -127,13 +162,6 @@ export const jedlikAd = () =>
             throw error;
           }
 
-          const owner = await ctx.context.internalAdapter.findAccountOwnerByKey(
-            {
-              issuer: ISSUER,
-              accountId: username,
-            },
-          );
-
           //* Amit MINDEN belépéskor frissítünk az iskolai válaszból. A
           //* `isTeacher` csak akkor kerül bele, ha az iskola nyilatkozott róla
           //* — hiányzó adatból nem minősítünk vissza senkit (lásd `jedlik-ad.ts`).
@@ -148,7 +176,7 @@ export const jedlikAd = () =>
 
           let user: Record<string, unknown> & { id: string };
 
-          if (owner?.kind === "owned") {
+          if (owner.kind === "owned") {
             //! A MEGLÉVŐ FIÓK ADATAI FRISSÜLNEK. Osztályt váltani tanév közben
             //! is lehet (átsorolás, évismétlés); ha csak a létrehozáskor
             //! olvasnánk ki, a lap örökre a régi osztályt hinné.
@@ -157,7 +185,7 @@ export const jedlikAd = () =>
               directoryData,
             );
             user = (updated ?? owner.user) as typeof user;
-          } else if (owner?.kind === "orphaned") {
+          } else {
             //! GAZDÁTLAN FIÓK-KÖTÉS — ilyennek nem szabadna léteznie: a séma
             //! `onDelete: Cascade`-je a felhasználóval együtt viszi az
             //! `account` sorát is. Ha mégis előfordul, NEM találgatunk és nem
@@ -170,38 +198,6 @@ export const jedlikAd = () =>
               message:
                 "A fiókod hibás állapotban van. Kérjük, jelezd az üzemeltetőnek.",
             });
-          } else {
-            //! ─── ITT SZÜLETIK A FIÓK ────────────────────────────────────────
-            //! Nincs külön regisztráció: az első sikeres iskolai belépés hozza
-            //! létre a helyi sort. Ez az a pont, ahol az iskola igazolása
-            //! átfordul a mi fiókunkká.
-            const created = await ctx.context.internalAdapter.createUser(
-              {
-                //* A név az iskolai válaszból, ha adott; különben a
-                //* felhasználónév — kitalálni nem fogunk nevet.
-                name: identity.fullName ?? identity.displayName,
-                email: syntheticEmail(username),
-                //! `false`, és ez pontos: ez a cím nem is létezik, tehát
-                //! „igazoltnak" mondani hazugság lenne. Semmilyen folyamat nem
-                //! támaszkodik rá, mert e-mailes ág nincs bekapcsolva.
-                emailVerified: false,
-                username,
-                ...directoryData,
-              },
-              { method: "jedlik-ad" },
-            );
-
-            await ctx.context.internalAdapter.linkAccount({
-              userId: created.id,
-              providerId: JEDLIK_PROVIDER_ID,
-              issuer: ISSUER,
-              accountId: username,
-              //! JELSZÓ NÉLKÜL. A Better Auth sémájában van `password` mező, de
-              //! mi nem írunk bele: az iskolai jelszót nem tároljuk semmilyen
-              //! formában, még kivonatolva sem. A jelszót az iskola őrzi.
-            });
-
-            user = created as typeof user;
           }
 
           const dontRememberMe = ctx.body.rememberMe === false;
