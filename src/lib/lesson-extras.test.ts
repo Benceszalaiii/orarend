@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   extrasKey,
   formatScreenAddress,
+  isIpv4Literal,
   type LessonExtras,
   linkDisplayName,
   linksFor,
@@ -10,6 +11,7 @@ import {
   sanitizeLinkLabel,
   sanitizeLinkUrl,
   sanitizeScreenHost,
+  sanitizeStoredExtras,
   screenFor,
   screenTaskFrameUrl,
 } from "./lesson-extras";
@@ -150,10 +152,78 @@ describe("parseScreenAddress", () => {
     );
   });
 
+  test("nyers IP vagy .local név — ettől függ, beágyazható-e", () => {
+    expect(isIpv4Literal("192.168.1.20")).toBe(true);
+    expect(isIpv4Literal("tanari-gep.local")).toBe(false);
+  });
+
   test("a képkocka címe a ScreenTask saját útvonala", () => {
     expect(screenTaskFrameUrl({ host: "10.0.0.1", port: 7070 }, "123")).toBe(
       "http://10.0.0.1:7070/ScreenTask.jpg?rand=123",
     );
+  });
+});
+
+describe("sanitizeStoredExtras (a vendég helyi példánya)", () => {
+  test("szemétből üres, nem kivétel", () => {
+    expect(sanitizeStoredExtras(null)).toEqual({ links: [], screens: [] });
+    expect(sanitizeStoredExtras("x")).toEqual({ links: [], screens: [] });
+    expect(sanitizeStoredExtras({ links: 5, screens: {} })).toEqual({
+      links: [],
+      screens: [],
+    });
+  });
+
+  test("az érvénytelen sort eldobja, az érvényeset kanonikus alakban tartja", () => {
+    const result = sanitizeStoredExtras({
+      links: [
+        {
+          id: "a",
+          teacher: "KovJ",
+          subject: "MAT",
+          url: "a.b/c",
+          label: " x ",
+        },
+        {
+          id: "b",
+          teacher: "KovJ",
+          subject: "MAT",
+          url: "javascript:alert(1)",
+        },
+        { teacher: "KovJ", subject: "MAT", url: "https://c.d/" },
+      ],
+      screens: [
+        { teacher: "KovJ", room: "102", host: "192.168.1.20", port: 7070 },
+        { teacher: "KovJ", room: "103", host: "8.8.8.8", port: 7070 },
+        { teacher: "KovJ", room: "104", host: "10.0.0.1", port: "7070" },
+      ],
+    });
+    expect(result.links).toEqual([
+      {
+        id: "a",
+        teacher: "kovj",
+        subject: "mat",
+        url: "https://a.b/c",
+        label: "x",
+        createdAt: "",
+      },
+    ]);
+    expect(result.screens.map((s) => s.room)).toEqual(["102"]);
+  });
+
+  test("az ismétlődő sort egyszer tartja meg", () => {
+    const result = sanitizeStoredExtras({
+      links: [
+        { id: "a", teacher: "t", subject: "s", url: "https://a.b/" },
+        { id: "b", teacher: "T", subject: "S", url: "https://a.b/" },
+      ],
+      screens: [
+        { teacher: "t", room: "1", host: "10.0.0.1", port: 7070 },
+        { teacher: "t", room: "1", host: "10.0.0.2", port: 7070 },
+      ],
+    });
+    expect(result.links.map((l) => l.id)).toEqual(["a"]);
+    expect(result.screens.map((s) => s.host)).toEqual(["10.0.0.1"]);
   });
 });
 

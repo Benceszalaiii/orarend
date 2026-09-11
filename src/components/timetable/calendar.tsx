@@ -81,6 +81,7 @@ import {
 import { reportClassUse } from "@/lib/usage";
 import { useHiddenMenu } from "@/lib/use-hidden-menu";
 import { cn } from "@/lib/utils";
+import { GlanceNote, GlanceToggle } from "./glance-controls";
 import { EventCard, LessonBlock } from "./lesson-block";
 import { type FocusTarget, LessonSheet } from "./lesson-sheet";
 import { GhostCard, MergeButton } from "./merge-controls";
@@ -715,6 +716,10 @@ function DayHeadCell({
   );
 }
 
+//* A szűretlen nézet „döntései": egy állandó üres lista, hogy a feloldás
+//* memója ne kapjon minden renderben új azonosságot.
+const NO_PREFS: MergePreference[] = [];
+
 export function TimetableCalendar({
   initialView,
   mode = "class",
@@ -1074,7 +1079,7 @@ export function TimetableCalendar({
   //! A NAP SAJÁT JELÖLÉSE HIÁNYOZHAT (a Jedlikinfo üres `week`-et ad pl. egy
   //! tanítás nélküli hétfőre), a HÉTÉ viszont nem: a duális állapotot ezért a
   //! hét betűjéből számoljuk, nem a napéból.
-  const dualOf = useCallback(
+  const savedDualOf = useCallback(
     (dayOfWeek: number): DualStatus | undefined =>
       dualStatusForDay?.({
         dayOfWeek,
@@ -1082,6 +1087,31 @@ export function TimetableCalendar({
         subjectShort,
       }),
     [dualStatusForDay, abWeek, subjectShort],
+  );
+
+  //! ─── SZŰRETLEN PILLANTÁS ─────────────────────────────────────────────────
+  //! Az összevonások és a duális beosztás NEM törlődnek, csak a rács nem
+  //! alkalmazza őket, amíg a diák körül nem néz (lásd `glance-controls.tsx`).
+  //! Semmi nem íródik a tárolóba: ez a nézet állapota, nem a beállításoké.
+  //*
+  //! AZ ALANYHOZ KÖTVE, NEM PUSZTA IGEN/NEM. A pillantás annak az alanynak szól,
+  //! akinél elindult — egy másik osztályra váltva véget ér, és visszaváltva sem
+  //! éled újra magától. És véget ér akkor is, ha nincs többé mit figyelmen
+  //! kívül hagyni (pl. a diák közben minden szűrését visszavonta): egy
+  //! „szűretlen" jelzés ott már semmit nem mondana, a következő döntése után
+  //! viszont váratlanul újra elrejtené azt, amit épp beállított.
+  const [glanceKey, setGlanceKey] = useState<string | null>(null);
+  const canGlance =
+    Boolean(view.subject) &&
+    (prefs.length > 0 ||
+      days.some((d) => savedDualOf(d.dayOfWeek) !== undefined));
+  const glancing = canGlance && glanceKey === storeKey;
+  if (glanceKey !== null && !glancing) setGlanceKey(null);
+
+  //* A rács minden duális jelölése ezen át kérdez — szűretlenül egyik sincs.
+  const dualOf = useCallback(
+    (dayOfWeek: number) => (glancing ? undefined : savedDualOf(dayOfWeek)),
+    [glancing, savedDualOf],
   );
 
   //! ─── A DUÁLIS NAP HELYÉN EGY BLOKK ÁLL ───────────────────────────────────
@@ -1092,16 +1122,18 @@ export function TimetableCalendar({
   //! CSAK OTT, AHOL VAN MIT FELVÁLTANI. Egy adat nélküli hétre (szünet,
   //! forráshiba) nem találunk ki duális napokat: a hét üressége a hír, nem a
   //! munkahely.
-  const lessons = useMemo(() => {
+  const scheduledLessons = useMemo(() => {
     if (!dualStatusForDay || view.lessons.length === 0) return view.lessons;
-    const dualDays = days.filter((d) => dualOf(d.dayOfWeek) === "dual");
+    const dualDays = days.filter((d) => savedDualOf(d.dayOfWeek) === "dual");
     if (dualDays.length === 0) return view.lessons;
     const dualDows = new Set(dualDays.map((d) => d.dayOfWeek));
     return [
       ...view.lessons.filter((l) => !dualDows.has(l.dayOfWeek)),
       ...dualDays.map(dualBlockLesson),
     ];
-  }, [view.lessons, days, dualOf, dualStatusForDay]);
+  }, [view.lessons, days, savedDualOf, dualStatusForDay]);
+  //* Szűretlenül a forrás órái állnak a rácson, a duális napokon is.
+  const lessons = glancing ? view.lessons : scheduledLessons;
 
   //! A RÁCS IDŐ-HATÁRAI: a tényleges órák (és beeső szakkör-alkalmak) tartománya.
   //! A csengetési rend (`periods`) a 0. és a 9. órát is tartalmazza, pedig az
@@ -1375,12 +1407,22 @@ export function TimetableCalendar({
         //! blokkon BELÜLI szünetek (a suli a dupla órát egy kártyaként adja
         //! vissza) — rövidített napon tehát a NAP SAJÁT rendjéből, különben a
         //! 40 perces órák közé 45 perces határokat húznánk.
-        resolveDay(byDay.get(d.dayOfWeek) ?? [], prefs, periodsOf(d)),
+        resolveDay(
+          byDay.get(d.dayOfWeek) ?? [],
+          glancing ? NO_PREFS : prefs,
+          periodsOf(d),
+        ),
       ]),
     );
-  }, [lessons, prefs, gridDays, periodsOf]);
+  }, [lessons, prefs, glancing, gridDays, periodsOf]);
 
-  const rows = useMemo(() => preferenceRows(prefs, lessons), [prefs, lessons]);
+  //! A SZŰRÉSEK LISTÁJA A SAJÁT ÓRARENDHEZ MÉR, nem ahhoz, ami épp a rácson
+  //! áll: egy szűretlen pillantás nem teheti „aktívvá" azt a döntést, amelyik
+  //! órája amúgy egy duális napra esik.
+  const rows = useMemo(
+    () => preferenceRows(prefs, scheduledLessons),
+    [prefs, scheduledLessons],
+  );
 
   //! A "hozd vissza" gombok IDENTITÁST küldenek, nem klaszterkulcsot: egy órát
   //! elrejthet egy másik napon hozott döntés általánosítása is. Egy kattintás
@@ -2213,6 +2255,9 @@ export function TimetableCalendar({
   //! válaszfala egymás mellett állna.
   const showMerge = hasSubject && menu.shows("merge");
   const showDual = hasSubject && menu.shows("dual") && Boolean(dualSetup);
+  //* A szűretlen nézet csak ott kínálkozik, ahol van mit figyelmen kívül
+  //* hagyni — szűrés és duális beosztás nélkül ugyanazt a rácsot adná vissza.
+  const showGlance = canGlance && menu.shows("glance");
   const showNotify = hasSubject && menu.shows("notify") && Boolean(notifySetup);
   //* A naptár-sor ugyanazon a három feltételen áll, mint a harang: kell alany,
   //* a diák nem rejtette el, és a lap ad hozzá vezérlőt (tanári lapon belépés
@@ -2223,6 +2268,7 @@ export function TimetableCalendar({
   const hasSettings =
     showMerge ||
     showDual ||
+    showGlance ||
     showNotify ||
     showCalendar ||
     showLegend ||
@@ -2430,6 +2476,14 @@ export function TimetableCalendar({
               · {abWeek} hét
             </span>
           )}
+          {/*//* A papíron nincs jelzősor: ha szűretlenül nyomtatják, az is a
+              //* fejlécbe kerül, különben a falon a diák saját órarendjének
+              //* látszana. */}
+          {glancing && (
+            <span className="ml-2 font-medium text-muted-strong">
+              · teljes órarend
+            </span>
+          )}
         </p>
       )}
 
@@ -2460,7 +2514,10 @@ export function TimetableCalendar({
                     : view.subject?.short) || words.oneCapital,
                 context: weekLabel(weekStart, narrowBar),
                 weekLetter: abWeek ?? undefined,
-                filtered: rows.length,
+                //* Szűretlenül a szűrések száma nem igaz a rácsra — a sor
+                //* ilyenkor a szűretlen jelzést viseli helyette.
+                filtered: glancing ? 0 : rows.length,
+                glance: glancing,
                 offCurrent: !isFocusWeek,
                 onReturn: () => load(focusWeek),
                 returnLabel: weekendFocus ? "Hétfő" : "Ma",
@@ -2592,6 +2649,16 @@ export function TimetableCalendar({
                             subjectShort,
                             weekLetter: abWeek ?? "",
                           })}
+                        {/*//* A két szűrés után áll, mert mindkettőt egyszerre
+                            //* kapcsolja ki — ideiglenesen. */}
+                        {showGlance && (
+                          <GlanceToggle
+                            active={glancing}
+                            onToggle={() =>
+                              setGlanceKey(glancing ? null : storeKey)
+                            }
+                          />
+                        )}
                         {showNotify && notifySetup?.({ subjectShort })}
                         {showCalendar &&
                           calendarSetup?.({ subjectShort, prefs })}
@@ -2659,6 +2726,15 @@ export function TimetableCalendar({
           fetchedAt={stale.fetchedAt}
           offline
           className="shrink-0 justify-center border-b border-border/60 bg-muted/30 px-4 py-1.5 print:hidden"
+        />
+      )}
+
+      {/*//! A SZŰRETLEN NÉZET UGYANITT SZÓL, és ugyanabban a sorban ad kiutat —
+          //! a lap kinyitása nélkül (lásd `GlanceNote`). */}
+      {glancing && (
+        <GlanceNote
+          onExit={() => setGlanceKey(null)}
+          className="shrink-0 border-b border-border/60 bg-primary/[0.06] px-4 py-1.5 print:hidden"
         />
       )}
 
@@ -3268,18 +3344,22 @@ export function TimetableCalendar({
                         </AnimatePresence>
 
                         {/* Feloldatlan ütközések: az összevonás gombja */}
-                        {resolved.conflicts.map((cluster) => (
-                          <MergeButton
-                            key={`${d.dateKey}-${cluster.key}-${cluster.startMin}`}
-                            cluster={cluster}
-                            dayName={d.name}
-                            top={top(cluster.startMin)}
-                            height={
-                              (cluster.endMin - cluster.startMin) * pxPerMin
-                            }
-                            onChoose={choose}
-                          />
-                        ))}
+                        {/*//! Szűretlenül nincs: ott minden ütközés
+                            //! „feloldatlan", és egy itt hozott döntés a
+                            //! háttérben várakozó szűrésekhez íródna. */}
+                        {!glancing &&
+                          resolved.conflicts.map((cluster) => (
+                            <MergeButton
+                              key={`${d.dateKey}-${cluster.key}-${cluster.startMin}`}
+                              cluster={cluster}
+                              dayName={d.name}
+                              top={top(cluster.startMin)}
+                              height={
+                                (cluster.endMin - cluster.startMin) * pxPerMin
+                              }
+                              onChoose={choose}
+                            />
+                          ))}
 
                         {/* "Most" vonal */}
                         {showNow && nowMin !== null && (
@@ -3324,7 +3404,7 @@ export function TimetableCalendar({
           morph={canMorph}
           onClose={closeFocus}
           onUndoMerge={undoByIdentity}
-          onHide={hide}
+          onHide={glancing ? undefined : hide}
         />
       )}
     </div>

@@ -27,6 +27,28 @@ import {
 
 const ENDPOINT = "/api/beallitasok";
 
+//! A LETÖLTÖTT ÁLLAPOT VISSZAÍRÁSA IS „VÁLTOZÁS"-T JELEZ. A tárolók írói
+//! (`saveCachedClass`, `saveLocalPreferences`…) ugyanazt a jelzést küldik,
+//! akár a diák kattintott, akár mi írtuk vissza a szerver állapotát — és
+//! némelyikük akkor is, ha az érték nem változott. A szinkron motorja
+//! (`prefs-sync.tsx`) ebből a jelzőből tudja, hogy a saját visszhangját
+//! hallja, és nem indít érte új kört. A jelzés szinkron, így a jelző csak az
+//! írás idejére áll.
+let applyingRemote = false;
+
+export function isApplyingSyncedPrefs(): boolean {
+  return applyingRemote;
+}
+
+function applyFromSync(prefs: SyncedPrefs): void {
+  applyingRemote = true;
+  try {
+    applyLocalPrefs(prefs);
+  } finally {
+    applyingRemote = false;
+  }
+}
+
 export type SyncOutcome =
   | { status: "ok"; revision: number; updatedAt: string | null }
   //* A munkamenet lejárt vagy nincs — nem hiba, csak nincs mit szinkronizálni.
@@ -183,7 +205,7 @@ export async function syncPrefs(
   //! következő lépésnél elszáll, a diák AKKOR IS látja a másik készülékén
   //! beállítottakat — a feltöltés a következő körben pótolható, a felhasználó
   //! várakoztatása nem.
-  applyLocalPrefs(merged);
+  applyFromSync(merged);
 
   //* Nincs mit feltölteni: a szerver már pontosan ezt tartalmazza.
   if (samePrefs(merged, remote.prefs)) {
@@ -214,7 +236,7 @@ export async function syncPrefs(
   //! felülíró készülék esetén végtelen ciklussá válhatna.
   if (pushed.kind === "conflict") {
     const resolved = mergePrefs(merged, pushed.current.prefs, "local");
-    applyLocalPrefs(resolved);
+    applyFromSync(resolved);
     const retry = await pushRemote(resolved, pushed.current.revision, signal);
     if (retry.kind === "ok") {
       saveSyncMeta({ revision: retry.envelope.revision, userId });

@@ -460,6 +460,23 @@ export default function AdatvedelemPage() {
               szakaszt. Minden helyben tárolt adat bármikor törölhető a böngésző
               adatainak törlésével.
             </p>
+            {/*//! AZ ÓRÁHOZ KÖTÖTT LINKEK ÉS KIVETÍTŐ-CÍMEK KÉT HELYEN ÉLHETNEK
+                //! (`lesson-extras-store.ts`), és a költözésük a belépéskor
+                //! automatikus — ezt ki kell mondani, nem elég a fenti,
+                //! általános mondat alá sorolni. */}
+            <p>
+              Az órákhoz mentett linkek és a tanári kivetítő (ScreenTask) címe
+              bejelentkezés nélkül szintén csak ebben a helyi tárolóban
+              maradnak (
+              <span className="font-medium text-foreground">
+                orarend:lesson-extras:v1
+              </span>
+              ). Ha bejelentkezel, a fiókodhoz mentődnek, hogy minden eszközödön
+              megjelenjenek — az addig ezen az eszközön mentetteket ilyenkor
+              feltöltjük a fiókodba, és a készülékről töröljük. A kivetített
+              képet a böngésződ közvetlenül a tanári gépről tölti le a helyi
+              hálózaton; az a mi szerverünkön soha nem halad át.
+            </p>
             {/*//! EZT KI KELL MONDANI, MERT ITT EGY SÜTI VAN. A többi
                 //! beállítás a böngésző helyi tárolójában marad, és a
                 //! kiszolgáló soha nem látja — ez az egy viszont MINDEN

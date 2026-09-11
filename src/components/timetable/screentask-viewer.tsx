@@ -12,6 +12,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import {
   formatScreenAddress,
+  isIpv4Literal,
   type ScreenAddress,
   screenTaskFrameUrl,
   screenTaskPageUrl,
@@ -28,12 +29,11 @@ import { cn } from "@/lib/utils";
 //! is láthatná: a tanári gép a terem hálózatán van, nem az interneten.
 //!
 //! A `https` → `http` ÁTLÉPÉS A BÖNGÉSZŐN MÚLIK. A lapunk titkosított, a
-//! ScreenTask nem. A Chrome (142-től) helyi IP-címre ezt ENGEDI, egy egyszeri
-//! „helyi hálózat elérése" engedélykérés után (Local Network Access). Más
-//! böngésző ezt letilthatja — ilyenkor a ScreenTask SAJÁT oldala a kiút, ezért
-//! az mindig egy gombnyira van, és a hibaüzenet is azt ajánlja.
+//! ScreenTask nem. Ezt a nézőt ezért csak ott nyitjuk meg, ahol a böngésző
+//! biztosan beengedi a képet (lásd `canViewInPage`); máshol a ScreenTask SAJÁT
+//! oldala nyílik új lapon.
 //!
-//! KÉPKOCKÁNKÉNT ÚJ `<img>`, ÉS CSAK A KÉSZ KERÜL KI. Ha a látható kép `src`-jét
+//! KÉPKOCKÁNKÉNT ÚJ KÉPELEM, ÉS CSAK A KÉSZ KERÜL KI. Ha a látható kép `src`-jét
 //! cserélnénk, minden frissítés egy üres villanással járna, amíg a következő
 //! meg nem jön. Így a régi kép addig marad, amíg az új teljesen be nem töltött.
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -49,6 +49,33 @@ const MAX_RETRY_MS = 5000;
 const HIDDEN_POLL_MS = 1000;
 
 type LinkState = "connecting" | "live" | "lost";
+
+//! ─── BEÁGYAZHATÓ-E EGYÁLTALÁN ───────────────────────────────────────────────
+//! ELŐRE KELL ELDÖNTENI, NEM PRÓBÁLGATÁSSAL. Egy `https`-es lapon a böngésző a
+//! `http://…` képet sokszor nem hibaként adja vissza, hanem csendben
+//! `https://`-re írja át (Safari, Firefox, régebbi Chrome) — a ScreenTask
+//! viszont csak `http`-t tud, így a néző a végtelenségig „kapcsolódna".
+//!
+//! Beágyazni csak két esetben lehet:
+//!   • a lap maga is `http` (pl. helyi telepítés) — nincs vegyes tartalom;
+//!   • a böngésző ismeri a helyi hálózati hozzáférést (Chrome LNA — a jele a
+//!     `Request.targetAddressSpace`), ÉS a cím nyers helyi IP: a böngésző csak
+//!     így tudja MÁR A KÉRÉS ELŐTT, hogy a helyi hálózatra megy, és csak ekkor
+//!     menti fel a vegyes tartalom szabálya alól. Egy `.local` névnél nem
+//!     kockáztatunk — a névre vonatkozó https-átírás megelőzheti.
+//!
+//! Minden más esetben a ScreenTask saját nézője nyílik, új lapon. Az önálló
+//! `http` oldal, nem beágyazott tartalom — a vegyes tartalom szabálya rá nem
+//! vonatkozik, tehát minden böngészőben működik.
+export function canViewInPage(host: string): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.location.protocol === "http:") return true;
+  return (
+    isIpv4Literal(host) &&
+    typeof Request !== "undefined" &&
+    "targetAddressSpace" in Request.prototype
+  );
+}
 
 const DARK_BUTTON =
   "text-white/80 hover:bg-white/10 hover:text-white dark:hover:bg-white/10";

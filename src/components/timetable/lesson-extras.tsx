@@ -26,6 +26,7 @@ import {
   sanitizeLinkLabel,
   sanitizeLinkUrl,
   screenFor,
+  screenTaskPageUrl,
 } from "@/lib/lesson-extras";
 import {
   addLessonLink,
@@ -35,7 +36,7 @@ import {
   saveScreenHost,
   useLessonExtras,
 } from "@/lib/lesson-extras-store";
-import { ScreenTaskViewer } from "./screentask-viewer";
+import { canViewInPage, ScreenTaskViewer } from "./screentask-viewer";
 
 //* ---------------------------------------------------------------------------
 //* Linkek és kivetítés a részletlapon
@@ -44,8 +45,11 @@ import { ScreenTaskViewer } from "./screentask-viewer";
 //! tantárgy párhoz (minden órájukon ott van), a kivetítő címe a tanár + terem
 //! párhoz (a ScreenTask a terem gépén fut). Lásd `src/lib/lesson-extras.ts`.
 //!
-//! BELÉPÉS NÉLKÜL NINCS TÁROLÁS. A sorok a fiókhoz tartoznak, és minden
-//! eszközön megjelennek; aki nincs belépve, egy sort kap arról, mit nyerne vele.
+//! BELÉPÉS NÉLKÜL IS MŰKÖDIK, CSAK HELYBEN. Vendégként a sorok a készülék
+//! `localStorage`-ába kerülnek; belépve a fiókba, és minden eszközön
+//! megjelennek (a vendég sorai a belépéskor átköltöznek — lásd
+//! `lesson-extras-store.ts`). A felület a kettőt ugyanúgy kezeli; a vendég
+//! egy sort kap arról, mit nyerne a belépéssel.
 
 const INPUT =
   "h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 sm:text-sm dark:bg-input/30";
@@ -74,7 +78,6 @@ export function LessonExtrasSection({
   //! TANÁR NÉLKÜL NINCS KULCS. Mindkét sor a tanárhoz kötődik; ha a forrás nem
   //! adott tanárt, nincs mihez menteni — a szakasz ilyenkor meg sem jelenik.
   if (!extrasKey(teacher) || isPending) return null;
-  if (!userId) return <SignedOutHint />;
 
   const loading = status === "loading";
   const distinctRooms = [...new Set(rooms.filter((room) => extrasKey(room)))];
@@ -103,6 +106,7 @@ export function LessonExtrasSection({
           onOpen={(screen) => setViewing({ screen, room })}
         />
       ))}
+      {!userId && <GuestNote />}
       {viewing && (
         <ScreenTaskViewer
           screen={viewing.screen}
@@ -132,29 +136,21 @@ function SectionHead({
   );
 }
 
-function SignedOutHint() {
+//! A VENDÉGNEK KI KELL MONDANI, HOL VAN A MENTÉSE. Enélkül a gépén hiába
+//! keresné a telefonon felvett linket — és azt hinné, elveszett.
+function GuestNote() {
   const pathname = usePathname();
   return (
-    <div className="px-4 py-3">
-      <SectionHead icon={Link2} label="Linkek, kivetítés" />
-      <p className="mt-1 pl-7 text-pretty text-xs text-muted-foreground">
-        Lépj be, és ehhez az órához linkeket, valamint a tanár kivetítőjének
-        címét mentheted — minden eszközödön megjelennek.
-      </p>
-      <div className="mt-2 pl-7">
-        <Button
-          asChild
-          size="sm"
-          variant="outline"
-          className="gap-1.5 rounded-full px-3 text-xs"
-        >
-          <Link href={`/belepes?tovabb=${encodeURIComponent(pathname)}`}>
-            <LogIn className="size-3.5" aria-hidden />
-            Belépés
-          </Link>
-        </Button>
-      </div>
-    </div>
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-pretty text-[11px] text-muted-foreground">
+      <span>Belépés nélkül csak ezen az eszközön mentődik.</span>
+      <Link
+        href={`/belepes?tovabb=${encodeURIComponent(pathname)}`}
+        className="inline-flex items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline"
+      >
+        <LogIn className="size-3" aria-hidden />
+        Lépj be, és minden eszközödön ott lesz
+      </Link>
+    </p>
   );
 }
 
@@ -169,7 +165,8 @@ function LinksBlock({
   loading,
   failed,
 }: {
-  userId: string;
+  //* `null` = vendég: a sorok ezen a készüléken, `localStorage`-ban élnek.
+  userId: string | null;
   teacher: string;
   subject: string;
   links: LessonLink[];
@@ -375,7 +372,8 @@ function ScreenBlock({
   loading,
   onOpen,
 }: {
-  userId: string;
+  //* `null` = vendég: a sorok ezen a készüléken, `localStorage`-ban élnek.
+  userId: string | null;
   teacher: string;
   room: string;
   //* Teremváltásos blokknál termenként külön cím kell — ott kiírjuk, melyik.
@@ -387,6 +385,15 @@ function ScreenBlock({
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  //! A BÖNGÉSZŐ DÖNTI EL, NEM A PRÓBÁLKOZÁS. Ahol a lapba ágyazott képet a
+  //! böngésző `https`-re írná át, ott a néző sosem kapna képkockát — ezért
+  //! ott rögtön a ScreenTask saját oldala nyílik (lásd `canViewInPage`). A
+  //! kérdés csak a kliensen dönthető el, ezért effektben.
+  const host = screen?.host ?? null;
+  const [inPage, setInPage] = useState(false);
+  useEffect(() => {
+    setInPage(host !== null && canViewInPage(host));
+  }, [host]);
 
   const remove = async (current: ScreenHost) => {
     setBusy(true);
@@ -434,14 +441,35 @@ function ScreenBlock({
         />
       ) : screen ? (
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 pl-7">
-          <Button
-            size="sm"
-            className="h-8 gap-1.5 rounded-full px-3 text-xs"
-            onClick={() => onOpen(screen)}
-          >
-            <Cast className="size-3.5" aria-hidden />
-            Kivetítés megnyitása
-          </Button>
+          {inPage ? (
+            <Button
+              size="sm"
+              className="h-8 gap-1.5 rounded-full px-3 text-xs"
+              onClick={() => onOpen(screen)}
+            >
+              <Cast className="size-3.5" aria-hidden />
+              Kivetítés megnyitása
+            </Button>
+          ) : (
+            <Button
+              asChild
+              size="sm"
+              className="h-8 gap-1.5 rounded-full px-3 text-xs"
+            >
+              {/*//! ÖNÁLLÓ `http` LAP, NEM BEÁGYAZOTT KÉP — erre a vegyes
+                  //! tartalom szabálya nem vonatkozik, így minden böngészőben
+                  //! megnyílik. */}
+              <a
+                href={screenTaskPageUrl(screen)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Cast className="size-3.5" aria-hidden />
+                Kivetítés megnyitása
+                <ExternalLink className="size-3" aria-hidden />
+              </a>
+            </Button>
+          )}
           <span className="font-mono text-xs text-muted-strong">
             {formatScreenAddress(screen)}
           </span>

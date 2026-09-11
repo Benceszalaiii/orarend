@@ -135,6 +135,11 @@ export function sanitizeScreenHost(value: unknown): string | null {
   return null;
 }
 
+//* A tárolt (már kanonikus) cím nyers IPv4-cím-e — és nem `.local` név.
+export function isIpv4Literal(host: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+}
+
 function isPrivateIpv4([a, b]: number[]): boolean {
   return (
     a === 10 ||
@@ -187,6 +192,67 @@ export function screenTaskFrameUrl(
   nonce: string,
 ): string {
   return `http://${host}:${port}/ScreenTask.jpg?rand=${encodeURIComponent(nonce)}`;
+}
+
+//* ---------------------------------------------------------------------------
+//* A VENDÉG HELYI PÉLDÁNYA
+//* ---------------------------------------------------------------------------
+//! A `localStorage`-BÓL OLVASOTT ADAT IS ÁTMEGY AZ ELLENŐRZÉSEN. Bármi
+//! átírhatja — kézzel, egy régebbi verzió, egy félbeszakadt írás —, és amit
+//! innen olvasunk, az linkként és képcímként kerül a lapra. Ugyanazok a
+//! szabályok, mint a szerveren: amit ott nem fogadnánk el, azt itt sem.
+export function sanitizeStoredExtras(value: unknown): LessonExtras {
+  const raw = (value && typeof value === "object" ? value : {}) as {
+    links?: unknown;
+    screens?: unknown;
+  };
+
+  const links: LessonLink[] = [];
+  const seenLinks = new Set<string>();
+  for (const item of Array.isArray(raw.links) ? raw.links : []) {
+    if (links.length >= MAX_LINKS_TOTAL) break;
+    const l = (item ?? {}) as Record<string, unknown>;
+    const teacher = extrasKey(l.teacher);
+    const subject = extrasKey(l.subject);
+    const url = sanitizeLinkUrl(l.url);
+    const id = typeof l.id === "string" && l.id.length <= 64 ? l.id : "";
+    if (!teacher || !subject || !url || !id) continue;
+    const identity = `${teacher}\n${subject}\n${url}`;
+    if (seenLinks.has(identity)) continue;
+    seenLinks.add(identity);
+    links.push({
+      id,
+      teacher,
+      subject,
+      url,
+      label: sanitizeLinkLabel(l.label),
+      createdAt: typeof l.createdAt === "string" ? l.createdAt : "",
+    });
+  }
+
+  const screens: ScreenHost[] = [];
+  const seenScreens = new Set<string>();
+  for (const item of Array.isArray(raw.screens) ? raw.screens : []) {
+    if (screens.length >= MAX_SCREENS_TOTAL) break;
+    const s = (item ?? {}) as Record<string, unknown>;
+    const teacher = extrasKey(s.teacher);
+    const room = extrasKey(s.room);
+    const host = sanitizeScreenHost(s.host);
+    const port = sanitizePort(s.port);
+    if (!teacher || !room || !host || port === null) continue;
+    const identity = `${teacher}\n${room}`;
+    if (seenScreens.has(identity)) continue;
+    seenScreens.add(identity);
+    screens.push({
+      teacher,
+      room,
+      host,
+      port,
+      updatedAt: typeof s.updatedAt === "string" ? s.updatedAt : "",
+    });
+  }
+
+  return { links, screens };
 }
 
 //* ---------------------------------------------------------------------------

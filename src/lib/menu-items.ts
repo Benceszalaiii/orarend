@@ -39,6 +39,7 @@ export type MenuItemId =
   | "rooms"
   | "merge"
   | "dual"
+  | "glance"
   | "notify"
   | "calendar"
   | "legend";
@@ -69,6 +70,12 @@ export const MENU_ITEMS: readonly MenuItemMeta[] = [
     id: "dual",
     label: "Duális beosztás",
     hint: "Mely napokon vagy a munkahelyen",
+    group: "settings",
+  },
+  {
+    id: "glance",
+    label: "Teljes órarend",
+    hint: "Minden óra, a beállításaid nélkül",
     group: "settings",
   },
   {

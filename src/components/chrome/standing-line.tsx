@@ -225,6 +225,8 @@ export type LineContent = {
   weekLetter?: string;
   /** Hány összevonás SZŰR ki órát a nézetből (lásd lentebb). */
   filtered?: number;
+  /** Igaz, ha a rács épp a teljes órarendet mutatja (lásd `glance-controls.tsx`). */
+  glance?: boolean;
   /** Igaz, ha nem a mai héten/napon állunk — ilyenkor jön elő a „Ma". */
   offCurrent?: boolean;
   onReturn?: () => void;
@@ -862,6 +864,16 @@ function LineButton({
             {line.filtered} összevonás szűr a nézetben
           </span>
           <span aria-hidden>{line.filtered} szűrés</span>
+        </span>
+      )}
+      {/*//! A SZŰRETLEN NÉZET IS A SORON JELEZ, ugyanazért: a rács ilyenkor a
+          //! diák órarendjénél TÖBBET mutat, és a sor az egyetlen fejléc, ami
+          //! ezt a lap kinyitása nélkül kimondhatja. Körvonalas, nem tömör —
+          //! ne legyen összetéveszthető a szűrések számával. */}
+      {line.glance && (
+        <span className="shrink-0 rounded-full border border-primary/40 px-1.5 py-px text-[11px] font-semibold text-primary">
+          <span className="sr-only">A teljes órarend látszik</span>
+          <span aria-hidden>teljes</span>
         </span>
       )}
     </>
