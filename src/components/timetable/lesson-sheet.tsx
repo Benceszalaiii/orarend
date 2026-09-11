@@ -21,6 +21,7 @@ import { accentStyle } from "@/lib/accent";
 import type { TimetableSubjectKind } from "@/lib/timetable";
 import { groupLabel, type LessonRun } from "@/lib/timetable-merge";
 import { cn } from "@/lib/utils";
+import { LessonExtrasSection } from "./lesson-extras";
 import { durationLabel, rangeLabel } from "./shared";
 
 export type CalendarEvent = {
@@ -58,6 +59,7 @@ const MORPH_NAME = "tt-focus";
 export function LessonSheet({
   target,
   mode = "class",
+  viewedShort = "",
   morph,
   onClose,
   onUndoMerge,
@@ -67,6 +69,10 @@ export function LessonSheet({
   //* Kinek az órarendjéből nyílt ki — ettől függ, van-e értelme a
   //* „nem járok rá" ajánlatnak (lásd `LessonBody`).
   mode?: TimetableSubjectKind;
+  //! A NÉZETT ALANY JELE. A tanári nézet kártyáján nincs tanár (magától
+  //! értetődik), a linkek és a kivetítő címe viszont a tanárhoz kötődnek —
+  //! ott ő maga a kulcs.
+  viewedShort?: string;
   //* Fut-e view transition — ilyenkor a Radix saját be-/kifutása nem kell.
   morph: boolean;
   onClose: () => void;
@@ -110,6 +116,7 @@ export function LessonSheet({
           <LessonBody
             run={target.run}
             mode={mode}
+            viewedShort={viewedShort}
             dayLabel={target.dayLabel}
             onUndoMerge={onUndoMerge}
             onHide={onHide}
@@ -183,6 +190,7 @@ function Row({
 function LessonBody({
   run,
   mode,
+  viewedShort,
   dayLabel,
   onUndoMerge,
   onHide,
@@ -190,6 +198,7 @@ function LessonBody({
 }: {
   run: LessonRun;
   mode: TimetableSubjectKind;
+  viewedShort: string;
   dayLabel: string;
   onUndoMerge: (identities: string[]) => void;
   onHide: (identity: string) => void;
@@ -289,6 +298,12 @@ function LessonBody({
             {lesson.group}
           </Row>
         )}
+
+        <LessonExtrasSection
+          teacher={mode === "teacher" ? viewedShort : lesson.teacherShort}
+          subject={lesson.subjectShort || lesson.subject}
+          rooms={rooms}
+        />
 
         {groupOnly && (
           //! EZ AZ A HIÁNY, AMIT A VISSZAJELZÉS TALÁLT MEG. Az összevonás gombja

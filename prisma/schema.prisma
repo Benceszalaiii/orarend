@@ -1,5 +1,6 @@
 //! ─── AZ ADATBÁZIS SÉMÁJA ────────────────────────────────────────────────────
-//! Ez a séma KIZÁRÓLAG a bejelentkezést és a beállítás-szinkront szolgálja ki.
+//! Ez a séma a bejelentkezést, a beállítás-szinkront és a diák saját, órához
+//! kötött linkjeit / kivetítő-címeit szolgálja ki.
 //! Az órarend adata NEM kerül ide: az a Jedlikinfóé, mi csak megjelenítjük. A
 //! használati statisztika és a push-feliratkozások továbbra is a Redisben élnek
 //! (`lib/usage-store.ts`, `lib/push-store.ts`) — azok NÉVTELENEK, és nem szabad,
@@ -110,10 +111,12 @@ model User {
   //* kérésnél — lásd `src/lib/auth.ts`. `null` = még soha nem járt itt.
   lastActiveAt DateTime?
 
-  sessions   Session[]
-  accounts   Account[]
-  passkeys   Passkey[]
-  preference Preference?
+  sessions        Session[]
+  accounts        Account[]
+  passkeys        Passkey[]
+  preference      Preference?
+  lessonLinks     LessonLink[]
+  screenTaskHosts ScreenTaskHost[]
 
   @@unique([email])
   @@map("user")
@@ -251,4 +254,49 @@ model Preference {
   updatedAt DateTime @updatedAt
 
   @@map("preference")
+}
+
+//! ─── AZ ÓRÁHOZ KÖTÖTT LINKEK ───────────────────────────────────────────────
+//! A diák saját könyvjelzői egy órához: Classroom-kurzus, feladatlap,
+//! Teams-csoport. A kulcs a TANÁR + TANTÁRGY, nem az egyes óra — ugyanaz a link
+//! minden héten ott van, ahol az a tanár azt a tárgyat tartja.
+//!
+//! SAJÁT, NEM KÖZÖS. Egy sor egy felhasználóé; más diák nem látja, és nincs is
+//! olyan végpont, amin keresztül láthatná (`/api/ora-kiegeszitok`).
+//!
+//! A kulcsok kisbetűsítve állnak itt (`extrasKey`, `src/lib/lesson-extras.ts`):
+//! a tanár jele a diák és a tanár nézetéből más betűzéssel érkezhet.
+model LessonLink {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teacher   String
+  subject   String
+  //* Csak `http`/`https` — a szerver ellenőrzi (`sanitizeLinkUrl`).
+  url       String
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, teacher, subject])
+  @@map("lesson_link")
+}
+
+//! ─── A KIVETÍTŐ (SCREENTASK) CÍME ──────────────────────────────────────────
+//! A ScreenTask a tanári gépen fut, és a terem helyi hálózatán osztja meg a
+//! képernyőt. A cím ezért a TANÁR + TEREM párhoz tartozik: ugyanaz a tanár
+//! másik teremben másik gépről (másik IP-ről) vetít.
+//!
+//! CSAK HELYI HÁLÓZATI CÍM kerülhet ide (`sanitizeScreenHost`) — nyilvános
+//! címre a böngésző amúgy sem engedné betölteni a képet.
+model ScreenTaskHost {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teacher   String
+  room      String
+  host      String
+  port      Int      @default(7070)
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, teacher, room])
+  @@map("screentask_host")
 }

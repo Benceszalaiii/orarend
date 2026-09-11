@@ -120,6 +120,15 @@ export const MENU_GROUP_TITLE: Record<MenuItemGroup, string> = {
   site: "Az oldal",
 };
 
+//! AZ „ÜGYELET" ALAPBÓL REJTVE VAN, amíg a diák meg nem nyitja a
+//! testreszabóban. Nem azért, mert kevesebbet ér a többi sornál, hanem mert a
+//! többségnek (lásd a fenti leltár-megjegyzést a duális beosztásról) sosem
+//! kell — csak azoknak, akiket ez ügyeltet. Ez az EGYETLEN kivétel a „minden
+//! sor alapból látszik" szabály alól, ezért él itt, nem a `MENU_ITEMS`
+//! listában: az mutatja, MI van a lapon, ez pedig azt, mi a jó alapértelmezés
+//! annak, aki még nem nyúlt hozzá.
+export const DEFAULT_HIDDEN_MENU: readonly MenuItemId[] = ["duty"];
+
 export function isMenuItemId(value: unknown): value is MenuItemId {
   return MENU_ITEMS.some((item) => item.id === value);
 }
@@ -147,7 +156,7 @@ export function loadHiddenMenu(): MenuItemId[] | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(MENU_HIDDEN_STORAGE_KEY);
-    if (raw === null) return [];
+    if (raw === null) return null;
     return sanitizeHiddenMenu(JSON.parse(raw));
   } catch {
     return null;

@@ -3320,6 +3320,7 @@ export function TimetableCalendar({
         <LessonSheet
           target={focus}
           mode={mode}
+          viewedShort={subjectShort}
           morph={canMorph}
           onClose={closeFocus}
           onUndoMerge={undoByIdentity}
