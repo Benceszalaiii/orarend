@@ -42,7 +42,7 @@ const jakartaSans = localFont({
 export const metadata: Metadata = {
   title: "Órarend",
   description:
-    "A Jedlik heti órarendje teljes képernyőn: válaszd ki az osztályt, vond össze az ütköző csoportbontásokat.",
+    "A Győri SZC Jedlik Ányos technikum órarendje osztályokra, csoportbontásokra és duális hetekre bontva.",
   applicationName: "Órarend",
   //* Telepítve iOS-en teljes képernyős alkalmazásként fut; a fekete áttetsző
   //* státuszsáv a `viewport-fit=cover`-rel együtt ér valamit.

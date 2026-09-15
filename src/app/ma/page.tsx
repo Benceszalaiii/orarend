@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { MaPage } from "./ma-client";
 
 export const metadata: Metadata = {
-  title: "Ma – Órarend",
+  title: "Ma - Órarend",
   description:
-    "A mai nap egy képernyőn: mi megy most, mennyi van hátra, hova mész utána, és mozdult-e valami.",
+    "A Győri SZC Jedlik Ányos technikum órarendje osztályokra, csoportbontásokra és duális hetekre bontva: heti rács teljes képernyőn, vagy a mai nap egyetlen képernyőn.",
 };
 
 export default function Page() {

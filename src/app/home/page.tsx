@@ -11,9 +11,9 @@ import { Landing } from "./_components/landing";
 //! mutat, így a két azonos tartalom nem versenyez egymással.
 
 export const metadata: Metadata = {
-  title: "Órarend — a Jedlik hete egy lapon",
+  title: "Órarend",
   description:
-    "A Jedlik órarendje osztályokra, csoportbontásokra és duális hetekre bontva: heti rács teljes képernyőn, vagy a mai nap egyetlen képernyőn, óráról órára.",
+    "A Győri SZC Jedlik Ányos technikum órarendje osztályokra, csoportbontásokra és duális hetekre bontva: heti rács teljes képernyőn, vagy a mai nap egyetlen képernyőn.",
   alternates: { canonical: "https://jedlik.info/" },
 };
 
