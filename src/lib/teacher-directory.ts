@@ -3,11 +3,12 @@ import "server-only";
 import { JEDLIK_API_ORIGIN } from "./jedlik-api";
 import { schoolRoleForEmail } from "./school-domain";
 import {
-  findTeacherByName,
+  findTeacherForAccount,
   MIN_NAME_TOKENS,
   nameTokens,
   type TeacherRecord,
 } from "./teacher-name";
+import { TEACHER_EMAIL_PINS } from "./teacher-pins";
 
 //! ═══════════════════════════════════════════════════════════════════════════
 //! A TANÁRI JOG FORRÁSA — A JEDLIKINFO TANÁRLISTÁJA
@@ -78,14 +79,25 @@ export type TeacherLookup =
   //! ne tudja véletlenül összemosni a kettőt.
   | { status: "unavailable" };
 
-export async function lookupTeacherByGoogleName(
-  name: string | null | undefined,
+type GoogleAccount = {
+  email: string | null | undefined;
+  name: string | null | undefined;
+};
+
+export async function lookupTeacherForAccount(
+  account: GoogleAccount,
 ): Promise<TeacherLookup> {
-  //* Üres vagy egyszavas névre a lista le sem kell: úgysem lehet találat.
-  if (nameTokens(name).length < MIN_NAME_TOKENS) return { status: "no-match" };
+  //* Üres vagy egyszavas névre a lista le sem kell: úgysem lehet találat —
+  //* kivéve a kézzel rögzített címet, ahol a név nem számít.
+  const pinned = TEACHER_EMAIL_PINS.has(
+    account.email?.trim().toLowerCase() ?? "",
+  );
+  if (!pinned && nameTokens(account.name).length < MIN_NAME_TOKENS) {
+    return { status: "no-match" };
+  }
   const directory = await loadTeacherDirectory();
   if (!directory) return { status: "unavailable" };
-  const teacher = findTeacherByName(name, directory);
+  const teacher = findTeacherForAccount(account, directory, TEACHER_EMAIL_PINS);
   return teacher ? { status: "matched", teacher } : { status: "no-match" };
 }
 
@@ -94,10 +106,10 @@ export async function lookupTeacherByGoogleName(
  * elérhető — JOGOSULTSÁG MÓDOSÍTÁSÁHOZ ezért a `resolveSchoolIdentity`-t
  * használd, ami a kettőt megkülönbözteti.
  */
-export async function findTeacherByGoogleName(
-  name: string | null | undefined,
+export async function findTeacherForGoogleAccount(
+  account: GoogleAccount,
 ): Promise<TeacherRecord | null> {
-  const lookup = await lookupTeacherByGoogleName(name);
+  const lookup = await lookupTeacherForAccount(account);
   return lookup.status === "matched" ? lookup.teacher : null;
 }
 
@@ -111,7 +123,8 @@ export type SchoolIdentityFields = {
  *
  * - `@students.jedlik.eu` → diák: `{ isTeacher: false, teacherName: null }`
  *   (hálózat nélkül).
- * - `@jedlik.eu` + egyértelmű névtalálat a tanárlistában →
+ * - `@jedlik.eu` + kézi rögzítés (`teacher-pins.ts`) vagy egyértelmű
+ *   névtalálat a tanárlistában →
  *   `{ isTeacher: true, teacherName: <a LISTA neve, nem a Google-é> }`.
  * - `@jedlik.eu`, a lista megjött, de nincs találat →
  *   `{ isTeacher: false, teacherName: null }`.
@@ -132,7 +145,7 @@ export async function resolveSchoolIdentity(input: {
   if (role === null) return null;
   if (role === "student") return { isTeacher: false, teacherName: null };
 
-  const lookup = await lookupTeacherByGoogleName(input.name);
+  const lookup = await lookupTeacherForAccount(input);
   switch (lookup.status) {
     case "matched":
       return { isTeacher: true, teacherName: lookup.teacher.name };

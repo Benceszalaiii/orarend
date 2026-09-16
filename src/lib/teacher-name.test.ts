@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   findTeacherByName,
+  findTeacherForAccount,
   nameTokens,
   normalizeName,
   type TeacherRecord,
@@ -102,6 +103,46 @@ describe("findTeacherByName", () => {
     expect(findTeacherByName("Kovács János", [])).toBeNull();
     expect(
       findTeacherByName("Kovács János", null as unknown as TeacherRecord[]),
+    ).toBeNull();
+  });
+});
+
+describe("findTeacherForAccount — kézi kivételek", () => {
+  const PINS = new Map([["flash@jedlik.eu", "Horváth Norbert (1979.05.16.)"]]);
+  const short = (email: string, name: string | null) =>
+    findTeacherForAccount({ email, name }, TEACHERS, PINS)?.short ?? null;
+
+  test("a rögzített cím a megadott tanár, a Google-névtől függetlenül", () => {
+    expect(short("flash@jedlik.eu", "Horváth Norbert2")).toBe("HN");
+    expect(short("FLASH@jedlik.eu", null)).toBe("HN");
+  });
+
+  test("a rögzített pár másik tagja más címmel egyértelművé válik", () => {
+    expect(short("valaki@jedlik.eu", "Horváth Norbert")).toBe("HF");
+    expect(short("valaki@jedlik.eu", "Norbert Horvath")).toBe("HF");
+  });
+
+  test("rögzítés nélkül a névillesztés változatlan", () => {
+    expect(short("kj@jedlik.eu", "Janos Kovacs")).toBe("KJ");
+    expect(
+      findTeacherForAccount(
+        { email: "x@jedlik.eu", name: "Horváth Norbert" },
+        TEACHERS,
+        new Map(),
+      ),
+    ).toBeNull();
+  });
+
+  test("a listában nem szereplő rögzített név nem ad jogot, nincs visszaesés", () => {
+    const bad = new Map([
+      ["flash@jedlik.eu", "Horváth Norbert (1979. 05. 16)"],
+    ]);
+    expect(
+      findTeacherForAccount(
+        { email: "flash@jedlik.eu", name: "Kovács János" },
+        TEACHERS,
+        bad,
+      ),
     ).toBeNull();
   });
 });

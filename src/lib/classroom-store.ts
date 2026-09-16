@@ -50,6 +50,11 @@ async function resolveTeacherShort(user: {
   const directory = await loadTeacherDirectory();
   if (!directory) return null;
   if (user.teacherName) {
+    //! ELŐBB BETŰRE PONTOSAN. A normalizálás a zárójeles dátumot is eldobja,
+    //! tehát a két `Horváth Norbert (…)` normalizálva azonos — a pontos név
+    //! viszont egyedi, és a `teacherName` épp a lista neve.
+    const exact = directory.filter((t) => t.name === user.teacherName);
+    if (exact.length === 1) return extrasKey(exact[0].short);
     const wanted = normalizeName(user.teacherName);
     const hits = directory.filter((t) => normalizeName(t.name) === wanted);
     return hits.length === 1 ? extrasKey(hits[0].short) : null;

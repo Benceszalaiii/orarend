@@ -165,3 +165,36 @@ export function findTeacherByName<T extends TeacherRecord>(
   });
   return contained.length === 1 ? contained[0].teacher : null;
 }
+
+/**
+ * Egy fiók tanára: a `pins` (e-mail → lista-név) kézi kivételeivel, különben
+ * a `findTeacherByName` névillesztésével.
+ *
+ * - RÖGZÍTETT CÍM: a lista PONTOSAN ilyen nevű egyetlen sora, a Google-névtől
+ *   függetlenül. Ha nincs ilyen sor (elírás, a tanár kikerült a listából),
+ *   `null` — nem esik vissza a névre.
+ * - MINDEN MÁS CÍM: névillesztés a listán, a MÁS címekhez rögzített tanárok
+ *   nélkül. Így egy azonos nevű pár egyik tagjának rögzítése a másikat
+ *   egyértelművé teszi (lásd `teacher-pins.ts`).
+ */
+export function findTeacherForAccount<T extends TeacherRecord>(
+  account: {
+    email: string | null | undefined;
+    name: string | null | undefined;
+  },
+  teachers: readonly T[],
+  pins: ReadonlyMap<string, string>,
+): T | null {
+  if (!Array.isArray(teachers)) return null;
+  const email = account.email?.trim().toLowerCase() ?? "";
+  const pinned = email ? pins.get(email) : undefined;
+  if (pinned !== undefined) {
+    const hits = teachers.filter((t) => t.name === pinned);
+    return hits.length === 1 ? hits[0] : null;
+  }
+  const claimed = new Set(pins.values());
+  return findTeacherByName(
+    account.name,
+    teachers.filter((t) => !claimed.has(t.name)),
+  );
+}
