@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { GoogleGlyph } from "@/components/google-glyph";
 import { Button } from "@/components/ui/button";
-import { GOOGLE_LINK_REASON } from "@/lib/ad-migration";
 import {
   authClient,
   describeOAuthError,
@@ -128,8 +127,7 @@ export function SignInPanel() {
           <span className="font-medium text-foreground">
             {session.user.name}
           </span>
-          {session.user.class ? ` — ${session.user.class}` : ""}. A beállításaid
-          átjönnek a többi eszközödre.
+          {session.user.class ? ` — ${session.user.class}` : ""}.
         </p>
 
         {linkedGoogle === false ? (
@@ -137,9 +135,6 @@ export function SignInPanel() {
             <p className="text-sm text-foreground">
               Kösd össze a Google-fiókoddal, hogy a leállás után is elérhető
               maradjon a fiókod.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {GOOGLE_LINK_REASON}
             </p>
             <Button
               type="button"
@@ -246,8 +241,7 @@ export function SignInPanel() {
           Belépés Google-fiókkal
         </Button>
         <p className="text-xs text-muted-foreground">
-          Az iskolai Google-fiókoddal (@jedlik.eu vagy @students.jedlik.eu) —
-          ugyanazzal, amivel a leveleidbe is belépsz.
+          @jedlik.eu vagy @students.jedlik.eu
         </p>
       </div>
 
@@ -263,17 +257,14 @@ export function SignInPanel() {
           //! `/sign-in/jedlik` végpont már ELUTASÍTJA az új fiókot — lásd
           //! `auth-jedlik.ts`. Aki még sosem lépett be itt, egy magyarázó
           //! hibaüzenetet kap az űrlap kitöltése után, NEM sikeres belépést.
-          //! A lenti szöveg ezt előre jelzi, hogy erre ne kelljen az
-          //! elutasításból rájönnie. */}
+          //! A cím alatti rövid jelzés ezt előre mutatja. */}
       <div className="flex flex-col gap-3">
         <div>
           <h2 className="text-sm font-medium text-muted-strong">
             Iskolai fiókkal
           </h2>
           <p className="text-xs text-muted-foreground">
-            Ez a belépési mód megszűnőben van: ÚJ fiók vele már nem hozható
-            létre — ha még sosem léptél be, a fenti Google-gombot használd. Ha
-            korábban már volt itt fiókod, ezzel most is be tudsz lépni.
+            Megszűnőben — csak meglévő fiókkal.
           </p>
         </div>
 
@@ -387,10 +378,6 @@ export function SignInPanel() {
               )}
               Belépés ujjlenyomattal
             </button>
-            <p className="text-xs text-muted-foreground">
-              Ha egyszer már beléptél itt, és beállítottad a gyors belépést, nem
-              kell újra begépelned az iskolai jelszavad.
-            </p>
           </div>
         ) : null}
       </div>
