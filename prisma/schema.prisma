@@ -84,11 +84,20 @@ model User {
   //! `false` az alapértelmezés. AD-belépésnél a mezőt CSAK akkor írjuk felül,
   //! ha az iskolai válasz ténylegesen nyilatkozott róla (lásd
   //! `src/lib/jedlik-ad.ts`) — hiányzó adatból nem minősítünk vissza senkit
-  //! tanárból diákká. Google-belépésnél nincs ilyen bizonytalanság: a
-  //! tantestületi cím (`@jedlik.eu`) kontra diákcím (`@students.jedlik.eu`)
-  //! egyértelműen eldönti, és minden belépéskor újraértékelődik (lásd
-  //! `src/lib/auth.ts`, `validateUserInfo`).
+  //! tanárból diákká.
+  //!
+  //! GOOGLE-BELÉPÉSNÉL A DOMAIN NEM ELÉG. A `@students.jedlik.eu` diák, de a
+  //! `@jedlik.eu` címen nem csak tanárok ülnek: ott a Google-névnek szerepelnie
+  //! kell a Jedlikinfo tanárlistájában is (`src/lib/teacher-directory.ts`).
+  //! Minden Google-fiókos munkamenet-létrehozáskor újraértékelődik; ha a lista
+  //! épp nem elérhető, a mező érintetlen marad.
   isTeacher Boolean @default(false)
+
+  //* A tanár neve PONTOSAN úgy, ahogy a Jedlikinfo tanárlistájában áll (nem a
+  //* Google-név) — ez a stabil kulcs a saját tanári órarendhez
+  //* (`resolveTeacher` a `timetable.ts`-ben név szerint is felold).
+  //* `null` = nem tanár, vagy még nem azonosítottuk.
+  teacherName String?
 
   //* Mikor néztük meg utoljára az iskolai rendszerben, hogy az osztály és a
   //* tanár-státusz stimmel-e. Minden jelszavas belépés frissíti; a passkey-s
@@ -110,6 +119,13 @@ model User {
   //* A Better Auth infra `activityTracking` bővítménye írja minden
   //* kérésnél — lásd `src/lib/auth.ts`. `null` = még soha nem járt itt.
   lastActiveAt DateTime?
+
+  //! ─── ÜZEMELTETŐI JOG ─────────────────────────────────────────────────────
+  //! Egyetlen dolgot nyit: a közlemények kezelését (`/admin`). EGYETLEN KÓDÚT
+  //! SEM ÍRJA — sem a belépés, sem a kliens (`input: false`, `src/lib/auth.ts`).
+  //! Kézzel kell beállítani az adatbázisban:
+  //!   UPDATE "user" SET "isAdmin" = true WHERE email = '…@jedlik.eu';
+  isAdmin Boolean @default(false)
 
   sessions        Session[]
   accounts        Account[]
@@ -299,4 +315,46 @@ model ScreenTaskHost {
 
   @@id([userId, teacher, room])
   @@map("screentask_host")
+}
+
+//! ─── KÖZLEMÉNYEK ───────────────────────────────────────────────────────────
+//! Az üzemeltető üzenete a lapon: „a Jedlikinfo nem elérhető", „karbantartás".
+//! Az `/admin` írja, a `/api/kozlemenyek` adja ki MINDENKINEK — tehát ide
+//! semmi nem kerülhet, ami nem nyilvános.
+enum AnnouncementKind {
+  //* Sáv a lap tetején; nem zárható be.
+  BAR
+  //* Buborék, ami addig marad, amíg rá nem kattintanak (a böngésző megjegyzi).
+  TOAST
+  //* Az egész lapot eltakarja — karbantartás, hibás adat.
+  BLOCK
+}
+
+enum AnnouncementTone {
+  INFO
+  WARNING
+  ERROR
+}
+
+model Announcement {
+  id      String           @id @default(cuid())
+  kind    AnnouncementKind
+  tone    AnnouncementTone @default(INFO)
+  title   String?
+  message String
+
+  //! MELYIK LAPOKON. `*` = mindenhol; `/orarend` = pontosan az; `/tanari/*` =
+  //! az és minden alatta. Az illesztés: `src/lib/announcements.ts`.
+  paths String[]
+
+  active   Boolean   @default(true)
+  //* Opcionális időablak; `null` = nincs korlát abban az irányban.
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+  @@map("announcement")
 }

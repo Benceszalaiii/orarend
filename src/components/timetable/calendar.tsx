@@ -1140,12 +1140,24 @@ export function TimetableCalendar({
   //! iskolai héten ezek többnyire üresek — azokat NEM húzzuk a rácsba, különben
   //! minden héten nagy, üres sáv jelenne meg előtte és utána. Csak akkor van
   //! hely a szélén, ha a hét valóban kezdődik/végződik korán vagy későn.
+  //! A MINIMÁLIS TARTOMÁNY viszont mindig az 1–7. óra: ha valakinek egész héten
+  //! csak egy 8. órája van, a rács különben arra az egy sávra zsugorodna, és
+  //! nem lenne mihez viszonyítani, hányadik óráról van szó.
+  const baselinePeriods = periods.filter(
+    (p) => p.number >= 1 && p.number <= 7,
+  );
   const lessonMins = [
     ...lessons.map((l) => l.startMin),
     ...lessons.map((l) => l.endMin),
     ...events.map((e) => e.startMin),
     ...events.map((e) => e.endMin),
   ];
+  if (lessonMins.length) {
+    lessonMins.push(
+      ...baselinePeriods.map((p) => p.startMin),
+      ...baselinePeriods.map((p) => p.endMin),
+    );
+  }
   const dayStart = lessonMins.length
     ? Math.min(...lessonMins) - 6
     : (min(periods.map((p) => p.startMin)) ?? 8 * 60) - 8;

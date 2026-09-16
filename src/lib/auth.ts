@@ -9,6 +9,7 @@ import { isBlockedAuthPath } from "./auth-blocked-paths";
 import { jedlikAd } from "./auth-jedlik";
 import prisma from "./prisma";
 import { schoolRoleForEmail } from "./school-domain";
+import { resolveSchoolIdentity } from "./teacher-directory";
 
 //! ═══════════════════════════════════════════════════════════════════════════
 //! BEJELENTKEZÉS — MIÉRT VAN, ÉS MIÉRT PONT ÍGY
@@ -155,10 +156,33 @@ export const auth = betterAuth({
       },
       //* AD-belépésnél az iskolai válasz mondja meg (és csak akkor írjuk
       //* felül, ha nyilatkozott róla — lásd `jedlik-ad.ts`). Google-belépésnél
-      //* a `validateUserInfo` alatti `databaseHooks.user.create.before` írja,
-      //* a tantestületi (`jedlik.eu`) kontra diák (`students.jedlik.eu`)
-      //* domain alapján.
+      //* a `databaseHooks` írja (`resolveSchoolIdentity`): diákdomain → hamis,
+      //* `jedlik.eu` → csak akkor igaz, ha a név a Jedlikinfo tanárlistájában
+      //* is egyértelműen szerepel. A DOMAIN ÖNMAGÁBAN NEM AD TANÁRI JOGOT.
       isTeacher: {
+        type: "boolean",
+        required: false,
+        input: false,
+        returned: true,
+        defaultValue: false,
+      },
+      //! A TANÁR KANONIKUS NEVE A JEDLIKINFO LISTÁBÓL — nem a Google-név. Ugyanaz
+      //! a védelem, mint az `isTeacher`-nél: `input: false`, a kliens nem
+      //! írhatja, különben egy `/update-user` hívással más tanár órarendjét
+      //! és feedjét nevezhetné meg a sajátjaként. `returned: true`, mert a
+      //! felületnek ebből kell tudnia, melyik tanári órarend a sajátja — de
+      //! csak a SAJÁT neve megy ki, a tanárlista nem.
+      teacherName: {
+        type: "string",
+        required: false,
+        input: false,
+        returned: true,
+      },
+      //! KÖZLEMÉNYKEZELŐ JOG. `input: false` — különben egy `/update-user`
+      //! hívással bárki üzemeltetővé tehetné magát. A `returned` csak a
+      //! menüpont megjelenítésére kell; a jogot a szerver MINDIG az
+      //! adatbázisból ellenőrzi (`requireAdmin`), nem a sütiből.
+      isAdmin: {
         type: "boolean",
         required: false,
         input: false,
@@ -225,9 +249,64 @@ export const auth = betterAuth({
         //! `Awaitable`-lel megelégszik szinkron visszatéréssel is, ez a hook
         //! nem, tehát ez itt NEM stilisztikai, hanem fordítási kényszer.
         before: async (user) => {
-          const role = schoolRoleForEmail(user.email);
-          if (!role) return;
-          return { data: { ...user, isTeacher: role === "teacher" } };
+          //* A `user.name` itt a Google-profil neve (új OAuth-fióknál ebből
+          //* születik a sor). AD-fióknál a cím `@jedlik-ad.invalid`, a válasz
+          //* `null`, tehát a `directoryData` `isTeacher`-je érintetlen marad.
+          const fields = await resolveSchoolIdentity({
+            email: user.email,
+            name: user.name,
+          });
+          if (!fields) return;
+          return { data: { ...user, ...fields } };
+        },
+      },
+    },
+
+    //! ─── MEGLÉVŐ FIÓKOK: ÚJRAÉRTÉKELÉS MINDEN BELÉPÉSKOR ────────────────────
+    //! A `user.create.before` csak az ELSŐ belépésnél fut. Aki a
+    //! domain-alapú szabály idején kapott `isTeacher`-t, vagy akit azóta
+    //! vettek fel a tanárlistába, annál a következő belépéskor kell
+    //! helyrehozni. A Better Auth OAuth-belépése (és a passkey is) minden
+    //! alkalommal munkamenetet hoz létre — ez az egyetlen közös pont, ahol a
+    //! felhasználót módosítani lehet; a `validateUserInfo` csak kapu.
+    //!
+    //! NEM MINŐSÍT VISSZA OK NÉLKÜL: AD-fiókot nem érint (nem iskolai Google-
+    //! cím), a lista elérhetetlenségénél nem ír, és csak eltérés esetén ír.
+    //! A tényleges „nincs a listán" viszont OK: épp ez a javítás lényege.
+    //!
+    //! ISMERT KÉSÉS: a munkamenet-süti gyorsítótára (`cookieCache`, 5 perc) még
+    //! az írás ELŐTTI felhasználót hordozhatja — a változás legfeljebb ennyivel
+    //! később látszik a felületen. Új fióknál nincs késés (ott a `create` hook
+    //! már helyesen írt).
+    session: {
+      create: {
+        before: async (session, ctx) => {
+          if (!ctx) return;
+          try {
+            const adapter = ctx.context.internalAdapter;
+            const user = (await adapter.findUserById(session.userId)) as
+              | ({ email: string; name: string } & Record<string, unknown>)
+              | null;
+            if (!user || !schoolRoleForEmail(user.email)) return;
+            const fields = await resolveSchoolIdentity({
+              email: user.email,
+              name: user.name,
+            });
+            if (!fields) return;
+            if (
+              user.isTeacher === fields.isTeacher &&
+              (user.teacherName ?? null) === fields.teacherName
+            ) {
+              return;
+            }
+            await adapter.updateUser(user.id as string, fields);
+          } catch (error) {
+            //! A belépést NEM akasztjuk meg emiatt: a mező marad, ami volt.
+            ctx.context.logger.error(
+              "[teacher] újraértékelés sikertelen",
+              error,
+            );
+          }
         },
       },
     },

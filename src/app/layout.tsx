@@ -4,6 +4,7 @@ import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Geist } from "next/font/google";
+import { Announcements } from "@/components/announcements";
 import { AppearanceScript } from "@/components/appearance/appearance-script";
 import { ThemeStyle } from "@/components/appearance/theme-style";
 import { CalendarSync } from "@/components/calendar-sync";
@@ -128,6 +129,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             //! `components/appearance/theme-style.tsx`). Aki nem választott,
             //! annál ez `null`-t ad: se lekérés, se beágyazott stílus. */}
         <ThemeStyle />
+
+        {/*//! AZ ÜZEMELTETŐ KÖZLEMÉNYEI (`/admin`). A tartalom ELŐTT, hogy a sáv
+            //! a lap tetején álljon; a buborék és a teljes lapos hiba `fixed`. */}
+        <Announcements />
 
         {children}
 
