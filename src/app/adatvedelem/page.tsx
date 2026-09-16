@@ -27,7 +27,7 @@ export default function AdatvedelemPage() {
           Adatvédelmi tájékoztató
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Utolsó frissítés: 2026. szeptember 7.
+          Utolsó frissítés: 2026. szeptember 16.
         </p>
 
         <div className="mt-8 flex flex-col gap-8 text-sm leading-relaxed text-muted-strong">
@@ -420,6 +420,36 @@ export default function AdatvedelemPage() {
               kliens felét (ami képernyő-, betűkészlet- és hardveradatokból
               azonosítana egy eszközt) — ez nem illene ahhoz, amit ez az oldal a
               diákok adatairól vállal.
+            </p>
+            {/*//! A `dash({ activityTracking })` ÉS AZ `admin()` BŐVÍTMÉNY A
+                //! FIÓK SORÁBA ÍR — ez nem esemény a Better Auth felé, hanem
+                //! nálunk tárolt adat, ezért külön kell kimondani. A
+                //! megszemélyesítést különösen: az üzemeltető a diák nevében
+                //! láthatja a lapot, és ezt a diáknak tudnia kell. */}
+            <p>
+              A fiókodhoz a keretrendszer két további adatot is tárol. Az egyik,
+              hogy{" "}
+              <span className="font-medium text-foreground">
+                mikor használtad utoljára az oldalt
+              </span>{" "}
+              bejelentkezve (egyetlen időpont, amely minden módosító kérésnél
+              felülíródik — előzményt nem őrzünk belőle). A másik a fiók
+              kezeléséhez tartozó mezők: a szerepköröd, és ha a fiókot
+              visszaélés miatt letiltjuk, a letiltás ténye, oka és lejárata. A
+              letiltott fiókkal nem lehet belépni; az órarend ettől még
+              bejelentkezés nélkül ugyanúgy használható.
+            </p>
+            <p>
+              Az üzemeltető hibakereséshez{" "}
+              <span className="font-medium text-foreground">
+                beléphet a fiókodba a te nevedben
+              </span>{" "}
+              (megszemélyesítés), legfeljebb egy órára, hogy lássa, amit te
+              látsz. Ehhez a jelszavadra nincs szüksége, és nem is ismeri meg.
+              Az ilyen munkamenet mellé feljegyezzük, melyik üzemeltető
+              indította, és a belépési eseményekkel együtt a Better Auth
+              naplójába is bekerül. Erre kizárólag az üzemeltető kézzel kijelölt
+              fiókja képes.
             </p>
             <p>
               Bővebben:{" "}
