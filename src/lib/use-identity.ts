@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { DEFAULT_IDENTITY, type Identity, loadIdentity } from "./identity";
 import { onPrefsChanged } from "./prefs-events";
 
-//! A TÁROLT ALANY, ÚTVONAL NÉLKÜL. A `chrome/standing-line.tsx` saját
+//! A TÁROLT ALANY, ÚTVONAL NÉLKÜL. A `chrome/pill-nav.tsx` saját
 //! `useIdentity`-je ELŐSZÖR az útvonalat kérdezi (`/orarend` → diák,
 //! `/tanari` → tanár), és csak utána a tárolót — neki a sáv MINDEN lapon
 //! helyes cellát kell mutasson. A `/ma` viszont EGY útvonal mindkét alanynak:

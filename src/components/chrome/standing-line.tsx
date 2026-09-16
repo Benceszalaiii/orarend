@@ -5,14 +5,11 @@ import {
   ChevronLeft,
   ChevronRight,
   DoorOpen,
-  GraduationCap,
   House,
-  type LucideIcon,
   ShieldCheck,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { AccountMenu } from "@/components/account-menu";
 import { AppearanceMenu } from "@/components/appearance/appearance-menu";
@@ -23,16 +20,9 @@ import {
   sheetItem,
 } from "@/components/chrome/chrome-sheet";
 import { MenuVisibilityMenu } from "@/components/chrome/menu-visibility";
+import { PillNav } from "@/components/chrome/pill-nav";
 import { RailTips } from "@/components/chrome/rail-tips";
-import {
-  DEFAULT_IDENTITY,
-  type Identity,
-  loadIdentity,
-  saveIdentity,
-  weekRouteFor,
-} from "@/lib/identity";
 import { isViewRoute, saveLastView } from "@/lib/last-view";
-import { onPrefsChanged } from "@/lib/prefs-events";
 import { useHiddenMenu } from "@/lib/use-hidden-menu";
 import { cn } from "@/lib/utils";
 
@@ -66,8 +56,8 @@ import { cn } from "@/lib/utils";
 //! beállítások gyakoriság szerint vannak sorba rakva.
 //!
 //! MIÉRT NEM TUD ÚJRA TÚLCSORDULNI. A sor csonkul (`min-w-0` + `truncate`), a
-//! jobb oldali csoport pedig FIX: a négycellás váltó (~151 px, lásd
-//! `ViewMatrix`) és — ahol nincs lap — a fiók (44 px). 375 px-en a sornak
+//! jobb oldali csoport pedig FIX: a folyékony váltó (~165 px, lásd
+//! `PillNav`) és — ahol nincs lap — a fiók (44 px). 375 px-en a sornak
 //! marad ~192 px, fiókkal együtt is ~148. Rajta kívül semmi nem `shrink-0`,
 //! tehát a fejléc szélessége a lapok számától független marad.
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -81,76 +71,7 @@ import { cn } from "@/lib/utils";
 export const SITE_BAR_MAX = "max-w-[120rem]";
 export const SITE_BAR_METRICS = "gap-x-2 px-3 sm:gap-x-3 sm:px-4";
 
-//! ─── A VÁLTÓ — KIÉ ÉS MELYIK, EGY TÁRGYBAN ────────────────────────────────
-//! A KÉT KÉRDÉS MERŐLEGES, DE NEM FÜGGETLEN — EZ AZ, AMIT AZ ELŐZŐ VÁLTOZAT
-//! ELVÉTETT. Ott az alany a LAPBA került („Kit nézel"), a nézetek a SÁVBAN
-//! maradtak, abból az érvből, hogy a diák az alanyhoz soha nem nyúl. Az érv
-//! igaz, a következtetés nem: attól, hogy ritkán állítod, még ugyanannak a
-//! címnek a másik fele. „13C hete" és „Kovács B. hete" ugyanaz a mondat két
-//! alannyal. Ha a mondat egyik fele a sávban áll, a másik meg egy koppintás
-//! mögött, akkor a diák nem CÍMET lát, hanem két különálló vezérlőt — és a
-//! „Hét" pirulán nem látszik, hogy két különböző lapra visz.
-//!
-//! EZÉRT EGY TOK, KÉT SZAKASZ. Hajszálvonaltól balra: KIÉ (Diák / Tanár).
-//! Jobbra: MELYIK (Hét / Ma). Négy cella, két tengely, egy tárgy — az a
-//! mátrix, amit a felület eddig két helyen tárolt, most kimondva látszik.
-//!
-//! A SÚLY A TOKON BELÜL KÜLÖNBÖZIK, ÉS EZ SZÁNDÉKOS. Az alany félévente
-//! változik, a nézet naponta többször: telefonon ezért az alany IKON, a nézet
-//! SZÓ. Egy tokba zárva sem lesznek egyenrangúak — csak összetartozók. `sm`-től
-//! az ikon mellé a szó is kifér, és akkor négy nevesített cella áll ott.
-//!
-//! MIÉRT NEM CSORDUL TÚL EZZEL SEM. 375 px-en a tok ~151 px (két 30 px-es
-//! ikoncella + 9 px válaszfal + „Hét" 42 + „Ma" 38 + belső margó), a sornak
-//! marad ~192 px — a régi 92 px-es nézetváltóhoz képest 59 px az ára. A tok
-//! `shrink-0`, a sor csonkul: a szerkezeti biztosíték változatlan, és a sor
-//! ebből még mindig kimondja az alanyt és a hét felét („13C · aug. 31 – s…").
-//!
-//! A NEGYEDIK CELLA MOST MÁR VAN, ÉS NEM ÚJ ÚTVONALON. Az alany tárolt
-//! beállítás (`lib/identity.ts`), nem útvonalrész; a `/ma` abból dolgozik.
-//! A mátrix ezért jelentésben nőtt teljessé, nem címtérben.
-type ViewId = "week" | "today";
-
-const VIEWS: readonly { id: ViewId; label: string; title: string }[] = [
-  { id: "week", label: "Hét", title: "A teljes heti órarend" },
-  { id: "today", label: "Ma", title: "A mai nap egy képernyőn" },
-];
-
-//* A tanári rács ugyanaz a NÉZET, más alannyal — ezért ő is a „Hét"-et
-//* világítja meg. Ami nincs a táblázatban (nyitólap, designlap), ott egyik
-//* cella sem aktív: ott nem nézed egyik nézetet sem, csak elérheted őket.
-const VIEW_OF: Record<string, ViewId> = {
-  "/orarend": "week",
-  "/tanari": "week",
-  "/ma": "today",
-};
-
-const IDENTITIES: readonly {
-  id: Identity;
-  label: string;
-  title: string;
-  icon: LucideIcon;
-}[] = [
-  {
-    id: "class",
-    label: "Diák",
-    title: "Osztály órarendje",
-    icon: Users,
-  },
-  {
-    id: "teacher",
-    label: "Tanár",
-    title: "Tanár órarendje",
-    icon: GraduationCap,
-  },
-];
-
-//* Az útvonal, ahol az alanyra maga a cím válaszol. A `/ma` szándékosan nincs
-//* benne: az EGY útvonal mindkét alanynak (lásd `lib/identity.ts`).
-const IDENTITY_OF: Record<string, Identity> = {
-  "/orarend": "class",
-  "/tanari": "teacher",
-};
+//! A VÁLTÓ (KIÉ ÉS MELYIK, EGY TÁRGYBAN) SAJÁT FÁJLBAN ÁLL: `chrome/pill-nav.tsx`.
 
 //! ─── A LAP CSAK OTT VAN, AHOL KELL ────────────────────────────────────────
 //! A LAPOT EGY 375 PX-ES MÉRÉS SZÜLTE, ÉS ELŐSZÖR MINDEN MÉRETRE ÉRVÉNYES
@@ -311,7 +232,7 @@ export function StandingLine({
         {/*//! A KÉT MELLÉKLAP A NYITÓLAP ALÁ KERÜL, NEM A VÁLTÓBA. Az ügyelet
             //! és a teremkereső NEM ugyanarra az adatra néző NÉZET — nem az a
             //! kérdés, kinek és melyik hetét mutatják, hanem az iskoláról
-            //! mondanak valamit, amit az órarend rácsa nem tud. A `ViewMatrix`
+            //! mondanak valamit, amit az órarend rácsa nem tud. A `PillNav`
             //! négy cellája pont attól olvasható tengelynek, hogy CSAK az
             //! alany és a nézet van benne; egy ötödik-hatodik cella
             //! visszahozná a régi, rendezetlen pirulasort.
@@ -548,7 +469,7 @@ export function StandingLine({
           //! BIZTOSÍTÉK. Két pirula és a fiók — se harang, se osztályválasztó,
           //! se nyitólap-ikon. Ami kimaradt, az a lapban van, névvel kiírva. */}
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <ViewMatrix floating={floating} />
+          <PillNav floating={floating} />
           {/*//! A FIÓK NEM NÉZET, ÉS NEM IS A NÉZETEK TESTVÉRE. A belépésnek
             //! ebben az alkalmazásban EGYETLEN haszna van: átviszi a
             //! beállításokat a másik készülékre (lásd `account-menu.tsx` —
@@ -634,170 +555,6 @@ const STEP =
 //! előbb-utóbb elcsúszna — és pont a szélessége a lényeg.
 const RETURN_PILL =
   "shrink-0 touch-target rounded-full px-2.5 py-1 text-xs font-semibold";
-
-//! ─── A NÉGY CELLA ─────────────────────────────────────────────────────────
-//! MIND A NÉGY UGYANAZT A CELLÁT VISELI, ÉS EZ TARTJA ÖSSZE A TOKOT. Ha az
-//! alany más alakot kapna, mint a nézet, a hajszálvonal két IDEGEN vezérlőt
-//! választana el, nem egy tárgy két felét. Egy alak, egy aktív állapot: a
-//! különbséget a tartalom hordozza (ikon kontra szó), nem a stílus.
-//! `py-2`, NEM `py-1` — ÉS EZ MÉRT HIBAJAVÍTÁS. A régi nézetpirula 22 px
-//! magas volt, vagyis a WCAG 2.5.8 24 px-es alsó határa ALATT: két pirulánál
-//! ez épp csak megúszható volt, négynél már nem az. A sor 44 px, a tok
-//! `p-0.5` — a magasabb cella ingyen van, a sáv egy képponttal sem nő tőle.
-const CELL =
-  "flex items-center gap-1.5 rounded-full py-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none";
-const CELL_ON = "bg-foreground text-background";
-const CELL_OFF = "text-muted-strong hover:bg-muted hover:text-foreground";
-
-//! AZ ALANYRA ELŐSZÖR AZ ÚTVONAL VÁLASZOL, ÉS CSAK UTÁNA A TÁROLÓ. Az
-//! `/orarend` és a `/tanari` MAGA a válasz — ott a tárolót megkérdezni annyi
-//! lenne, mint nyitott ajtón kopogni, és egy lassú `localStorage`-olvasás
-//! villanásnyi rossz cellát is villantana. A `/ma` viszont EGY útvonal
-//! mindkét alanynak: ott a tárolt érték az egyetlen forrás.
-function useIdentity(pathname: string): Identity {
-  const routed = IDENTITY_OF[pathname] ?? null;
-  const [stored, setStored] = useState<Identity>(DEFAULT_IDENTITY);
-
-  //* Kiszolgálón és az első képkockán az alapértelmezés fut — így a
-  //* hidratálás nem talál eltérést (ugyanaz a minta, mint `useWideChrome`).
-  useEffect(() => {
-    const sync = () => setStored(loadIdentity() ?? DEFAULT_IDENTITY);
-    sync();
-    return onPrefsChanged(sync);
-  }, []);
-
-  //! AZ ÚTVONAL VISSZA IS ÍR. Aki könyvjelzőről érkezik a `/tanari`-ra, attól
-  //! még tanár: enélkül a „Ma"-ra lépve a saját napja helyett egy osztályét
-  //! kapná. A `saveIdentity` változatlan értéknél nem ír és nem is jelez,
-  //! ezért ez az írás akkor sem duplázódik, ha a lap maga is beállítja.
-  useEffect(() => {
-    if (routed) saveIdentity(routed);
-  }, [routed]);
-
-  return routed ?? stored;
-}
-
-//! ─── A VÁLTÓ ──────────────────────────────────────────────────────────────
-//! EGY TOK, KÉT NEVESÍTETT CSOPORT. Vizuálisan egy tárgy; a
-//! képernyőolvasónak két csoport, mert két KÉRDÉS — „Kit nézel" és „Nézetek".
-//! Egyetlen közös néven a négy cella egyetlen listának hallatszana, és
-//! visszajönne pontosan az az összemosás, ami elől a mátrix megszületett.
-function ViewMatrix({ floating }: { floating: boolean }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const identity = useIdentity(pathname);
-  const activeView = VIEW_OF[pathname] ?? null;
-
-  //! A „HÉT" KÉT KÜLÖNBÖZŐ LAP, ÉS EZ A LEKÉPEZÉS EGY HELYEN ÁLL
-  //! (`weekRouteFor`). Enélkül minden hívó a maga módján találgatna, hogy a
-  //! tanári hét a `/tanari` — és a nyitólap váltója már ma is tévedne.
-  const weekHref = weekRouteFor(identity);
-
-  const pickIdentity = (next: Identity) => {
-    if (next === identity) return;
-    saveIdentity(next);
-    //! CSAK A HETES RÁCS UGRIK ÁT. A „Hét" két útvonal a két alanynak, ezért
-    //! ott az alanyváltás egyben lapváltás. A „Ma" EGY útvonal mindkettőnek:
-    //! oda navigálni azt jelentené, hogy a nézet is változott — pedig épp az
-    //! maradt. A lap a `notifyPrefsChanged` jelére épül újra a helyén.
-    if (activeView === "week") router.push(weekRouteFor(next));
-  };
-
-  return (
-    <div
-      className={cn(
-        "flex shrink-0 items-center rounded-full",
-        floating ? "p-0" : "border border-input p-0.5 dark:bg-input/30",
-      )}
-    >
-      {/*//! AZ ALANY IKONNAL ÁLL A TELEFONON, ÉS EZ NEM SPÓROLÁS. A felirat
-          //! `sm` alatt `sr-only`: a gomb OLVASÓNEVE végig „Diák", illetve
-          //! „Tanár" marad, csak a szem nem kapja meg. A szemnek nem is kell:
-          //! az alany NEVE közvetlenül mellette áll a sorban („13C" vagy
-          //! „Kovács B."), tehát az ikonpár nem egyedül viszi a jelentést.
-          //*
-          //! A CSOPORT NEVE NEM „KIT NÉZEL", PEDIG KÍNÁLTA MAGÁT. Az a lap
-          //! egyik szakaszának a CÍME — és ott most már az ALANY NEVÉT kérdezi
-          //! (melyik osztályt, melyik tanárt). Két azonos nevű csoport egy
-          //! képernyőn, más tartalommal: a képernyőolvasón ez ugyanaz a
-          //! kérdés kétszer, két külön válasszal. Itt a TENGELY áll, ott az
-          //! ÉRTÉK — a két név ezért különbözik. */}
-      {/*//! NEM `<fieldset>`, ÉS A LINTER ITT TÉVED. A `fieldset` űrlapmezőket
-          //! fog össze; ez a kettő nem mező, hanem két kapcsológomb
-          //! (`aria-pressed`), és semmilyen űrlap nem küldi el őket. Ráadásul
-          //! a `fieldset` alapértelmezett `min-inline-size: min-content`-je a
-          //! flexben pont azt a zsugorodást akadályozná meg, amire a tok
-          //! túlcsordulás-biztosítéka épül. A `role="group"` + `aria-label` a
-          //! pontos leírás: egy nevesített csoport, nem egy űrlaprészlet. */}
-      {/* biome-ignore lint/a11y/useSemanticElements: kapcsológombok csoportja, nem űrlapmezőké */}
-      <div
-        role="group"
-        aria-label="Kié az órarend"
-        className="flex items-center"
-      >
-        {IDENTITIES.map((option) => {
-          const active = identity === option.id;
-          const Icon = option.icon;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={active}
-              title={option.title}
-              onClick={() => pickIdentity(option.id)}
-              className={cn(
-                CELL,
-                "px-2 sm:px-2.5",
-                active ? CELL_ON : CELL_OFF,
-              )}
-            >
-              <Icon aria-hidden className="size-3.5 shrink-0" />
-              <span className="max-sm:sr-only">{option.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/*//! A VÁLASZFAL EGY TENGELYT VÁLASZT EL, NEM KÉT GOMBOT. Ugyanaz a
-          //! gondolat, mint a `.chrome-rail hr`-jénél: a csoporthatár LÁTSZIK
-          //! is, különben a négy cella egyetlen szalaggá olvad, és a diák azt
-          //! hiszi, hogy egyszerre csak egy lehet aktív közülük — holott
-          //! MINDIG kettő az, tengelyenként egy.
-          //*
-          //! CSOPORTON BELÜL VISZONT NINCS HÉZAG, ÉS EZ NEM SPÓROLÁS. A
-          //! kitöltött cella maga a határ (ugyanaz a szegmensvezérlő-nyelv,
-          //! amit a `DayStrip` is beszél): ahol a hézag ELVÁLASZTANA, ott a
-          //! válaszfal van, ahol pedig összetartozást kell mutatni, ott a
-          //! cellák érnek egymáshoz. Mellékesen 8 px-et ad vissza a sornak,
-          //! ami 375 px-en épp a dátum második fele („– szept. 4."). */}
-      <span
-        aria-hidden
-        className={cn(
-          "mx-0.5 h-4 w-px shrink-0",
-          floating ? "bg-white/20" : "bg-border",
-        )}
-      />
-
-      <nav aria-label="Nézetek" className="flex items-center">
-        {VIEWS.map((view) => (
-          <Link
-            key={view.id}
-            href={view.id === "today" ? "/ma" : weekHref}
-            title={view.title}
-            aria-current={activeView === view.id ? "page" : undefined}
-            className={cn(
-              CELL,
-              "px-2.5",
-              activeView === view.id ? CELL_ON : CELL_OFF,
-            )}
-          >
-            {view.label}
-          </Link>
-        ))}
-      </nav>
-    </div>
-  );
-}
 
 //! ─── A SOR MAGA ───────────────────────────────────────────────────────────
 //! EZ EGYSZERRE CÍM, ÁLLAPOT ÉS KAPU. Az alany a lap CÍME (ezért `h1`-súlyú
