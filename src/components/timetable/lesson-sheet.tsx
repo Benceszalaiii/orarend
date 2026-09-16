@@ -303,6 +303,7 @@ function LessonBody({
         <LessonExtrasSection
           teacher={mode === "teacher" ? viewedShort : lesson.teacherShort}
           subject={lesson.subjectShort || lesson.subject}
+          classes={mode === "teacher" ? [lesson.classShort] : [viewedShort]}
           rooms={rooms}
         />
 

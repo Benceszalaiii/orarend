@@ -466,8 +466,8 @@ export default function AdatvedelemPage() {
                 //! általános mondat alá sorolni. */}
             <p>
               Az órákhoz mentett linkek és a tanári kivetítő (ScreenTask) címe
-              bejelentkezés nélkül szintén csak ebben a helyi tárolóban
-              maradnak (
+              bejelentkezés nélkül szintén csak ebben a helyi tárolóban maradnak
+              (
               <span className="font-medium text-foreground">
                 orarend:lesson-extras:v1
               </span>
@@ -476,6 +476,15 @@ export default function AdatvedelemPage() {
               feltöltjük a fiókodba, és a készülékről töröljük. A kivetített
               képet a böngésződ közvetlenül a tanári gépről tölti le a helyi
               hálózaton; az a mi szerverünkön soha nem halad át.
+            </p>
+            {/*//! A TANÁR ÁLTAL BEÁLLÍTOTT SOROK NYILVÁNOSAK — ezt a tanárnak
+                //! tudnia kell, mielőtt felteszi (`/api/kozos-kiegeszitok`). */}
+            <p>
+              A tanárok által beállított sorok ettől eltérnek: egy terem
+              kivetítőjének címét és a tanár óráihoz feltett linkeket bárki
+              láthatja, aki megnyitja az órarendet, belépés nélkül is. Ezeket
+              csak belépett tanár módosíthatja; azt, hogy ki állította be, nem
+              tesszük közzé.
             </p>
             {/*//! EZT KI KELL MONDANI, MERT ITT EGY SÜTI VAN. A többi
                 //! beállítás a böngésző helyi tárolójában marad, és a

@@ -1,8 +1,21 @@
 "use client";
 
-import { AlertTriangle, Info, OctagonAlert, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  DoorOpen,
+  House,
+  Info,
+  OctagonAlert,
+  RotateCw,
+  ShieldCheck,
+  Sun,
+  X,
+} from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   type AnnouncementTone,
   appliesTo,
@@ -68,6 +81,18 @@ const BAR_TONE: Record<AnnouncementTone, string> = {
   ERROR: "bg-destructive text-destructive-foreground",
 };
 
+//! ─── KIUTAK A TELJES LAPOS HIBÁBÓL ─────────────────────────────────────────
+//! A letiltott lapon nem látszik a fejléc, tehát a diák ne ragadjon ott: a lap
+//! többi része (amit nem tilt le közlemény) egy kattintásra elérhető. Ugyanazok
+//! a feliratok, mint a fejléc lapjában (`chrome/standing-line.tsx`).
+const ESCAPE_ROUTES = [
+  { href: "/orarend", label: "Órarend", icon: CalendarDays },
+  { href: "/ma", label: "Mai nap", icon: Sun },
+  { href: "/ugyelet", label: "Ügyelet", icon: ShieldCheck },
+  { href: "/teremkereso", label: "Teremkereső", icon: DoorOpen },
+  { href: "/home", label: "Nyitólap", icon: House },
+] as const;
+
 const ICON_TONE: Record<AnnouncementTone, string> = {
   INFO: "text-primary",
   WARNING: "text-amber-500",
@@ -116,9 +141,16 @@ export function Announcements() {
   const toasts = here.filter(
     (a) => a.kind === "TOAST" && !dismissed.has(dismissKey(a)),
   );
-  const block = isBlockExempt(pathname)
-    ? undefined
-    : here.find((a) => a.kind === "BLOCK");
+  const blockAt = (path: string) =>
+    isBlockExempt(path)
+      ? undefined
+      : items.find((a) => a.kind === "BLOCK" && appliesTo(a, path));
+  const block = blockAt(pathname);
+  //* Csak oda vezetünk, ahol nem ugyanez a fal várja — egy `*`-os
+  //* karbantartásnál ez üres lista, és csak az újratöltés marad.
+  const escapes = ESCAPE_ROUTES.filter(
+    (route) => route.href !== pathname && !blockAt(route.href),
+  );
 
   return (
     <>
@@ -183,15 +215,17 @@ export function Announcements() {
         </div>
       )}
 
-      {block && <BlockScreen announcement={block} />}
+      {block && <BlockScreen announcement={block} escapes={escapes} />}
     </>
   );
 }
 
 function BlockScreen({
   announcement: a,
+  escapes,
 }: {
   announcement: PublicAnnouncement;
+  escapes: readonly (typeof ESCAPE_ROUTES)[number][];
 }) {
   const Icon = TONE_ICON[a.tone];
 
@@ -227,6 +261,35 @@ function BlockScreen({
         >
           {a.message}
         </p>
+
+        {escapes.length > 0 && (
+          <nav aria-label="Az oldal többi része" className="mt-8 w-full">
+            <p className="text-xs font-medium text-muted-foreground">
+              Addig ezeket használhatod:
+            </p>
+            <ul className="mt-3 flex flex-wrap justify-center gap-2">
+              {escapes.map(({ href, label, icon: RouteIcon }) => (
+                <li key={href}>
+                  <Button asChild variant="outline" className="h-10 px-4">
+                    <Link href={href}>
+                      <RouteIcon aria-hidden />
+                      {label}
+                    </Link>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
+
+        <Button
+          variant="ghost"
+          className="mt-4 h-10 px-4 text-muted-foreground"
+          onClick={() => window.location.reload()}
+        >
+          <RotateCw aria-hidden />
+          Újratöltés
+        </Button>
       </div>
     </div>
   );

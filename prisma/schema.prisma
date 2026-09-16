@@ -127,12 +127,14 @@ model User {
   //!   UPDATE "user" SET "isAdmin" = true WHERE email = '…@jedlik.eu';
   isAdmin Boolean @default(false)
 
-  sessions        Session[]
-  accounts        Account[]
-  passkeys        Passkey[]
-  preference      Preference?
-  lessonLinks     LessonLink[]
-  screenTaskHosts ScreenTaskHost[]
+  sessions           Session[]
+  accounts           Account[]
+  passkeys           Passkey[]
+  preference         Preference?
+  lessonLinks        LessonLink[]
+  screenTaskHosts    ScreenTaskHost[]
+  classroomScreens   ClassroomScreen[]
+  teacherLessonLinks TeacherLessonLink[]
 
   @@unique([email])
   @@map("user")
@@ -315,6 +317,65 @@ model ScreenTaskHost {
 
   @@id([userId, teacher, room])
   @@map("screentask_host")
+}
+
+//! ─── A TEREM KIVETÍTŐJE — KÖZÖS, A TANÁR ÁLLÍTJA BE ─────────────────────────
+//! A `ScreenTaskHost` diákonként külön tárolta a címet: minden diák maga gépelte
+//! be ugyanazt az IP-t, minden teremben, minden tanárnál. Ez a tábla ezt váltja:
+//! EGY SOR EGY TEREM. A tanári gép a teremben áll — a cím a teremhez tartozik,
+//! nem ahhoz, aki épp vetít.
+//!
+//! BÁRMELYIK TANÁR ÁTÍRHATJA, NEM CSAK AKI FELVETTE. Ha a gép új IP-t kap, az
+//! első tanár, aki észreveszi, kijavítja — és onnantól mindenkinek jó. Diák
+//! NEM írhatja (`requireTeacher`, `src/lib/classroom-store.ts`).
+//!
+//! NYILVÁNOS ADAT: a `/api/kozos-kiegeszitok` mindenkinek kiadja, belépés
+//! nélkül is. Csak helyi hálózati cím kerülhet ide (`sanitizeScreenHost`), ami
+//! az iskola hálózatán kívülről semmit nem ér.
+model ClassroomScreen {
+  //* A terem jele `extrasKey` alakban (kisbetűs, összevont szóköz).
+  room String @id
+  host String
+  port Int    @default(7070)
+
+  //* Ki írta utoljára. Törölt fióknál `null`, a cím marad — a terem gépe
+  //* nem tűnik el attól, hogy a tanár fiókja megszűnt.
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt
+
+  @@index([updatedById])
+  @@map("classroom_screen")
+}
+
+//! ─── A TANÁR LINKJEI AZ ÓRÁIHOZ ────────────────────────────────────────────
+//! Classroom-kurzus, Teams-csoport, feladatlap — amit a TANÁR tesz fel, és az
+//! óráján minden diák látja, belépés nélkül is. A diák saját könyvjelzői
+//! (`LessonLink`) mellette megmaradnak.
+//!
+//! CSAK AZ ÓRA SAJÁT TANÁRA ÍRHATJA. A kulcs a tanár JELE; a szerver a belépett
+//! tanár nevét a Jedlikinfo tanárlistájában jellé oldja, és csak akkor enged
+//! írni, ha az egyezik (`src/lib/classroom-store.ts`).
+//!
+//! OSZTÁLYRA SZŰKÍTHETŐ. Ugyanaz a tanár ugyanazt a tárgyat több osztálynak
+//! tanítja, és osztályonként más a Classroom-kurzus. Üres `classes` = a tárgy
+//! minden órája, bármelyik osztályban.
+model TeacherLessonLink {
+  id      String   @id @default(cuid())
+  teacher String
+  subject String
+  classes String[]
+  //* Csak `http`/`https` — a szerver ellenőrzi (`sanitizeLinkUrl`).
+  url     String
+  label   String?
+
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([teacher, subject])
+  @@index([createdById])
+  @@map("teacher_lesson_link")
 }
 
 //! ─── KÖZLEMÉNYEK ───────────────────────────────────────────────────────────

@@ -279,3 +279,77 @@ export function screenFor(
   if (!t || !r) return null;
   return extras.screens.find((s) => s.teacher === t && s.room === r) ?? null;
 }
+
+//* ---------------------------------------------------------------------------
+//* KÖZÖS SOROK — A TANÁR ÁLLÍTJA BE, MINDENKI LÁTJA
+//* ---------------------------------------------------------------------------
+//! A fenti sorok a diák SAJÁT könyvjelzői. Ezek a tanáréi: a terem kivetítőjének
+//! címe (TEREMHEZ kötve, bármelyik tanár átírhatja) és a tanár linkjei az
+//! óráihoz (a tanár JELÉHEZ kötve, csak ő írhatja). Lásd `prisma/schema.prisma`
+//! és `/api/kozos-kiegeszitok`.
+
+export const MAX_TEACHER_LINKS_PER_LESSON = 12;
+export const MAX_TEACHER_LINKS_PER_TEACHER = 200;
+const MAX_CLASSES_PER_LINK = 20;
+
+export type SharedScreen = ScreenAddress & { room: string; updatedAt: string };
+
+export type TeacherLink = {
+  id: string;
+  teacher: string;
+  subject: string;
+  //* Üres = a tárgy minden órája, bármelyik osztályban.
+  classes: string[];
+  url: string;
+  label: string | null;
+  createdAt: string;
+};
+
+export type SharedExtras = { screens: SharedScreen[]; links: TeacherLink[] };
+
+//! AZ OSZTÁLY-MEZŐ TÖBB OSZTÁLYT IS HORDHAT. Összevont órán a forrás egy
+//! kártyán adja az osztályokat („09A, 09B"), az osztály nézetében viszont csak
+//! a nézett osztály jele van meg. Szétbontva mindkét oldal ugyanazokra a
+//! kulcsokra jut.
+export function classKeys(value: unknown): string[] {
+  const parts = (Array.isArray(value) ? value : [value]).flatMap((item) =>
+    typeof item === "string" ? item.split(/[,;/]+/) : [],
+  );
+  const keys = new Set<string>();
+  for (const part of parts) {
+    const key = extrasKey(part);
+    if (key) keys.add(key);
+    if (keys.size >= MAX_CLASSES_PER_LINK) break;
+  }
+  return [...keys];
+}
+
+export function sharedScreenFor(
+  shared: SharedExtras,
+  room: string,
+): SharedScreen | null {
+  const r = extrasKey(room);
+  if (!r) return null;
+  return shared.screens.find((s) => s.room === r) ?? null;
+}
+
+//* Egy óra tanári linkjei: azonos tanár + tárgy, és vagy minden osztályé, vagy
+//* legalább egy közös osztály az órával. Osztály nélküli órán (nem tudjuk,
+//* kié) csak a minden osztálynak szóló linkek látszanak.
+export function teacherLinksFor(
+  shared: SharedExtras,
+  teacher: string,
+  subject: string,
+  classes: string[],
+): TeacherLink[] {
+  const t = extrasKey(teacher);
+  const s = extrasKey(subject);
+  if (!t || !s) return [];
+  const wanted = classKeys(classes);
+  return shared.links.filter(
+    (l) =>
+      l.teacher === t &&
+      l.subject === s &&
+      (l.classes.length === 0 || l.classes.some((c) => wanted.includes(c))),
+  );
+}

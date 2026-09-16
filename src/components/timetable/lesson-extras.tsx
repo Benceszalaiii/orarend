@@ -3,8 +3,10 @@
 import {
   Cast,
   ExternalLink,
+  GraduationCap,
   Link2,
   LogIn,
+  Maximize2,
   Pencil,
   Plus,
   X,
@@ -15,6 +17,7 @@ import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import {
+  classKeys,
   extrasKey,
   formatScreenAddress,
   type LessonLink,
@@ -23,10 +26,14 @@ import {
   parseScreenAddress,
   type ScreenAddress,
   type ScreenHost,
+  type SharedScreen,
   sanitizeLinkLabel,
   sanitizeLinkUrl,
   screenFor,
   screenTaskPageUrl,
+  sharedScreenFor,
+  type TeacherLink,
+  teacherLinksFor,
 } from "@/lib/lesson-extras";
 import {
   addLessonLink,
@@ -36,6 +43,14 @@ import {
   saveScreenHost,
   useLessonExtras,
 } from "@/lib/lesson-extras-store";
+import {
+  addTeacherLink,
+  removeRoomScreen,
+  removeTeacherLink,
+  saveRoomScreen,
+  useSharedExtras,
+  useTeacherSelf,
+} from "@/lib/shared-extras-store";
 import { canViewInPage, ScreenTaskViewer } from "./screentask-viewer";
 
 //* ---------------------------------------------------------------------------
@@ -60,18 +75,24 @@ const ICON_ACTION = "shrink-0 text-muted-foreground pointer-coarse:size-9";
 export function LessonExtrasSection({
   teacher,
   subject,
+  classes,
   rooms,
 }: {
   //* A tanár jele: a diák nézetében a kártyáról, a tanáriban a nézett tanáré.
   teacher: string;
   subject: string;
+  //* Az óra osztálya(i): a diák nézetében a nézett osztály, a tanáriban a
+  //* kártyáé. A tanári linkek osztályra szűkítéséhez kell.
+  classes: string[];
   rooms: string[];
 }) {
   const { data: session, isPending } = useSession();
   const userId = session?.user.id ?? null;
   const { status, extras } = useLessonExtras(userId);
+  const { status: sharedStatus, shared } = useSharedExtras();
+  const self = useTeacherSelf(userId, session?.user.isTeacher === true);
   const [viewing, setViewing] = useState<{
-    screen: ScreenHost;
+    screen: ScreenAddress;
     room: string;
   } | null>(null);
 
@@ -80,7 +101,11 @@ export function LessonExtrasSection({
   if (!extrasKey(teacher) || isPending) return null;
 
   const loading = status === "loading";
+  const sharedLoading = sharedStatus === "loading";
   const distinctRooms = [...new Set(rooms.filter((room) => extrasKey(room)))];
+  //! A SAJÁT ÓRA A TANÁR JELÉN MÚLIK, NEM A NÉZETEN. Egy tanár más tanár
+  //! órarendjét is megnyithatja — oda nem tehet fel linket.
+  const ownLesson = self.short !== null && self.short === extrasKey(teacher);
 
   return (
     <>
@@ -89,8 +114,11 @@ export function LessonExtrasSection({
           userId={userId}
           teacher={teacher}
           subject={subject}
+          classes={classKeys(classes)}
           links={linksFor(extras, teacher, subject)}
-          loading={loading}
+          teacherLinks={teacherLinksFor(shared, teacher, subject, classes)}
+          ownLesson={ownLesson}
+          loading={loading || sharedLoading}
           failed={status === "error"}
         />
       )}
@@ -98,11 +126,13 @@ export function LessonExtrasSection({
         <ScreenBlock
           key={room}
           userId={userId}
+          isTeacher={self.isTeacher}
           teacher={teacher}
           room={room}
           showRoom={distinctRooms.length > 1}
-          screen={screenFor(extras, teacher, room)}
-          loading={loading}
+          shared={sharedScreenFor(shared, room)}
+          personal={screenFor(extras, teacher, room)}
+          loading={loading || sharedLoading}
           onOpen={(screen) => setViewing({ screen, room })}
         />
       ))}
@@ -161,7 +191,10 @@ function LinksBlock({
   userId,
   teacher,
   subject,
+  classes,
   links,
+  teacherLinks,
+  ownLesson,
   loading,
   failed,
 }: {
@@ -169,7 +202,13 @@ function LinksBlock({
   userId: string | null;
   teacher: string;
   subject: string;
+  classes: string[];
   links: LessonLink[];
+  //* A tanár által feltett linkek — mindenki látja, csak ő törölheti.
+  teacherLinks: TeacherLink[];
+  //* A belépett felhasználó ennek az órának a tanára: a hozzáadás nála KÖZÖS
+  //* linket ment, nem saját könyvjelzőt.
+  ownLesson: boolean;
   loading: boolean;
   failed: boolean;
 }) {
@@ -177,13 +216,15 @@ function LinksBlock({
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const remove = async (link: LessonLink) => {
-    setRemoving(link.id);
+  const run = async (id: string, action: () => Promise<MutationResult>) => {
+    setRemoving(id);
     setError(null);
-    const result = await removeLessonLink(userId, link.id);
+    const result = await action();
     setRemoving(null);
     if (!result.ok) setError(result.message);
   };
+
+  const empty = links.length === 0 && teacherLinks.length === 0;
 
   return (
     <div className="px-4 py-3">
@@ -200,66 +241,70 @@ function LinksBlock({
               onClick={() => setAdding(true)}
             >
               <Plus className="size-3.5" aria-hidden />
-              Link hozzáadása
+              {ownLesson ? "Link a diákoknak" : "Link hozzáadása"}
             </Button>
           )
         }
       />
 
-      {links.length > 0 && (
+      {!empty && (
         <ul className="mt-1 space-y-0.5 pl-7">
-          {links.map((link) => {
-            const name = linkDisplayName(link);
-            return (
-              <li key={link.id} className="flex items-center gap-2">
-                <a
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-sm font-medium text-foreground underline-offset-4 hover:underline"
-                >
-                  <span className="min-w-0 wrap-anywhere">{name}</span>
-                  <ExternalLink
-                    className="size-3 shrink-0 text-muted-foreground"
-                    aria-hidden
-                  />
-                </a>
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  className={ICON_ACTION}
-                  aria-label={`„${name}” törlése`}
-                  disabled={removing === link.id}
-                  onClick={() => void remove(link)}
-                >
-                  <X aria-hidden />
-                </Button>
-              </li>
-            );
-          })}
+          {teacherLinks.map((link) => (
+            <LinkRow
+              key={link.id}
+              link={link}
+              badge={
+                link.classes.length > 0 && ownLesson
+                  ? link.classes.join(", ").toUpperCase()
+                  : "tanár"
+              }
+              busy={removing === link.id}
+              onRemove={
+                ownLesson
+                  ? () => void run(link.id, () => removeTeacherLink(link.id))
+                  : undefined
+              }
+            />
+          ))}
+          {links.map((link) => (
+            <LinkRow
+              key={link.id}
+              link={link}
+              busy={removing === link.id}
+              onRemove={() =>
+                void run(link.id, () => removeLessonLink(userId, link.id))
+              }
+            />
+          ))}
         </ul>
       )}
 
-      {links.length === 0 && !adding && (
+      {empty && !adding && (
         <p className="mt-1 pl-7 text-pretty text-xs text-muted-foreground">
           {loading
             ? "Betöltés…"
             : failed
               ? "Most nem sikerült betölteni a mentett linkjeidet."
-              : "Classroom, feladatlap, Teams — amit ehhez a tanárhoz és tárgyhoz mentesz, minden órájukon itt lesz."}
+              : ownLesson
+                ? "Classroom, Teams, feladatlap — amit itt felteszel, minden diák látja ennek a tárgynak az óráin."
+                : "Classroom, feladatlap, Teams — amit ehhez a tanárhoz és tárgyhoz mentesz, minden órájukon itt lesz."}
         </p>
       )}
 
       {adding && (
         <LinkForm
+          classes={ownLesson ? classes : null}
           onCancel={() => setAdding(false)}
-          onSubmit={async (url, label) => {
-            const result = await addLessonLink(userId, {
-              teacher,
-              subject,
-              url,
-              label,
-            });
+          onSubmit={async (url, label, onlyTheseClasses) => {
+            const result = ownLesson
+              ? await addTeacherLink({
+                  teacher,
+                  subject,
+                  classes: onlyTheseClasses ? classes : [],
+                  url,
+                  label,
+                })
+              : await addLessonLink(userId, { teacher, subject, url, label });
             if (result.ok) setAdding(false);
             return result;
           }}
@@ -275,13 +320,73 @@ function LinksBlock({
   );
 }
 
+function LinkRow({
+  link,
+  badge,
+  busy,
+  onRemove,
+}: {
+  link: Pick<LessonLink, "url" | "label">;
+  //* Közös (tanári) linknél a jelölés; saját könyvjelzőnél nincs.
+  badge?: string;
+  busy: boolean;
+  onRemove?: () => void;
+}) {
+  const name = linkDisplayName(link);
+  return (
+    <li className="flex items-center gap-2">
+      <a
+        href={link.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-sm font-medium text-foreground underline-offset-4 hover:underline"
+      >
+        <span className="min-w-0 wrap-anywhere">{name}</span>
+        <ExternalLink
+          className="size-3 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+        {badge && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground/10 px-1.5 py-px text-[10px] font-semibold text-muted-strong">
+            <GraduationCap className="size-3" aria-hidden />
+            {badge}
+          </span>
+        )}
+      </a>
+      {onRemove && (
+        <Button
+          size="icon-xs"
+          variant="ghost"
+          className={ICON_ACTION}
+          aria-label={`„${name}” törlése`}
+          disabled={busy}
+          onClick={onRemove}
+        >
+          <X aria-hidden />
+        </Button>
+      )}
+    </li>
+  );
+}
+
 function LinkForm({
+  classes,
   onSubmit,
   onCancel,
 }: {
-  onSubmit: (url: string, label: string | null) => Promise<MutationResult>;
+  //* Tanári linknél az óra osztályai (a szűkítés ajánlatához); `null` = saját
+  //* könyvjelző, nincs mire szűkíteni.
+  classes: string[] | null;
+  onSubmit: (
+    url: string,
+    label: string | null,
+    onlyTheseClasses: boolean,
+  ) => Promise<MutationResult>;
   onCancel: () => void;
 }) {
+  const scopeId = useId();
+  const canScope = classes !== null && classes.length > 0;
+  const [onlyTheseClasses, setOnlyTheseClasses] = useState(canScope);
   const urlId = useId();
   const labelId = useId();
   const errorId = useId();
@@ -306,7 +411,11 @@ function LinkForm({
     }
     setBusy(true);
     setError(null);
-    const result = await onSubmit(clean, sanitizeLinkLabel(label));
+    const result = await onSubmit(
+      clean,
+      sanitizeLinkLabel(label),
+      canScope && onlyTheseClasses,
+    );
     setBusy(false);
     if (!result.ok) setError(result.message);
   };
@@ -346,6 +455,32 @@ function LinkForm({
         onChange={(event) => setLabel(event.target.value)}
         disabled={busy}
       />
+      {classes !== null && (
+        //! KIMONDJUK, KI LÁTJA. A tanár ne azt higgye, hogy csak magának ment.
+        <div className="space-y-1 text-pretty text-[11px] text-muted-foreground">
+          {canScope && (
+            <label
+              htmlFor={scopeId}
+              className="flex items-center gap-2 text-xs text-foreground"
+            >
+              <input
+                id={scopeId}
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={onlyTheseClasses}
+                onChange={(event) => setOnlyTheseClasses(event.target.checked)}
+                disabled={busy}
+              />
+              Csak ennek az osztálynak: {classes.join(", ").toUpperCase()}
+            </label>
+          )}
+          <p>
+            {canScope && onlyTheseClasses
+              ? "Ennek az osztálynak minden diákja látja ennél a tárgynál, belépés nélkül is."
+              : "A tárgy minden órájánál látja minden diák, belépés nélkül is."}
+          </p>
+        </div>
+      )}
       {error && (
         <p id={errorId} role="alert" className="text-xs text-destructive">
           {error}
@@ -365,26 +500,35 @@ function LinkForm({
 //* ---------------------------------------------------------------------------
 function ScreenBlock({
   userId,
+  isTeacher,
   teacher,
   room,
   showRoom,
-  screen,
+  shared,
+  personal,
   loading,
   onOpen,
 }: {
   //* `null` = vendég: a sorok ezen a készüléken, `localStorage`-ban élnek.
   userId: string | null;
+  //* Bármelyik tanár beállíthatja vagy átírhatja a terem címét.
+  isTeacher: boolean;
   teacher: string;
   room: string;
   //* Teremváltásos blokknál termenként külön cím kell — ott kiírjuk, melyik.
   showRoom: boolean;
-  screen: ScreenHost | null;
+  //* A terem közös címe — egy tanár állította be, mindenkinek ez nyílik.
+  shared: SharedScreen | null;
+  //! A DIÁK SAJÁT CÍME CSAK TARTALÉK. Ott kell, ahol még egyik tanár sem
+  //! állította be a termet; amint van közös cím, az nyer, és a saját elbújik.
+  personal: ScreenHost | null;
   loading: boolean;
-  onOpen: (screen: ScreenHost) => void;
+  onOpen: (screen: ScreenAddress) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const screen: ScreenAddress | null = shared ?? personal;
   //! A BÖNGÉSZŐ DÖNTI EL, NEM A PRÓBÁLKOZÁS. Ahol a lapba ágyazott képet a
   //! böngésző `https`-re írná át, ott a néző sosem kapna képkockát — ezért
   //! ott rögtön a ScreenTask saját oldala nyílik (lásd `canViewInPage`). A
@@ -395,13 +539,29 @@ function ScreenBlock({
     setInPage(host !== null && canViewInPage(host));
   }, [host]);
 
-  const remove = async (current: ScreenHost) => {
+  //* Tanár a TEREM címét írja; diák csak a sajátját, és csak ha nincs közös.
+  const editsShared = isTeacher;
+  const canEdit = editsShared || !shared;
+
+  const act = async (action: () => Promise<MutationResult>) => {
     setBusy(true);
     setError(null);
-    const result = await removeScreenHost(userId, current);
+    const result = await action();
     setBusy(false);
     if (!result.ok) setError(result.message);
+    return result;
   };
+
+  const remove = () =>
+    act(() =>
+      shared
+        ? removeRoomScreen(room)
+        : personal
+          ? removeScreenHost(userId, personal)
+          : Promise.resolve({ ok: true } as const),
+    );
+
+  const pageHref = `/kivetites/${encodeURIComponent(room)}`;
 
   return (
     <div className="px-4 py-3">
@@ -419,7 +579,7 @@ function ScreenBlock({
               onClick={() => setEditing(true)}
             >
               <Plus className="size-3.5" aria-hidden />
-              IP-cím megadása
+              {editsShared ? "A terem IP-címe" : "IP-cím megadása"}
             </Button>
           )
         }
@@ -428,13 +588,18 @@ function ScreenBlock({
       {editing ? (
         <ScreenForm
           initial={screen ? formatScreenAddress(screen) : ""}
+          hint={
+            editsShared
+              ? `A ${room} terem címe lesz mindenkinek, amíg egy tanár át nem írja. A ScreenTask ablakában látható; port nélkül 7070.`
+              : "Csak neked mentjük. A tanári gépen, a ScreenTask ablakában látható. Port nélkül 7070."
+          }
           onCancel={() => setEditing(false)}
           onSubmit={async (address) => {
-            const result = await saveScreenHost(userId, {
-              teacher,
-              room,
-              ...address,
-            });
+            const result = await act(() =>
+              editsShared
+                ? saveRoomScreen(room, address)
+                : saveScreenHost(userId, { teacher, room, ...address }),
+            );
             if (result.ok) setEditing(false);
             return result;
           }}
@@ -470,37 +635,63 @@ function ScreenBlock({
               </a>
             </Button>
           )}
+          {shared && (
+            <Button
+              asChild
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1.5 rounded-full px-2.5 text-xs"
+            >
+              <Link href={pageHref}>
+                <Maximize2 className="size-3.5" aria-hidden />
+                Külön lapon
+              </Link>
+            </Button>
+          )}
           <span className="font-mono text-xs text-muted-strong">
             {formatScreenAddress(screen)}
+            {!shared && (
+              <span className="ml-1.5 font-sans text-[10px]">(saját)</span>
+            )}
           </span>
-          <span className="ml-auto flex items-center">
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              className={ICON_ACTION}
-              aria-label="Cím módosítása"
-              disabled={busy}
-              onClick={() => setEditing(true)}
-            >
-              <Pencil aria-hidden />
-            </Button>
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              className={ICON_ACTION}
-              aria-label="Cím törlése"
-              disabled={busy}
-              onClick={() => void remove(screen)}
-            >
-              <X aria-hidden />
-            </Button>
-          </span>
+          {canEdit && (
+            <span className="ml-auto flex items-center">
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                className={ICON_ACTION}
+                aria-label={
+                  editsShared ? "A terem címének módosítása" : "Cím módosítása"
+                }
+                disabled={busy}
+                onClick={() => setEditing(true)}
+              >
+                <Pencil aria-hidden />
+              </Button>
+              {(editsShared ? shared : personal) && (
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  className={ICON_ACTION}
+                  aria-label={
+                    editsShared ? "A terem címének törlése" : "Cím törlése"
+                  }
+                  disabled={busy}
+                  onClick={() => void remove()}
+                >
+                  <X aria-hidden />
+                </Button>
+              )}
+            </span>
+          )}
         </div>
       ) : (
         <p className="mt-1 pl-7 text-pretty text-xs text-muted-foreground">
           {loading
             ? "Betöltés…"
-            : "Ha a tanár ScreenTaskkal vetít, add meg a gépe címét — innen egy koppintással nézheted a képernyőjét, ugyanarról a wifiről."}
+            : editsShared
+              ? "Add meg egyszer a tanári gép címét — onnantól ebben a teremben minden diák egy koppintással nézheti, IP-cím nélkül."
+              : "Ebben a teremben még egyik tanár sem adta meg a kivetítő címét. Ha tudod, mentheted magadnak is."}
         </p>
       )}
 
@@ -513,12 +704,14 @@ function ScreenBlock({
   );
 }
 
-function ScreenForm({
+export function ScreenForm({
   initial,
+  hint,
   onSubmit,
   onCancel,
 }: {
   initial: string;
+  hint: string;
   onSubmit: (address: ScreenAddress) => Promise<MutationResult>;
   onCancel: () => void;
 }) {
@@ -576,7 +769,7 @@ function ScreenForm({
             {error}
           </span>
         ) : (
-          "A tanári gépen, a ScreenTask ablakában látható. Port nélkül 7070."
+          hint
         )}
       </p>
       <FormButtons
