@@ -5,6 +5,7 @@ import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware } from "better-auth/api";
+import { admin } from "better-auth/plugins";
 import { isBlockedAuthPath } from "./auth-blocked-paths";
 import { jedlikAd } from "./auth-jedlik";
 import prisma from "./prisma";
@@ -528,6 +529,24 @@ export const auth = betterAuth({
       activityTracking: { enabled: true },
     }),
     sentinel(),
+
+    //! ─── ADMIN BŐVÍTMÉNY — A PULT KITILTÁS-FUNKCIÓIHOZ ─────────────────────
+    //! A `dash()` a `banned` / `banReason` / `banExpires` mezőket CSAK akkor
+    //! olvassa és írja, ha ez a bővítmény is be van kapcsolva — enélkül a
+    //! pulton minden fiók „nincs kitiltva", és a kitiltás hatástalan. A
+    //! kitiltott fióknak a bővítmény a munkamenet létrehozását is megtagadja,
+    //! tehát az AD- és a passkey-s belépést is lezárja.
+    //!
+    //! A `role` NEM AZONOS AZ `isAdmin`-NAL. Az `isAdmin` a közleménykezelést
+    //! nyitja (`/admin` lap); a `role: "admin"` az `/api/auth/admin/*`
+    //! végpontokat (fiók listázása, kitiltás, MEGSZEMÉLYESÍTÉS, jelszóállítás).
+    //! Mindkettőt kézzel kell beállítani az adatbázisban, és a `role`-t csak
+    //! annak, akire a teljes fiókkezelést rá lehet bízni. Egyik sem `input`, a
+    //! kliens nem írhatja.
+    admin({
+      bannedUserMessage:
+        "Ez a fiók le van tiltva. Ha szerinted tévedés, keresd az üzemeltetőt.",
+    }),
   ],
 });
 

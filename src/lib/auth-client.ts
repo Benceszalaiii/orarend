@@ -3,7 +3,7 @@
 import { dashClient } from "@better-auth/infra/client";
 import { passkeyClient } from "@better-auth/passkey/client";
 import type { BetterAuthClientPlugin } from "better-auth/client";
-import { inferAdditionalFields } from "better-auth/client/plugins";
+import { adminClient, inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 //! CSAK TÍPUSKÉNT importáljuk. Az `auth.ts` és az `auth-jedlik.ts` is
 //! `server-only`-val van jelölve — egy értékként behúzott import a
@@ -63,6 +63,9 @@ export const authClient = createAuthClient({
     jedlikAdClient(),
     passkeyClient(),
     dashClient(),
+    //* Az `authClient.admin.*` hívások típusai. Jogot nem ad: a szerver minden
+    //* hívásnál a munkamenet `role`-ját ellenőrzi.
+    adminClient(),
     inferAdditionalFields<typeof auth>(),
   ],
 });

@@ -127,6 +127,15 @@ model User {
   //!   UPDATE "user" SET "isAdmin" = true WHERE email = '…@jedlik.eu';
   isAdmin Boolean @default(false)
 
+  //! ─── A BETTER AUTH `admin()` BŐVÍTMÉNY MEZŐI ─────────────────────────────
+  //! Lásd `src/lib/auth.ts`. A `role` MÁS, mint az `isAdmin`: `"admin"` érték a
+  //! teljes fiókkezelést nyitja (kitiltás, megszemélyesítés) — csak kézzel,
+  //! adatbázisból állítható. A kitiltást a Better Auth infra pultja is írja.
+  role       String?
+  banned     Boolean?  @default(false)
+  banReason  String?
+  banExpires DateTime?
+
   sessions           Session[]
   accounts           Account[]
   passkeys           Passkey[]
@@ -150,6 +159,9 @@ model Session {
   userAgent String?
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  //* Megszemélyesítésnél az üzemeltető `User.id`-ja (`admin()` bővítmény).
+  impersonatedBy String?
 
   @@unique([token])
   @@index([userId])
