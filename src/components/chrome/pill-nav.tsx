@@ -29,6 +29,7 @@ import {
 } from "react";
 import { PLACES, placeOf, readFlight } from "@/components/chrome/places";
 import { PlacesPanel } from "@/components/chrome/places-panel";
+import { type Pour, readPour } from "@/components/chrome/pour";
 import {
   DEFAULT_IDENTITY,
   type Identity,
@@ -127,6 +128,15 @@ const COLLAPSE = { type: "spring", stiffness: 400, damping: 42 } as const;
 const PRESS = { type: "spring", stiffness: 700, damping: 54 } as const;
 const RELEASE = { type: "spring", stiffness: 480, damping: 44 } as const;
 const INSTANT = { duration: 0 } as const;
+//* A kiöntött cseppből szétterülő folyadék: lazább, egyet túllő, mint egy
+//* cseppnyi víz, ami a felületre érve szétfut.
+const SPLASH = {
+  type: "spring",
+  stiffness: 300,
+  damping: 21,
+  mass: 1,
+} as const;
+const WOBBLE = [1, 0.74, 1.08, 0.97, 1];
 
 //* Ennyit nyúl a folyadék az egér alatti szomszéd felé.
 const LEAN = 5;
@@ -177,6 +187,8 @@ type LiquidLayerProps = {
   right?: MotionValue<number>;
   /** Ennyi szélességet tart meg egy elem összecsukható része inaktívan. */
   restExtra: number;
+  /** A buborékból kiöntött csepp (lásd `pour.ts`) — az első elhelyezés ebből terül szét. */
+  seed?: Pour | null;
 };
 
 function LiquidLayer({
@@ -193,6 +205,7 @@ function LiquidLayer({
   left: sharedLeft,
   right: sharedRight,
   restExtra,
+  seed,
 }: LiquidLayerProps) {
   const reduced = useReducedMotion() ?? false;
   const layerRef = useRef<HTMLDivElement>(null);
@@ -232,6 +245,8 @@ function LiquidLayer({
     target: { l: 0, r: 0 } as Rect,
     dir: 0,
     dirUntil: 0,
+    /** Amíg a kiöntött csepp úton van, a folyadék nem indul a cél felé. */
+    holding: false,
   });
 
   //! A CÉL AZ, AHOVÁ AZ ELRENDEZÉS BEÁLL, NEM AHOL ÉPP TART. Minden elem
@@ -279,6 +294,47 @@ function LiquidLayer({
     )
       return;
     t.target = { l, r };
+    if (t.holding) return;
+
+    if (!t.placed && seed && !reduced) {
+      t.placed = true;
+      const from = fromKey && fromKey !== activeKey ? rectOf(fromKey) : null;
+      if (!from) {
+        //! UGYANAZ A CELLA — A CSEPP A MÁR ÁLLÓ FOLYADÉKBA HULL. Helyről
+        //! helyre lépve a folyadék eddig is a helyek celláján állt: nem tűnik
+        //! el, csak megremeg, amikor a csepp beleolvad.
+        left.jump(l);
+        right.jump(r);
+        seed.arrived.then(() => {
+          if (press) animate(press, WOBBLE, { duration: 0.5, ease: "easeOut" });
+        });
+        return;
+      }
+      //! MÁS CELLÁBÓL — A RÉGI FOLYADÉK LESZAKAD, AZ ÚJ A CSEPPBŐL TERÜL. A
+      //! folyadék nulla szélességgel vár a csepp alatt; a régi cellában közben
+      //! elapad. Érkezéskor a csepp méretéből indul, és túllőve szétfut.
+      const box = layerRef.current?.getBoundingClientRect();
+      const c = seed.cx - (box?.left ?? 0);
+      left.jump(c);
+      right.jump(c);
+      t.holding = true;
+      const dir = Math.sign(
+        order.indexOf(activeKey) - order.indexOf(fromKey ?? activeKey),
+      );
+      setRemnants([
+        { id: ++remnantSeq, ...from, dir, blob: fromBlob ?? blobRef.current },
+      ]);
+      seed.arrived.then(() => {
+        t.holding = false;
+        const now = layerRef.current?.getBoundingClientRect();
+        const at = seed.cx - (now?.left ?? box?.left ?? 0);
+        left.jump(at - seed.bead.w / 2);
+        right.jump(at + seed.bead.w / 2);
+        animate(left, t.target.l, SPLASH);
+        animate(right, t.target.r, SPLASH);
+      });
+      return;
+    }
 
     if (!t.placed) {
       t.placed = true;
@@ -310,6 +366,7 @@ function LiquidLayer({
     activeKey,
     fromKey,
     fromBlob,
+    seed,
     hoverKey,
     reduced,
     order,
@@ -317,6 +374,7 @@ function LiquidLayer({
     left,
     right,
     rest,
+    press,
   ]);
 
   //* Kulcsváltáskor a régi helyen egy csepp marad, ami a goo-szűrőn át
@@ -433,7 +491,6 @@ type RoleToggleProps = {
   hidden: boolean;
 };
 
-const WOBBLE = [1, 0.74, 1.08, 0.97, 1];
 const ROLL = {
   type: "spring",
   stiffness: 380,
@@ -762,9 +819,44 @@ export function PillNav({
   const flyScale = useMotionValue(1);
   const [flyFollow] = useState(() => [flyX, flyY] as const);
   const [incoming] = useState(() => readFlight(place?.id));
+  const [pour] = useState(() => readPour(place?.id));
+  //* Amíg a kiöntött csepp úton van, az ikon a HEGYÉN utazik (lásd `pour.ts`)
+  //* — a cella saját ikonja addig nem látszik, különben kettő lenne.
+  const flyOpacity = useMotionValue(pour ? 0 : 1);
   useLayoutEffect(() => {
     const el = iconRef.current;
-    if (!incoming || reduced || !el) return;
+    if (!pour || !el) return;
+    let cancelled = false;
+    let runs: { stop: () => void }[] = [];
+    pour.arrived.then(() => {
+      if (cancelled) return;
+      pour.absorb();
+      flyOpacity.jump(1);
+      const r = el.getBoundingClientRect();
+      if (r.width === 0) return;
+      //* A csepp közepéből ugrik a helyére — a cella közben szétnyílhat.
+      flyX.jump(pour.cx - (r.left + r.width / 2));
+      flyY.jump(pour.cy - (r.top + r.height / 2));
+      flyScale.jump(0.85);
+      runs = [
+        animate(flyX, 0, FLY_X),
+        animate(flyY, 0, FLY_Y),
+        animate(flyScale, 1, FLY_S),
+      ];
+    });
+    return () => {
+      cancelled = true;
+      for (const run of runs) run.stop();
+      pour.absorb();
+      flyOpacity.jump(1);
+      flyX.jump(0);
+      flyY.jump(0);
+      flyScale.jump(1);
+    };
+  }, [pour, flyX, flyY, flyScale, flyOpacity]);
+  useLayoutEffect(() => {
+    const el = iconRef.current;
+    if (!incoming || pour || reduced || !el) return;
     const r = el.getBoundingClientRect();
     if (r.width === 0) return;
     flyX.jump(incoming.x - (r.left + r.width / 2));
@@ -781,7 +873,7 @@ export function PillNav({
       flyY.jump(0);
       flyScale.jump(1);
     };
-  }, [incoming, reduced, flyX, flyY, flyScale]);
+  }, [incoming, pour, reduced, flyX, flyY, flyScale]);
 
   //* Lapváltáskor a buborék magától becsukódik — a lap, amiről szólt, elment.
   // biome-ignore lint/correctness/useExhaustiveDependencies: az útvonal a jel
@@ -862,6 +954,7 @@ export function PillNav({
             left={liquidLeft}
             right={liquidRight}
             restExtra={6}
+            seed={pour}
           />
         </div>
       )}
@@ -981,7 +1074,7 @@ export function PillNav({
             <motion.span
               ref={iconRef}
               className="relative flex"
-              style={{ x: flyX, y: flyY, scale: flyScale }}
+              style={{ x: flyX, y: flyY, scale: flyScale, opacity: flyOpacity }}
             >
               <InkLabel
                 label={

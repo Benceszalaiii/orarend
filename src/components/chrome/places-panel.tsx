@@ -22,6 +22,7 @@ import {
 } from "react";
 import { sheetItem } from "@/components/chrome/chrome-sheet";
 import { launchFlight, PLACES, type Place } from "@/components/chrome/places";
+import { launchPour } from "@/components/chrome/pour";
 import { cn } from "@/lib/utils";
 
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -461,6 +462,7 @@ export function PlacesPanel({
               liquidTop={liqTop}
               liquidBottom={liqBottom}
               onHover={hoverTo}
+              cellRef={triggerRef}
               onPick={() => onClose()}
             />
           ))}
@@ -625,6 +627,7 @@ function PlaceRow({
   liquidTop,
   liquidBottom,
   onHover,
+  cellRef,
   onPick,
 }: {
   index: number;
@@ -635,6 +638,8 @@ function PlaceRow({
   liquidTop: MotionValue<number>;
   liquidBottom: MotionValue<number>;
   onHover: (index: number, delay?: number) => void;
+  /** A helyek-cella gombja a váltóban — a kiöntés célja. */
+  cellRef: RefObject<HTMLButtonElement | null>;
   onPick: () => void;
 }) {
   const iconRef = useRef<HTMLSpanElement>(null);
@@ -762,6 +767,16 @@ function PlaceRow({
             event.preventDefault();
           } else {
             launchFlight(place.id, iconRef.current);
+            //! A SOR FOLYADÉKA VISZI ÁT A LAPOT (lásd `pour.ts`). A cél a
+            //! cella dobozán, nem a gombén: a váltó folyadéka azt tölti ki.
+            const cell = cellRef.current?.parentElement;
+            if (linkRef.current && cell)
+              launchPour({
+                id: place.id,
+                row: linkRef.current,
+                icon: iconRef.current,
+                cell,
+              });
           }
           onPick();
         }}
