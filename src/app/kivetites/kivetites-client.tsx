@@ -330,9 +330,7 @@ export function KivetitesIndex() {
         Kivetítés
       </h1>
       <p className="mt-2 text-pretty text-sm leading-relaxed text-muted-foreground">
-        A tanár egyszer megadja a terem gépének címét, és onnantól a teremben
-        mindenki innen nézheti a képernyőjét — ugyanarról a wifiről, IP-cím
-        gépelése nélkül.
+        Tanár által konfigurált linkek.
       </p>
 
       <form onSubmit={go} className="mt-6 flex gap-2">
