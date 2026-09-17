@@ -973,7 +973,8 @@ export function GridFilm() {
                 Csak azt látod, amit szeretnél
               </h2>
               <p className="mt-5 max-w-[46ch] text-[15px] leading-7 text-white/70">
-                Konfiguráld a saját csoportbontásodat, és rejtsd el azokat az órákat, amire nem jársz. 
+                Konfiguráld a saját csoportbontásodat, és rejtsd el azokat az
+                órákat, amire nem jársz.
               </p>
               <Readout>
                 <Row term="Ütköző sáv">Hétfő, {slot(SPLIT_MINE)}</Row>

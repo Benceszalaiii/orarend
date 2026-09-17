@@ -120,7 +120,7 @@ export function PreferencesMenu({
             {rows.length > 0 && !suspended && (
               <span
                 aria-hidden
-                className="absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-brand px-1 text-[9px] leading-none font-bold tabular-nums text-brand-foreground ring-2 ring-background"
+                className="absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] leading-none font-bold tabular-nums text-ink-on-primary ring-2 ring-background"
               >
                 {rows.length > 9 ? "9+" : rows.length}
               </span>

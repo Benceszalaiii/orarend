@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  DoorOpen,
-  House,
-  ShieldCheck,
-} from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
@@ -21,6 +14,7 @@ import {
 } from "@/components/chrome/chrome-sheet";
 import { MenuVisibilityMenu } from "@/components/chrome/menu-visibility";
 import { PillNav } from "@/components/chrome/pill-nav";
+import { PLACES, type PlaceId } from "@/components/chrome/places";
 import { RailTips } from "@/components/chrome/rail-tips";
 import { isViewRoute, saveLastView } from "@/lib/last-view";
 import { useHiddenMenu } from "@/lib/use-hidden-menu";
@@ -137,6 +131,12 @@ function useWideChrome(): boolean {
   return wide;
 }
 
+//* A sáv sorrendje a régi: a nyitólap elöl, mögötte az iskola lapjai.
+const RAIL_ORDER: readonly PlaceId[] = ["home", "duty", "rooms", "screens"];
+const RAIL_PLACES = RAIL_ORDER.flatMap((id) =>
+  PLACES.filter((p) => p.id === id),
+);
+
 export type LineContent = {
   /** Az alany, ahogy a sor elején áll: „13C" vagy „Kovács B." */
   subject: string;
@@ -185,7 +185,7 @@ export function StandingLine({
   const sheetId = useId();
   const wide = useWideChrome();
   //* Sáv-alakban nincs mit kinyitni: a tartalom kint van.
-  const collapsible = Boolean(sheet) && !wide;
+  const collapsible = !floating && !wide;
   //! A LAP SAJÁT SORAIT IS A DIÁK SZABJA MEG. Ugyanaz a horog, amit a rács és a
   //! `/ma` is megkérdez a maga soraira — a döntés egy helyen áll, a szűrés ott,
   //! ahol a sor születik (lásd `lib/use-hidden-menu.ts`).
@@ -195,10 +195,22 @@ export function StandingLine({
   //! beágyazva, sáv-alakban NYOMTALANUL eltűnt — a belépés elérhetetlenné vált
   //! asztali gépen. A törzs ezért egy helyen áll össze, és a két tároló
   //! (buborék vagy sáv) ugyanazt kapja.
-  const sheetBody = sheet ? (
+  //*
+  //! ÉS MINDEN LAPON UGYANAZ A KÉT SZAKASZ. Amíg az „Az oldal" és a „Fiók" csak
+  //! a saját `sheet`-et adó lapokon (`/orarend`, `/ma`) állt össze, az
+  //! ügyeleten, a teremkeresőn és a kivetítésen a fejléc MÁS ALAKÚ volt: se
+  //! második sor asztalon, se lap telefonon, a fiók pedig egy magányos gomb a
+  //! váltó mellett. A lap saját szakaszai elöl állnak, ha vannak; a közös rész
+  //! mindig. Csak a lebegő tábla (nyitólap) marad nélküle.
+  const shared = !floating;
+  const sheetBody = shared ? (
     <>
-      {sheet}
-      <SheetDivider />
+      {sheet && (
+        <>
+          {sheet}
+          <SheetDivider />
+        </>
+      )}
       {/*//! A NYITÓLAP NEM KAP IKONT A SÁVBAN, ÉS EZ NEM FELEDÉKENYSÉG. A régi
           //! sávban egy `House` ikon állt a váltó mellett, felirat nélkül — az
           //! egyik a nyolc néma ikonból, ami a 375 px-es túlcsordulást
@@ -220,15 +232,11 @@ export function StandingLine({
             //! is gyakoriság szerinti: a témát váltogatják, a nyitólapra
             //! félévente mennek vissza. */}
         {menu.shows("appearance") && <AppearanceMenu />}
-        {menu.shows("home") && (
-          <Link href="/home" data-key="n" className={sheetItem()}>
-            <House
-              aria-hidden
-              className="size-4 shrink-0 text-muted-foreground"
-            />
-            <SheetItemBody label="Nyitólap" hint="Mit tud ez az órarend" />
-          </Link>
-        )}
+        {/*//! A HELYEK SÁVBAN IS OTT VANNAK, GYORSGOMBKÉNT. A váltó „Helyek"
+            //! buboréka MINDEN lapon eléri őket (lásd `chrome/places.ts`); itt
+            //! egy koppintással közelebb vannak annak, aki gyakran jár oda — és
+            //! a testreszabóban egyenként elrejthetők annak, aki nem. A lista
+            //! ugyanaz, mint a buboréké, tehát a kettő nem térhet el. */}
         {/*//! A KÉT MELLÉKLAP A NYITÓLAP ALÁ KERÜL, NEM A VÁLTÓBA. Az ügyelet
             //! és a teremkereső NEM ugyanarra az adatra néző NÉZET — nem az a
             //! kérdés, kinek és melyik hetét mutatják, hanem az iskoláról
@@ -248,23 +256,22 @@ export function StandingLine({
             //! `globals.css` régi megjegyzésének a feltétele („kivéve, ha
             //! közben felszabadul 240 px") teljesült. Ezzel megszűnt az az ára
             //! is, amit az a megjegyzés tudott hiányként vállalt. */}
-        {menu.shows("duty") && (
-          <Link href="/ugyelet" data-key="u" className={sheetItem()}>
-            <ShieldCheck
-              aria-hidden
-              className="size-4 shrink-0 text-muted-foreground"
-            />
-            <SheetItemBody label="Ügyelet" hint="Ki ügyel most, és hol" />
-          </Link>
-        )}
-        {menu.shows("rooms") && (
-          <Link href="/teremkereso" data-key="k" className={sheetItem()}>
-            <DoorOpen
-              aria-hidden
-              className="size-4 shrink-0 text-muted-foreground"
-            />
-            <SheetItemBody label="Teremkereső" hint="Melyik terem üres most" />
-          </Link>
+        {RAIL_PLACES.map((place) =>
+          menu.shows(place.id) ? (
+            <Link
+              key={place.id}
+              href={place.href}
+              data-key={place.hotkey}
+              aria-current={pathname === place.href ? "page" : undefined}
+              className={sheetItem("aria-[current=page]:bg-muted")}
+            >
+              <place.Icon
+                aria-hidden
+                className="size-4 shrink-0 text-muted-foreground"
+              />
+              <SheetItemBody label={place.label} hint={place.hint} />
+            </Link>
+          ) : null,
         )}
         {/*//! A TESTRESZABÓ A SZAKASZ VÉGÉN ÁLL, ÉS SOSEM REJTHETŐ EL. Ez a
             //! szakasz utolsó sora, mert ez az, amihez a legritkábban nyúlnak —
@@ -334,7 +341,11 @@ export function StandingLine({
     <div
       ref={boxRef}
       className={cn(
-        "relative w-full",
+        //! `z-50`: AZ ÁLLÓ SOR A LAP LEGFELSŐ RÉTEGE. A lapja és a váltó
+        //! buboréka is belőle nyílik lefelé, a rács ragadó fejléce (`z-40`,
+        //! lásd `calendar.tsx`) fölé — amíg a sor maga nem volt réteg, a
+        //! buborék a rács fejléce ALÁ csúszott.
+        "relative z-50 w-full",
         !floating && "flex flex-col",
         floating && "flex items-center",
         floating && SITE_BAR_METRICS,
@@ -413,6 +424,7 @@ export function StandingLine({
                 sheetId={sheetId}
                 interactive={collapsible}
                 railShown={Boolean(sheet) && wide}
+                title={sheet ? undefined : "Beállítások és fiók"}
                 onToggle={() => setOpen((v) => !v)}
               />
             </div>
@@ -462,7 +474,7 @@ export function StandingLine({
             //! szabadul fel a sornak minden képernyőn. Ahol NINCS lap (a
             //! nyitólap lebegő táblája), ott marad a helyén: ott a lap az
             //! egyetlen hely, ahol egyáltalán elérhető lenne. */}
-          {!sheet && <AccountMenu />}
+          {floating && <AccountMenu />}
         </div>
       </div>
 
@@ -475,7 +487,7 @@ export function StandingLine({
           //! A RANGSOR A KÉT SOR KÖZÖTT VAN, NEM A SORON BELÜL: fent a
           //! címsúlyú állítás, itt a halkabb műveletek, közöttük hajszálvonal.
           //! Ettől olvasható a sáv anélkül, hogy bármit el kellene rejteni. */}
-      {sheet && wide && (
+      {sheetBody && wide && (
         <div
           ref={railRef}
           className={cn(
@@ -544,6 +556,7 @@ function LineButton({
   sheetId,
   interactive,
   railShown,
+  title = "Osztály, hét és beállítások",
   onToggle,
 }: {
   line: LineContent;
@@ -552,6 +565,8 @@ function LineButton({
   interactive: boolean;
   /** Igaz, ha alatta a sáv-alak áll: ott az alany és a szűrések száma már kint van. */
   railShown: boolean;
+  /** A kapu buboréka — azt mondja, ami a lapban van. */
+  title?: string;
   onToggle: () => void;
 }) {
   const body = (
@@ -612,11 +627,16 @@ function LineButton({
       {/*//* Sáv-alakban a szám az összevonás ikonján ül jelvényként
           //* (`preferences-menu.tsx`) — ott, ahol a szűrés kapcsolható. */}
       {Boolean(line.filtered) && !railShown && (
-        <span className="shrink-0 rounded-full bg-brand/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-brand">
+        //* Telefonon csak a szám fér ki — a „szűrés" szó a lapban, az
+        //* Összevonások jelvényénél áll. Kobalt, nem piros: állapot, nem hiba.
+        <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
           <span className="sr-only">
             {line.filtered} összevonás szűr a nézetben
           </span>
-          <span aria-hidden>{line.filtered} szűrés</span>
+          <span aria-hidden>
+            {line.filtered}
+            <span className="max-sm:hidden"> szűrés</span>
+          </span>
         </span>
       )}
       {/*//! A SZŰRETLEN NÉZET IS A SORON JELEZ, ugyanazért: a rács ilyenkor a
@@ -660,7 +680,7 @@ function LineButton({
       //! pontosan megmondja, mit nyit ez a gomb; egy ráadás szerep csak egy
       //! üres réteget tenne a képernyőolvasó útjába, és párbeszédet ígérne ott,
       //! ahol nincs.
-      title="Osztály, hét és beállítások"
+      title={title}
       onClick={onToggle}
       className={cn(
         shape,

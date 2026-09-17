@@ -63,6 +63,7 @@ import {
   periodsOfDay,
   SUBJECT_WORDS,
   saveCachedSubject,
+  saveUrlSubject,
   subjectStoreKey,
 } from "@/lib/timetable";
 import {
@@ -829,6 +830,14 @@ export function TimetableCalendar({
   const [selectedSubject, setSelectedSubject] = useState<string>(
     initialView.subject?.short ?? "",
   );
+  //* A címsor kövesse a látott alanyt (`?class=13C`), hogy a link mindig
+  //* megosztható legyen. Csak SIKERES betöltés után: egy elgépelt címet nem
+  //* írunk felül, a hibalap mellett az marad, amit kértek.
+  const shownSubject = view.ok ? (view.subject?.short ?? "") : "";
+  useEffect(() => {
+    if (variant !== "fullscreen" || !shownSubject) return;
+    saveUrlSubject(mode, shownSubject);
+  }, [variant, mode, shownSubject]);
   //! A betöltés jelzése SAJÁT állapot, nem `useTransition`: a nézet cseréjét a
   //! View Transition visszahívásában, `flushSync`-kel kell elkötni (különben a
   //! böngésző a RÉGI DOM-ról készítené az „új" pillanatképet), és a `flushSync`

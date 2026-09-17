@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CalendarDays,
   DoorOpen,
+  Eye,
   House,
   Info,
   OctagonAlert,
@@ -22,6 +23,7 @@ import {
   isBlockExempt,
   type PublicAnnouncement,
 } from "@/lib/announcements";
+import { useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -69,6 +71,34 @@ function writeDismissed(keys: Set<string>) {
   }
 }
 
+//! AZ ÜZEMELTETŐ ÁTLÉP A TELJES LAPOS HIBÁN. Neki kell látnia, mi van mögötte
+//! (és hogy a javítás után működik-e), mielőtt levenné a közleményt. Csak ezen
+//! a fülön és csak erre a változatra szól: új fülön, vagy ha a közleményt
+//! átírják, újra megjelenik. A fal nem biztonsági határ, tehát ez sem az.
+const BYPASSED_KEY = "orarend:announcements-bypassed:v1";
+
+function readBypassed(): Set<string> {
+  try {
+    const raw = window.sessionStorage.getItem(BYPASSED_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(
+      Array.isArray(parsed)
+        ? parsed.filter((v): v is string => typeof v === "string")
+        : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function writeBypassed(keys: Set<string>) {
+  try {
+    window.sessionStorage.setItem(BYPASSED_KEY, JSON.stringify([...keys]));
+  } catch {
+    //* Tiltott tároló: az átlépés ezen a betöltésen érvényes marad.
+  }
+}
+
 const TONE_ICON: Record<AnnouncementTone, typeof Info> = {
   INFO: Info,
   WARNING: AlertTriangle,
@@ -103,6 +133,9 @@ export function Announcements() {
   const pathname = usePathname();
   const [items, setItems] = useState<PublicAnnouncement[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
+  const [bypassed, setBypassed] = useState<Set<string>>(() => new Set());
+  const { data: session } = useSession();
+  const isAdmin = session?.user.isAdmin === true;
 
   const load = useCallback(async () => {
     try {
@@ -119,6 +152,7 @@ export function Announcements() {
 
   useEffect(() => {
     setDismissed(readDismissed());
+    setBypassed(readBypassed());
     void load();
     const onVisible = () => {
       if (document.visibilityState === "visible") void load();
@@ -136,6 +170,15 @@ export function Announcements() {
     });
   }, []);
 
+  const bypass = useCallback((a: PublicAnnouncement) => {
+    setBypassed((prev) => {
+      const next = new Set(prev);
+      next.add(dismissKey(a));
+      writeBypassed(next);
+      return next;
+    });
+  }, []);
+
   const here = items.filter((a) => appliesTo(a, pathname));
   const bars = here.filter((a) => a.kind === "BAR");
   const toasts = here.filter(
@@ -144,7 +187,12 @@ export function Announcements() {
   const blockAt = (path: string) =>
     isBlockExempt(path)
       ? undefined
-      : items.find((a) => a.kind === "BLOCK" && appliesTo(a, path));
+      : items.find(
+          (a) =>
+            a.kind === "BLOCK" &&
+            appliesTo(a, path) &&
+            !(isAdmin && bypassed.has(dismissKey(a))),
+        );
   const block = blockAt(pathname);
   //* Csak oda vezetünk, ahol nem ugyanez a fal várja — egy `*`-os
   //* karbantartásnál ez üres lista, és csak az újratöltés marad.
@@ -215,7 +263,13 @@ export function Announcements() {
         </div>
       )}
 
-      {block && <BlockScreen announcement={block} escapes={escapes} />}
+      {block && (
+        <BlockScreen
+          announcement={block}
+          escapes={escapes}
+          onBypass={isAdmin ? () => bypass(block) : undefined}
+        />
+      )}
     </>
   );
 }
@@ -223,9 +277,11 @@ export function Announcements() {
 function BlockScreen({
   announcement: a,
   escapes,
+  onBypass,
 }: {
   announcement: PublicAnnouncement;
   escapes: readonly (typeof ESCAPE_ROUTES)[number][];
+  onBypass?: () => void;
 }) {
   const Icon = TONE_ICON[a.tone];
 
@@ -290,6 +346,17 @@ function BlockScreen({
           <RotateCw aria-hidden />
           Újratöltés
         </Button>
+
+        {onBypass && (
+          <Button
+            variant="outline"
+            className="mt-2 h-10 px-4"
+            onClick={onBypass}
+          >
+            <Eye aria-hidden />
+            Megtekintés így is (üzemeltető)
+          </Button>
+        )}
       </div>
     </div>
   );

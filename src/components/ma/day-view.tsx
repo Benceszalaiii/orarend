@@ -1,7 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { CrestField, PAGE_COLUMNS } from "@/components/chrome/page-field";
+import {
+  CrestField,
+  PAGE_CHROME,
+  PAGE_COLUMNS,
+} from "@/components/chrome/page-field";
 import { SITE_BAR_MAX, StandingLine } from "@/components/chrome/standing-line";
 import { SiteFooter } from "@/components/site-footer";
 import { dateFromKey } from "@/components/timetable/shared";
@@ -102,7 +106,7 @@ export function DayView({
   } = dv;
 
   const chrome = (
-    <div className="ma-chrome sticky top-0 z-30 text-hero-foreground">
+    <div className={PAGE_CHROME}>
       <div className={cn("mx-auto w-full", SITE_BAR_MAX)}>
         <StandingLine
           line={{

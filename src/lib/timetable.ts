@@ -110,6 +110,44 @@ export function saveCachedSubject(
   }
 }
 
+//! ─── AZ ALANY A CÍMBEN IS ÁLLHAT ───────────────────────────────────────────
+//! `/orarend?class=13C`, `/tanari?teacher=AgAn` — egy link, ami EGYENESEN az
+//! adott órarendre visz. A cím erősebb a készülék emlékezeténél: aki egy
+//! linkre kattint, azt akarja látni, nem a legutóbbi saját választását. A
+//! kis- és nagybetű, a pont vagy a teljes tanárnév mindegy — a feloldás
+//! (`resolveSubjectResult`) ugyanúgy megbocsátó, mint a választónál.
+export const SUBJECT_URL_PARAM: Record<TimetableSubjectKind, string> = {
+  class: "class",
+  teacher: "teacher",
+};
+
+export function loadUrlSubject(kind: TimetableSubjectKind): string | null {
+  try {
+    const value = new URLSearchParams(window.location.search).get(
+      SUBJECT_URL_PARAM[kind],
+    );
+    return value?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+//* A választás visszaírása a címbe (előzmény-bejegyzés nélkül), hogy a
+//* címsor mindig egy megosztható linket mutasson. A többi paraméter marad.
+export function saveUrlSubject(
+  kind: TimetableSubjectKind,
+  short: string,
+): void {
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get(SUBJECT_URL_PARAM[kind]) === short) return;
+    url.searchParams.set(SUBJECT_URL_PARAM[kind], short);
+    window.history.replaceState(null, "", url);
+  } catch {
+    /* nincs mit tenni — a lap a cím nélkül is működik */
+  }
+}
+
 export function loadCachedClass(): string | null {
   return loadCachedSubject("class");
 }
@@ -255,7 +293,7 @@ function timetableHttp(status: number, statusText?: string): TimetableError {
       kind: "request",
       title: `A ${TIMETABLE_SOURCE} API elutasította a kérést`,
       message: `A ${TIMETABLE_SOURCE} API nem engedélyezte a lekérdezést (${detail}) — ${EXTERNAL}.`,
-      hint: "Elképzelhető, hogy az órarend csak iskolai belépéssel érhető el.",
+      hint: "",
       detail,
       retryable: false,
     };

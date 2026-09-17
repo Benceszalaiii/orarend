@@ -1,7 +1,11 @@
 "use client";
 
 import { ShieldCheck } from "lucide-react";
-import { CrestField, PAGE_COLUMNS } from "@/components/chrome/page-field";
+import {
+  CrestField,
+  PAGE_CHROME,
+  PAGE_COLUMNS,
+} from "@/components/chrome/page-field";
 import { SITE_BAR_MAX, StandingLine } from "@/components/chrome/standing-line";
 import { DayDeck } from "@/components/ma/day-deck";
 import { DayStrip } from "@/components/ma/day-strip";
@@ -83,7 +87,7 @@ export function UgyeletPage() {
     <main className="relative flex min-h-[100dvh] flex-col bg-background tt-safe">
       <CrestField />
 
-      <div className="ma-chrome sticky top-0 z-30 text-hero-foreground">
+      <div className={PAGE_CHROME}>
         <div className={cn("mx-auto w-full", SITE_BAR_MAX)}>{line}</div>
         {days.length > 0 && (
           <div className={cn(PAGE_COLUMNS, "pb-1.5")}>

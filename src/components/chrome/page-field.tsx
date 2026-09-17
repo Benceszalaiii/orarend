@@ -35,3 +35,9 @@ export function CrestField() {
 //* törzs fölött — az igazodás így szerkezetből következik, nem egyeztetésből.
 export const PAGE_COLUMNS =
   "mx-auto w-full max-w-5xl px-4 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-8";
+
+//! A RAGADÓ FEJLÉC BUROKJA — MINDEN NEM-RÁCS LAPON UGYANAZ. A `/ma`, az
+//! ügyelet, a teremkereső és a kivetítés ugyanabban a fejlécben áll; amíg ezt
+//! mind a négy maga írta le, a kivetítésről lemaradt a szövegszín, és a
+//! fejléc ott más árnyalatú volt. Egy konstans, hogy ne csúszhassanak szét.
+export const PAGE_CHROME = "ma-chrome sticky top-0 z-30 text-hero-foreground";

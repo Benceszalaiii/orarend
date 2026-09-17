@@ -1,6 +1,11 @@
 "use client";
 
-import { GraduationCap, type LucideIcon, Presentation } from "lucide-react";
+import {
+  Compass,
+  GraduationCap,
+  type LucideIcon,
+  Presentation,
+} from "lucide-react";
 import {
   animate,
   type MotionValue,
@@ -11,8 +16,8 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  type KeyboardEvent,
   type PointerEvent,
+  type ReactNode,
   type RefObject,
   useCallback,
   useEffect,
@@ -22,6 +27,8 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { PLACES, placeOf, readFlight } from "@/components/chrome/places";
+import { PlacesPanel } from "@/components/chrome/places-panel";
 import {
   DEFAULT_IDENTITY,
   type Identity,
@@ -52,9 +59,16 @@ import { cn } from "@/lib/utils";
 //! csonkul, a tok nem (lásd `standing-line.tsx`).
 //! ═══════════════════════════════════════════════════════════════════════════
 
-type ViewId = "week" | "today";
+//* A „places" nem nézet, hanem a HELYEK cellája (lásd `chrome/places.ts`):
+//* a folyadék oda is átfolyik, ha az ügyeleten, a teremkeresőn, a kivetítésen
+//* vagy a nyitólapon állsz — így a váltó minden lapon megmondja, hol vagy.
+type ViewId = "week" | "today" | "places";
 
-const VIEWS: readonly { id: ViewId; label: string; title: string }[] = [
+const VIEWS: readonly {
+  id: Exclude<ViewId, "places">;
+  label: string;
+  title: string;
+}[] = [
   { id: "week", label: "Hét", title: "A teljes heti órarend" },
   { id: "today", label: "Ma", title: "A mai nap egy képernyőn" },
 ];
@@ -82,16 +96,18 @@ const ROLES: readonly {
   },
 ];
 
-const VIEW_KEYS = VIEWS.map((v) => v.id);
+const VIEW_KEYS: readonly ViewId[] = [...VIEWS.map((v) => v.id), "places"];
 const ROLE_KEYS = ROLES.map((r) => r.id);
 
 //* A tanári rács ugyanaz a NÉZET, más alannyal — ezért ő is a „Hét"-et
-//* világítja meg. Ami nincs a táblázatban (nyitólap, ügyelet, teremkereső),
-//* ott egyik cella sem aktív: ott nem nézed egyik nézetet sem, csak elérheted.
+//* világítja meg. A helyek (nyitólap, ügyelet, teremkereső, kivetítés) a
+//* harmadik cellát: ott nem nézed egyik nézetet sem, de a váltó akkor is
+//* kimondja, hol állsz.
 const VIEW_OF: Record<string, ViewId> = {
   "/orarend": "week",
   "/tanari": "week",
   "/ma": "today",
+  ...Object.fromEntries(PLACES.map((p) => [p.href, "places" as const])),
 };
 
 //* Az útvonal, ahol az alanyra maga a cím válaszol. A `/ma` szándékosan nincs
@@ -394,96 +410,130 @@ function GooFilter({ id }: { id: string }) {
   );
 }
 
-type RoleTrackProps = {
+//! ─── AZ ALANY EGY KAPCSOLÓ, NEM KÉT RÁDIÓ ─────────────────────────────────
+//! Két alany van, és mindig az egyik áll. Két külön rádiógombbal a diáknak
+//! célozni kellett: a MÁSIKRA koppintani, a sajátjára koppintva semmi nem
+//! történt — egy 26 px magas, két ikonnyi sávban ez fél találat. Kapcsolóként
+//! az egész sáv EGY célpont, és bárhová esik az ujj, átfordít.
+//*
+//! A KÉT IKON ETTŐL MÉG LÁTSZIK. A kapcsoló nem rejti el, mire vált: a folyadék
+//! az aktuálison ül, a másik halványan mellette — így ránézésre kétállású,
+//! nem egy rejtélyes gomb. Egérrel a folyadék a másik felé dől (`LEAN`), ami
+//! előre megmondja, mi fog történni.
+//*
+//! ÁTFORDÍTÁSKOR A FOLYADÉK REMEG, AZ IKON GÖRDÜL. A csepp lelapul és
+//! visszapattan (a térfogat megmarad, lásd `LiquidLayer`), az érkező ikon a
+//! haladás irányába fordulva gurul a helyére. A kettő együtt mondja: ez EGY
+//! tárgy volt, ami átbillent — nem két gomb, amiből az egyik kigyulladt.
+type RoleToggleProps = {
   role: Identity;
   fromRole: Identity | null;
-  onSelect: (role: Identity) => void;
+  onToggle: (role: Identity) => void;
   filterId: string;
   hidden: boolean;
 };
 
-function RoleTrack({
+const WOBBLE = [1, 0.74, 1.08, 0.97, 1];
+const ROLL = {
+  type: "spring",
+  stiffness: 380,
+  damping: 17,
+  mass: 0.7,
+} as const;
+
+function RoleToggle({
   role,
   fromRole,
-  onSelect,
+  onToggle,
   filterId,
   hidden,
-}: RoleTrackProps) {
+}: RoleToggleProps) {
   const reduced = useReducedMotion() ?? false;
   const itemsRef = useRef(new Map<string, HTMLElement>());
-  const [hoverRole, setHoverRole] = useState<Identity | null>(null);
+  const [hovering, setHovering] = useState(false);
+  const press = useMotionValue(1);
   const current = ROLES.find((r) => r.id === role) ?? ROLES[0];
+  const other = ROLES.find((r) => r.id !== role) ?? ROLES[1];
   const previous = fromRole ? ROLES.find((r) => r.id === fromRole) : undefined;
 
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const i = ROLE_KEYS.indexOf(role);
-    const next =
-      e.key === "ArrowRight" || e.key === "ArrowDown"
-        ? ROLE_KEYS[(i + 1) % ROLE_KEYS.length]
-        : e.key === "ArrowLeft" || e.key === "ArrowUp"
-          ? ROLE_KEYS[(i - 1 + ROLE_KEYS.length) % ROLE_KEYS.length]
-          : e.key === "Home"
-            ? ROLE_KEYS[0]
-            : e.key === "End"
-              ? ROLE_KEYS[ROLE_KEYS.length - 1]
-              : null;
-    if (!next) return;
-    e.preventDefault();
-    onSelect(next);
-    itemsRef.current.get(next)?.focus();
-  };
+  //* Hányszor fordult át ENNÉL a példánynál. A lapváltás utáni első rajz nem
+  //* gördít (azt az átadás már elmondta), csak a helyben tett váltás.
+  const [flips, setFlips] = useState(0);
+  const seen = useRef(role);
+  useEffect(() => {
+    if (seen.current === role) return;
+    seen.current = role;
+    setFlips((n) => n + 1);
+    if (!reduced) animate(press, WOBBLE, { duration: 0.55, ease: "easeOut" });
+  }, [role, reduced, press]);
+
+  const nextIndex = ROLE_KEYS.indexOf(role);
 
   return (
-    <div
-      role="radiogroup"
-      aria-label="Kié az órarend"
+    <button
+      type="button"
+      role="switch"
+      aria-checked={role === "teacher"}
+      aria-label="Tanári órarend"
       aria-hidden={hidden || undefined}
+      tabIndex={hidden ? -1 : undefined}
       inert={hidden}
-      onKeyDown={onKeyDown}
-      className="relative flex h-[26px] items-center"
+      title={`${current.title} — koppints: ${other.title.toLowerCase()}`}
+      onClick={() => onToggle(other.id)}
+      onPointerEnter={(e) => e.pointerType === "mouse" && setHovering(true)}
+      onPointerLeave={() => setHovering(false)}
+      className={cn(
+        "relative flex h-[26px] cursor-pointer items-center rounded-full outline-none",
+        "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-ring",
+      )}
     >
       <LiquidLayer
         order={ROLE_KEYS}
         activeKey={role}
         fromKey={fromRole}
         fromBlob={previous?.blob}
-        hoverKey={hoverRole}
+        hoverKey={hovering ? other.id : null}
         itemsRef={itemsRef}
         filterId={filterId}
         blob={cn("transition-colors duration-500", current.blob)}
         shadow="drop-shadow(0 1px 1.5px oklch(0 0 0 / 0.28))"
+        press={press}
         restExtra={0}
       />
-      {ROLES.map(({ id, label, title, Icon }) => {
+      {ROLES.map(({ id, label, Icon }, i) => {
         const selected = id === role;
+        //* Az érkező ikon a folyadék haladásának irányába gördül be.
+        const spin = i === nextIndex ? (i === 0 ? -1 : 1) : 0;
         return (
-          // biome-ignore lint/a11y/useSemanticElements: stílusos rádiók vándorló tabindexszel; natív input nem hordozhatja a folyadékréteget
-          <button
+          <span
             key={id}
             ref={(el) => {
               if (el) itemsRef.current.set(id, el);
               else itemsRef.current.delete(id);
             }}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            aria-label={label}
-            title={title}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => onSelect(id)}
-            onPointerEnter={(e) =>
-              e.pointerType === "mouse" && setHoverRole(id)
-            }
-            onPointerLeave={() => setHoverRole(null)}
             className={cn(
-              "relative flex h-full cursor-pointer items-center rounded-full px-2 text-xs font-semibold tracking-[-0.005em] outline-none transition-colors duration-200 motion-reduce:transition-none",
-              "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-ring",
+              "relative flex h-full items-center rounded-full px-2 text-xs font-semibold tracking-[-0.005em] transition-colors duration-200 motion-reduce:transition-none",
               selected
                 ? "text-ink-on-primary"
-                : "text-background/55 hover:text-background",
+                : hovering
+                  ? "text-background"
+                  : "text-background/55",
             )}
           >
-            <Icon aria-hidden className="size-4 shrink-0" strokeWidth={2.25} />
+            <motion.span
+              key={selected ? `${id}-${flips}` : id}
+              aria-hidden
+              className="flex"
+              initial={
+                selected && flips > 0 && !reduced
+                  ? { rotate: spin * 200, scale: 0.4 }
+                  : false
+              }
+              animate={{ rotate: 0, scale: 1 }}
+              transition={ROLL}
+            >
+              <Icon className="size-4 shrink-0" strokeWidth={2.25} />
+            </motion.span>
             {/*//! A NÉV TELEFONON NEM NYÍLIK KI. Az olvasónév (`aria-label`)
                 //! végig megvan; a szemnek a mellette álló sor mondja ki az
                 //! alanyt („13C" vagy „Kovács B."). `sm`-től kifér. */}
@@ -520,10 +570,10 @@ function RoleTrack({
                 {label}
               </span>
             </motion.span>
-          </button>
+          </span>
         );
       })}
-    </div>
+    </button>
   );
 }
 
@@ -548,13 +598,16 @@ function InkLabel({
   left,
   right,
   liquid,
+  follow,
   className,
 }: {
-  label: string;
+  label: ReactNode;
   rowRef: RefObject<HTMLDivElement | null>;
   left: MotionValue<number>;
   right: MotionValue<number>;
   liquid: boolean;
+  /** Az elemet mozgató értékek (pl. a repülő ikoné) — a vágás ezekkel is újraszámol. */
+  follow?: readonly MotionValue<number>[];
   className?: string;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -591,7 +644,9 @@ function InkLabel({
       );
     };
     update();
-    const subs = [left.on("change", update), right.on("change", update)];
+    const subs = [left, right, ...(follow ?? [])].map((mv) =>
+      mv.on("change", update),
+    );
     //* A sor átméreteződése (nyíló-csukódó alany) a feliratot is odébb tolja.
     const ro = new ResizeObserver(update);
     if (rowRef.current) ro.observe(rowRef.current);
@@ -599,19 +654,19 @@ function InkLabel({
       for (const unsub of subs) unsub();
       ro.disconnect();
     };
-  }, [liquid, left, right, rowRef, inkClip, baseClip]);
+  }, [liquid, left, right, follow, rowRef, inkClip, baseClip]);
 
   return (
-    <span ref={ref} className="relative">
+    <span ref={ref} className="relative flex">
       <motion.span
-        className={cn("block text-foreground", className)}
+        className={cn("flex items-center text-foreground", className)}
         style={{ clipPath: baseClip }}
       >
         {label}
       </motion.span>
       <motion.span
         aria-hidden
-        className="pointer-events-none absolute inset-0 text-background"
+        className="pointer-events-none absolute inset-0 flex items-center text-background"
         style={{ clipPath: inkClip }}
       >
         {label}
@@ -647,6 +702,13 @@ function useIdentity(pathname: string): Identity {
   return routed ?? stored;
 }
 
+//! A REPÜLÉS RUGÓI. A két tengely KÜLÖN rugón fut, és a függőleges lazább: a
+//! vízszintes hamarabb ér célba, a függőleges utána húzódik — az ikon így ívben
+//! száll a buborék sorából a cellába, nem egyenes vonalon csúszik.
+const FLY_X = { type: "spring", stiffness: 300, damping: 30, mass: 1 } as const;
+const FLY_Y = { type: "spring", stiffness: 210, damping: 22, mass: 1 } as const;
+const FLY_S = { type: "spring", stiffness: 260, damping: 20, mass: 1 } as const;
+
 export function PillNav({
   floating = false,
   className,
@@ -659,13 +721,20 @@ export function PillNav({
   const reduced = useReducedMotion() ?? false;
   const identity = useIdentity(pathname);
   const activeView = VIEW_OF[pathname] ?? null;
+  const place = placeOf(pathname);
   const [hoverView, setHoverView] = useState<ViewId | null>(null);
   const itemsRef = useRef(new Map<string, HTMLElement>());
   const press = useMotionValue(1);
   const liquidLeft = useMotionValue(0);
   const liquidRight = useMotionValue(0);
+  const navRef = useRef<HTMLElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
-  const filterId = `pn-goo-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const iconRef = useRef<HTMLSpanElement>(null);
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const filterId = `pn-goo-${uid}`;
+  const panelId = `pn-places-${uid}`;
+  const [placesOpen, setPlacesOpen] = useState(false);
 
   const [from] = useState(readHandoff);
   const fromView =
@@ -683,6 +752,46 @@ export function PillNav({
     };
   }, []);
 
+  //! ─── A HELY IKONJA A BUBORÉKBÓL REPÜL BE ───────────────────────────────
+  //! Az új lap váltója a buborék sorának ikonját ott találja, ahol a koppintás
+  //! hagyta (`launchFlight`), és a saját cellájába repíti. A FLIP a kész
+  //! elrendezésből mér: a cella közben nyílhat vagy csukódhat, a transzformáció
+  //! az elrendezéshez képest fut, tehát a végén pontosan a helyén ül.
+  const flyX = useMotionValue(0);
+  const flyY = useMotionValue(0);
+  const flyScale = useMotionValue(1);
+  const [flyFollow] = useState(() => [flyX, flyY] as const);
+  const [incoming] = useState(() => readFlight(place?.id));
+  useLayoutEffect(() => {
+    const el = iconRef.current;
+    if (!incoming || reduced || !el) return;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0) return;
+    flyX.jump(incoming.x - (r.left + r.width / 2));
+    flyY.jump(incoming.y - (r.top + r.height / 2));
+    flyScale.jump(Math.max(1, incoming.size / r.width) * 1.35);
+    const runs = [
+      animate(flyX, 0, FLY_X),
+      animate(flyY, 0, FLY_Y),
+      animate(flyScale, 1, FLY_S),
+    ];
+    return () => {
+      for (const run of runs) run.stop();
+      flyX.jump(0);
+      flyY.jump(0);
+      flyScale.jump(1);
+    };
+  }, [incoming, reduced, flyX, flyY, flyScale]);
+
+  //* Lapváltáskor a buborék magától becsukódik — a lap, amiről szólt, elment.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: az útvonal a jel
+  useEffect(() => setPlacesOpen(false), [pathname]);
+
+  const closePlaces = useCallback((opts?: { refocus?: boolean }) => {
+    setPlacesOpen(false);
+    if (opts?.refocus) triggerRef.current?.focus();
+  }, []);
+
   //! A „HÉT" KÉT KÜLÖNBÖZŐ LAP (`weekRouteFor`), A „MA" EGY.
   const weekHref = weekRouteFor(identity);
 
@@ -696,6 +805,8 @@ export function PillNav({
 
   const squash = (e: PointerEvent) => {
     if (reduced || e.button !== 0) return;
+    //* A buborékban tett koppintás nem a tok megnyomása.
+    if ((e.target as Element).closest(`#${panelId}`)) return;
     animate(press, 0.94, PRESS);
   };
   const release = () => {
@@ -703,18 +814,35 @@ export function PillNav({
     animate(press, 1, RELEASE);
   };
 
+  //* A szöveg halványítása ugyanaz minden inaktív cellán.
+  const idleInk = (active: boolean) =>
+    !active &&
+    (floating
+      ? "opacity-55 group-hover:opacity-75"
+      : "opacity-70 group-hover:opacity-100 dark:opacity-55 dark:group-hover:opacity-75");
+
+  const placesActive = activeView === "places";
+  const placesWasActive = fromView ? fromView === "places" : placesActive;
+  const PlaceIcon = place?.Icon ?? Compass;
+
   return (
     <nav
+      ref={navRef}
       aria-label="Nézetek"
       onPointerDown={squash}
       onPointerUp={release}
       onPointerCancel={release}
       onPointerLeave={release}
       className={cn(
-        "relative isolate inline-flex h-10 shrink-0 touch-manipulation select-none items-stretch rounded-full p-1 [-webkit-tap-highlight-color:transparent]",
-        floating
-          ? "bg-background"
-          : "bg-card shadow-[inset_0_0_0_1px_var(--input)]",
+        //! `z-20`: A BUBORÉK A VÁLTÓ FÁJÁBAN ÉL, tehát a váltó rétegével
+        //! együtt fedi a sort követő testvéreket — a sáv műveletsorát és a
+        //! napsávot. Enélkül azok a buborék FÖLÉ rajzolódtak.
+        "relative isolate z-20 inline-flex h-10 shrink-0 touch-manipulation select-none items-stretch rounded-full p-1 [-webkit-tap-highlight-color:transparent]",
+        //! NINCS KÖRVONAL. A tok egy hajszálvonallal keretezve „kiemelt"
+        //! gombbá vált a sorban, és a belőle kicsorduló nyakat is elvágta:
+        //! a folyadék a vonalon át nem olvadhat a tokba. A tok a színével
+        //! válik el, nem egy kerettel.
+        floating ? "bg-background" : "bg-card",
         className,
       )}
     >
@@ -774,10 +902,7 @@ export function PillNav({
                     "transition-opacity duration-200 motion-reduce:transition-none",
                     //! SÖTÉT TOKON A TELJES FEHÉR KIABÁL. A rámutatás ott
                     //! csak halkan erősödhet; világos tokon a teljes erő marad.
-                    !active &&
-                      (floating
-                        ? "opacity-55 group-hover:opacity-75"
-                        : "opacity-70 group-hover:opacity-100 dark:opacity-55 dark:group-hover:opacity-75"),
+                    idleInk(active),
                   )}
                 />
               </Link>
@@ -807,10 +932,10 @@ export function PillNav({
                 className="flex h-full items-center [overflow-x:clip]"
               >
                 <div data-liquid-extra className="shrink-0 pr-1">
-                  <RoleTrack
+                  <RoleToggle
                     role={identity}
                     fromRole={fromRole}
-                    onSelect={pickIdentity}
+                    onToggle={pickIdentity}
                     filterId={filterId}
                     hidden={!active}
                   />
@@ -819,7 +944,120 @@ export function PillNav({
             </div>
           );
         })}
+
+        {/*//! ─── A HELYEK CELLÁJA ─────────────────────────────────────────
+            //! Egy gomb, nem négy. Inaktívan egy iránytű: „innen máshová is
+            //! mehetsz". Ha egy helyen állsz, a folyadék ide folyik át, az
+            //! iránytű helyén a hely SAJÁT ikonja áll, és `sm`-től a neve is —
+            //! telefonon a mellette álló sor már kimondja („Ügyelet · ma").
+            //*
+            //! A GOMB NYITVA IS GOMB MARAD. Újra megnyomva becsukja a
+            //! buborékot; a folyadék közben nem mozdul, mert a hely, ahol
+            //! állsz, nem változott. */}
+        <div
+          ref={(el) => {
+            if (el) itemsRef.current.set("places", el);
+            else itemsRef.current.delete("places");
+          }}
+          className="relative flex items-center"
+        >
+          <button
+            ref={triggerRef}
+            type="button"
+            aria-expanded={placesOpen}
+            aria-controls={placesOpen ? panelId : undefined}
+            aria-label={place ? `Helyek — most: ${place.label}` : "Helyek"}
+            title="Ügyelet, teremkereső, kivetítés, nyitólap"
+            onClick={() => setPlacesOpen((v) => !v)}
+            onPointerEnter={(e) =>
+              e.pointerType === "mouse" && setHoverView("places")
+            }
+            onPointerLeave={() => setHoverView(null)}
+            className={cn(
+              "group relative flex h-full cursor-pointer items-center rounded-full pr-1 pl-2.5 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3",
+              "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
+            )}
+          >
+            <motion.span
+              ref={iconRef}
+              className="relative flex"
+              style={{ x: flyX, y: flyY, scale: flyScale }}
+            >
+              <InkLabel
+                label={
+                  <motion.span
+                    key={place?.id ?? "compass"}
+                    className="flex"
+                    initial={false}
+                    animate={{
+                      rotate: placesOpen && !placesActive ? 135 : 0,
+                    }}
+                    transition={reduced ? INSTANT : ROLL}
+                  >
+                    <PlaceIcon className="size-4" strokeWidth={2.25} />
+                  </motion.span>
+                }
+                rowRef={rowRef}
+                left={liquidLeft}
+                right={liquidRight}
+                liquid={Boolean(activeView)}
+                follow={flyFollow}
+                className={cn(
+                  "transition-opacity duration-200 motion-reduce:transition-none",
+                  idleInk(placesActive || placesOpen),
+                )}
+              />
+            </motion.span>
+            <motion.span
+              initial={
+                fromView
+                  ? {
+                      width: placesWasActive ? "auto" : 6,
+                      opacity: placesWasActive ? 1 : 0,
+                    }
+                  : false
+              }
+              animate={{
+                width: placesActive ? "auto" : 6,
+                opacity: placesActive ? 1 : 0,
+              }}
+              transition={
+                reduced
+                  ? INSTANT
+                  : {
+                      width: COLLAPSE,
+                      opacity: placesActive
+                        ? { duration: 0.22, delay: 0.14 }
+                        : { duration: 0.1 },
+                    }
+              }
+              className="flex h-full items-center [overflow-x:clip]"
+            >
+              <span data-liquid-extra className="block w-max min-w-1.5">
+                <span className="block pr-1.5 pl-1.5 max-sm:hidden">
+                  <InkLabel
+                    label={place?.label ?? ""}
+                    rowRef={rowRef}
+                    left={liquidLeft}
+                    right={liquidRight}
+                    liquid={placesActive}
+                  />
+                </span>
+              </span>
+            </motion.span>
+          </button>
+        </div>
       </div>
+
+      <PlacesPanel
+        open={placesOpen}
+        onClose={closePlaces}
+        navRef={navRef}
+        triggerRef={triggerRef}
+        floating={floating}
+        current={place}
+        panelId={panelId}
+      />
     </nav>
   );
 }

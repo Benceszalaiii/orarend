@@ -1,4 +1,4 @@
-import { StandingLine } from "@/components/chrome/standing-line";
+import { PillNav } from "@/components/chrome/pill-nav";
 import { SiteFooter } from "@/components/site-footer";
 import Cta from "./cta";
 import { GridFilm } from "./film";
@@ -23,12 +23,16 @@ export function Landing() {
   return (
     <main className="bg-card">
       {/*//! A VÁLTÓ ÁTKEL HÁROM ALAPSZÍNEN. A film meleg papírral nyit, kobalton
-          //! megy át és éjszakai felületen zár — egy rögzített sáv mindhármon
-          //! rajta ül. A `floating` változat ezért saját, sötét üvegtáblát
-          //! visel: nem a mögötte lévő laptól kéri a kontrasztot. */}
-      <StandingLine
-        surface="floating"
-        className="fixed top-[calc(env(safe-area-inset-top)+0.75rem)] right-[calc(env(safe-area-inset-right)+0.75rem)] z-50 sm:top-4 sm:right-4"
+          //! megy át és éjszakai felületen zár — egy rögzített pirula mindhármon
+          //! rajta ül. A `nav-glass` saját, zárt színvilágot ad neki: nem a
+          //! mögötte lévő laptól kéri a kontrasztot.
+          //*
+          //! CSAK A VÁLTÓ, TÁBLA ÉS FIÓK NÉLKÜL. A nyitólap bemutatkozás: itt a
+          //! belépés gombja egy olyan kérdést tett fel („ki vagy?"), amire a lap
+          //! még nem adott okot. A pirula maga a tábla — köré nem kell még egy. */}
+      <PillNav
+        floating
+        className="nav-glass fixed top-[calc(env(safe-area-inset-top)+0.75rem)] right-[calc(env(safe-area-inset-right)+0.75rem)] z-50 shadow-[0_10px_30px_-14px_oklch(0_0_0/0.8)] sm:top-4 sm:right-4"
       />
       <GridFilm />
       <Latest />

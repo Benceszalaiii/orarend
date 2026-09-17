@@ -11,6 +11,9 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { CrestField, PAGE_CHROME } from "@/components/chrome/page-field";
+import { SITE_BAR_MAX, StandingLine } from "@/components/chrome/standing-line";
+import { SiteFooter } from "@/components/site-footer";
 import { ScreenForm } from "@/components/timetable/lesson-extras";
 import {
   canViewInPage,
@@ -318,79 +321,93 @@ export function KivetitesIndex() {
   );
 
   return (
-    <main className="mx-auto w-full max-w-xl px-5 py-10">
-      <Link
-        href="/orarend"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:underline"
-      >
-        <ChevronLeft className="size-4" aria-hidden />
-        Órarend
-      </Link>
-      <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">
-        Kivetítés
-      </h1>
-      <p className="mt-2 text-pretty text-sm leading-relaxed text-muted-foreground">
-        Tanár által konfigurált linkek.
-      </p>
+    <main className="relative flex min-h-[100dvh] flex-col bg-background tt-safe">
+      <CrestField />
 
-      <form onSubmit={go} className="mt-6 flex gap-2">
-        <label htmlFor={inputId} className="sr-only">
-          Terem
-        </label>
-        <input
-          id={inputId}
-          type="text"
-          autoComplete="off"
-          placeholder="Terem, pl. 218"
-          className="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-sm dark:bg-input/30"
-          value={room}
-          onChange={(event) => setRoom(event.target.value)}
-        />
-        <Button
-          type="submit"
-          className="rounded-full px-4"
-          disabled={!room.trim()}
-        >
-          Megnyitás
-        </Button>
-      </form>
+      {/*//! A KIVETÍTÉS IS A VÁLTÓ ALÁ KERÜL. Eddig egy „‹ Órarend" hivatkozás
+          //! volt az egyetlen út ki innen; a váltó ugyanazt tudja (Hét, Ma), és
+          //! mellé kimondja, hogy a Helyek közül itt állsz. A teremnézet
+          //! (`/kivetites/[terem]`) szándékosan NEM kapja meg: az egy
+          //! osztályterem kivetítőjén fut, ott minden fejléc zaj. */}
+      <div className={PAGE_CHROME}>
+        <div className={cn("mx-auto w-full", SITE_BAR_MAX)}>
+          <StandingLine
+            line={{
+              subject: "Kivetítés",
+              context:
+                status === "loading" ? undefined : `${rooms.length} terem`,
+            }}
+          />
+        </div>
+      </div>
+      <div className="relative z-10 mx-auto w-full max-w-xl grow px-5 pt-6 pb-10">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          Kivetítés
+        </h1>
+        <p className="mt-2 text-pretty text-sm leading-relaxed text-muted-foreground">
+          Tanár által konfigurált linkek.
+        </p>
 
-      <h2 className="mt-8 text-xs font-medium text-muted-strong">
-        Beállított termek
-      </h2>
-      {status === "loading" ? (
-        <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner className="size-4" /> Betöltés…
-        </p>
-      ) : rooms.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          {status === "error"
-            ? "Most nem sikerült betölteni a termeket."
-            : "Még egyik teremhez sem adott meg címet tanár."}
-        </p>
-      ) : (
-        <ul className="mt-2 divide-y divide-border rounded-xl border border-border">
-          {rooms.map((screen) => (
-            <li key={screen.room}>
-              <Link
-                href={`/kivetites/${encodeURIComponent(screen.room)}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50"
-              >
-                <Cast
-                  className="size-4 shrink-0 text-muted-foreground"
-                  aria-hidden
-                />
-                <span className="flex-1 text-sm font-semibold uppercase tabular-nums text-foreground">
-                  {screen.room}
-                </span>
-                <span className="font-mono text-xs text-muted-strong">
-                  {formatScreenAddress(screen)}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+        <form onSubmit={go} className="mt-6 flex gap-2">
+          <label htmlFor={inputId} className="sr-only">
+            Terem
+          </label>
+          <input
+            id={inputId}
+            type="text"
+            autoComplete="off"
+            placeholder="Terem, pl. 218"
+            className="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-sm dark:bg-input/30"
+            value={room}
+            onChange={(event) => setRoom(event.target.value)}
+          />
+          <Button
+            type="submit"
+            className="rounded-full px-4"
+            disabled={!room.trim()}
+          >
+            Megnyitás
+          </Button>
+        </form>
+
+        <h2 className="mt-8 text-xs font-medium text-muted-strong">
+          Beállított termek
+        </h2>
+        {status === "loading" ? (
+          <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner className="size-4" /> Betöltés…
+          </p>
+        ) : rooms.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {status === "error"
+              ? "Most nem sikerült betölteni a termeket."
+              : "Még egyik teremhez sem adott meg címet tanár."}
+          </p>
+        ) : (
+          <ul className="mt-2 divide-y divide-border rounded-xl border border-border">
+            {rooms.map((screen) => (
+              <li key={screen.room}>
+                <Link
+                  href={`/kivetites/${encodeURIComponent(screen.room)}`}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50"
+                >
+                  <Cast
+                    className="size-4 shrink-0 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <span className="flex-1 text-sm font-semibold uppercase tabular-nums text-foreground">
+                    {screen.room}
+                  </span>
+                  <span className="font-mono text-xs text-muted-strong">
+                    {formatScreenAddress(screen)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <SiteFooter className="relative z-10" />
     </main>
   );
 }

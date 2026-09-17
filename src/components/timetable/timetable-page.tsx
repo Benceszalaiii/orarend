@@ -20,6 +20,7 @@ import {
   describeTimetableFailure,
   fetchTimetableSubjects,
   loadCachedSubject,
+  loadUrlSubject,
   PUBLIC_DEFAULT_CLASS,
   subjectStoreKey,
   type TimetableError,
@@ -428,13 +429,18 @@ export function TimetablePage({
 //! A tanári lap harmadik forrása (a belépés NEVE, a tanárlistához mérve) itt
 //! szándékosan nincs benne: ahhoz kell a lista, tehát az marad a lassú úton.
 function subjectWithoutList(mode: TimetableSubjectKind): string {
+  //* A címben kért alany mindent megelőz (`?class=13C`, `?teacher=…`).
+  const linked = loadUrlSubject(mode);
+  if (linked) return linked;
   const remembered = loadCachedSubject(mode);
   if (remembered) return remembered;
   return mode === "class" ? PUBLIC_DEFAULT_CLASS : "";
 }
 
 //! ─── KIÉ AZ ELSŐ HÉT ───────────────────────────────────────────────────────
-//! Három forrás, ebben a sorrendben, és a sorrend a lényeg:
+//! Három forrás, ebben a sorrendben, és a sorrend a lényeg. (A címben kért
+//! alany — `?class=` / `?teacher=` — ide el sem jut: azt a `subjectWithoutList`
+//! már a lista nélkül elindítja.)
 //!   1. amit legutóbb ezen a készüléken választottak — ez a legerősebb jel,
 //!      mert kimondott döntés volt;
 //!   2. tanári lapon: az iskolai belépésből ismert NÉV, ha szerepel a
