@@ -86,6 +86,17 @@ const DRIP = {
 const LEAD = { type: "spring", stiffness: 560, damping: 48, mass: 1 } as const;
 const TRAIL = { type: "spring", stiffness: 170, damping: 27, mass: 1 } as const;
 const SWELL = { type: "spring", stiffness: 420, damping: 32, mass: 1 } as const;
+//* Menet közbeni újracélzáshoz: nem nyúlik, csak átcsúszik.
+const EVEN = { type: "spring", stiffness: 380, damping: 40, mass: 1 } as const;
+
+//! A MUTATÓ SZÁNDÉKA, NEM MINDEN SOR, AMIN ÁTSUHAN. Egy gyors húzás öt sort
+//! is érint; ha mindegyik célpont lenne, a folyadék minden képkockán irányt
+//! váltana és cseppeket hagyna maga után. A rövid késleltetés alatt a gyors
+//! átsuhanás egyetlen célba olvad, a megállás viszont észrevétlenül gyors.
+const HOVER_DELAY = 45;
+const LEAVE_DELAY = 90;
+//* Ennyi eltérésen belül a folyadék „áll" egy soron.
+const SETTLED = 1.5;
 
 const SHADOW = "drop-shadow(0 18px 22px oklch(0 0 0 / 0.5))";
 const INK_SHADOW = "drop-shadow(0 2px 4px oklch(0 0 0 / 0.3))";
@@ -133,6 +144,13 @@ export function PlacesPanel({
   const fade = useMotionValue(0);
   const filterId = `pp-goo-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const [hover, setHover] = useState<number | null>(null);
+  const hoverTimer = useRef<number | undefined>(undefined);
+  const hoverTo = useCallback((index: number | null, delay = 0) => {
+    window.clearTimeout(hoverTimer.current);
+    if (delay <= 0) setHover(index);
+    else hoverTimer.current = window.setTimeout(() => setHover(index), delay);
+  }, []);
+  useEffect(() => () => window.clearTimeout(hoverTimer.current), []);
   //* A sorok alatti folyadék két éle — a sorok tintája ezekből vágja magát.
   const liqTop = useMotionValue(0);
   const liqBottom = useMotionValue(0);
@@ -182,13 +200,13 @@ export function PlacesPanel({
         ];
     if (!open)
       Promise.all(runs).then(() => {
-        setHover(null);
+        hoverTo(null);
         setPresent(false);
       });
     return () => {
       for (const run of runs) run.stop();
     };
-  }, [open, present, reduced, fall, spread, fade]);
+  }, [open, present, reduced, fall, spread, fade, hoverTo]);
 
   //! ─── A TEST ALAKJA ─────────────────────────────────────────────────────
   //! Nullán egy nyaknyi széles, nulla magas csepp a gomb alatt; egynél a
@@ -429,7 +447,7 @@ export function PlacesPanel({
               transition: { staggerChildren: 0.05, delayChildren: 0.12 },
             },
           }}
-          onPointerLeave={() => setHover(null)}
+          onPointerLeave={() => hoverTo(null, LEAVE_DELAY)}
           className="flex flex-col gap-0.5"
         >
           {PLACES.map((place, i) => (
@@ -442,7 +460,7 @@ export function PlacesPanel({
               reduced={reduced}
               liquidTop={liqTop}
               liquidBottom={liqBottom}
-              onHover={setHover}
+              onHover={hoverTo}
               onPick={() => onClose()}
             />
           ))}
@@ -503,9 +521,12 @@ function RowLiquid({
     const prev = last.current;
     const span = target === null ? null : spanOf(target);
 
+    //* Ahol a folyadék ÉPP van — nem ahová legutóbb indult.
+    const visible = bottom.get() - top.get() > SETTLED;
+
     if (!span) {
       if (prev.span) {
-        const mid = (prev.span.top + prev.span.bottom) / 2;
+        const mid = (top.get() + bottom.get()) / 2;
         if (reduced) {
           top.jump(mid);
           bottom.jump(mid);
@@ -522,18 +543,36 @@ function RowLiquid({
       top.jump(span.top);
       bottom.jump(span.bottom);
     } else if (!prev.span) {
-      //* Az első megjelenés a sor közepéből duzzad ki, nem csúszik be.
-      const mid = (span.top + span.bottom) / 2;
-      top.jump(mid);
-      bottom.jump(mid);
-      animate(top, span.top, SWELL);
-      animate(bottom, span.bottom, SWELL);
+      if (visible) {
+        //* Még apadt, amikor új cél jött — onnan folyik tovább, nem ugrik.
+        animate(top, span.top, EVEN);
+        animate(bottom, span.bottom, EVEN);
+      } else {
+        //* Az első megjelenés a sor közepéből duzzad ki, nem csúszik be.
+        const mid = (span.top + span.bottom) / 2;
+        top.jump(mid);
+        bottom.jump(mid);
+        animate(top, span.top, SWELL);
+        animate(bottom, span.bottom, SWELL);
+      }
     } else if (prev.index !== target) {
-      const dir = span.top > prev.span.top ? 1 : -1;
-      animate(top, span.top, dir > 0 ? TRAIL : LEAD);
-      animate(bottom, span.bottom, dir > 0 ? LEAD : TRAIL);
-      const from = prev.span;
-      setRemnants((list) => [...list, { id: ++remnantSeq, ...from, dir }]);
+      //! CSAK AZ ÁLLÓ FOLYADÉK SZAKAD. Ha a csepp még úton van, a régi cél
+      //! helyén nincs mit otthagyni — a leszakadó csepp ott a semmiből
+      //! bukkanna fel, és az irányfüggő élek menet közben megfordulva a
+      //! testet több sorra húznák szét. Ilyenkor egyenletesen átcélzunk.
+      const settled =
+        Math.abs(top.get() - prev.span.top) < SETTLED &&
+        Math.abs(bottom.get() - prev.span.bottom) < SETTLED;
+      if (settled) {
+        const dir = span.top > prev.span.top ? 1 : -1;
+        animate(top, span.top, dir > 0 ? TRAIL : LEAD);
+        animate(bottom, span.bottom, dir > 0 ? LEAD : TRAIL);
+        const from = prev.span;
+        setRemnants((list) => [...list, { id: ++remnantSeq, ...from, dir }]);
+      } else {
+        animate(top, span.top, EVEN);
+        animate(bottom, span.bottom, EVEN);
+      }
     }
     last.current = { index: target, span };
   }, [target, spanOf, reduced, top, bottom]);
@@ -595,7 +634,7 @@ function PlaceRow({
   reduced: boolean;
   liquidTop: MotionValue<number>;
   liquidBottom: MotionValue<number>;
-  onHover: (index: number) => void;
+  onHover: (index: number, delay?: number) => void;
   onPick: () => void;
 }) {
   const iconRef = useRef<HTMLSpanElement>(null);
@@ -706,7 +745,9 @@ function PlaceRow({
         href={place.href}
         data-place-row
         aria-current={current ? "page" : undefined}
-        onPointerEnter={(e) => e.pointerType === "mouse" && onHover(index)}
+        onPointerEnter={(e) =>
+          e.pointerType === "mouse" && onHover(index, HOVER_DELAY)
+        }
         //! A FOLYADÉK CSAK LÁTHATÓ FÓKUSZRA MOZDUL. Nyitáskor a buborék az
         //! első sorra teszi a fókuszt (billentyűzettel ez kell), de koppintás
         //! után ez a fókusz láthatatlan — és a folyadék mégis az „Ügyelet" alá
