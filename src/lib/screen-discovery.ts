@@ -14,20 +14,26 @@ import { type ScreenAddress, screenTaskFrameUrl } from "./lesson-extras";
 //!   • a negyedik szám 1–25;
 //!   • a ScreenTask a 7070-es vagy a 8080-as porton fut.
 //!
-//! A PRÓBA UGYANAZ, MINT A NÉZŐ: a `/ScreenTask.jpg` képet töltjük be. Ha kép
-//! jön, az biztosan ScreenTask — egy nyomtató vagy router nem ad ott JPEG-et.
-//! Emiatt ugyanott működik, ahol a néző (lásd `canViewInPage`).
+//! A PRÓBA: válaszol-e bármi az adott címen (`fetch`), és ha igen, ad-e
+//! `/ScreenTask.jpg` képet — egy nyomtató vagy router nem ad ott JPEG-et.
+//! Ugyanott működik, ahol a néző (lásd `canViewInPage`).
 //! ═══════════════════════════════════════════════════════════════════════════
 
 export const SCHOOL_HOST_PREFIX = "10.0.";
 export const DISCOVERY_PORTS = [7070, 8080] as const;
 export const DISCOVERY_LAST_OCTET_MAX = 25;
 
-//* Egyszerre ennyi kép tölt — egy teljes harmadik szám (25 gép × 2 port) belefér.
-const PROBE_CONCURRENCY = 50;
-//! Egy élő ScreenTask a helyi hálózaton jóval hamarabb válaszol; a nem létező
-//! gépre menő kérés viszont se `load`-ot, se `error`-t nem ad — ezért vágjuk el.
-const PROBE_TIMEOUT_MS = 2500;
+//! Chrome egy célpont felé (közvetlen kapcsolatnál) legfeljebb 32 foglalatot
+//! nyit — a többi a böngészőn belül sorban áll, és közben ketyegne az órája.
+const PROBE_CONCURRENCY = 24;
+//! A nem létező gépre menő kérés se választ, se hibát nem ad — ezért vágjuk el.
+//! A ScreenTask EGYESÉVEL szolgálja ki a kéréseket, és közben a diákok nézői is
+//! kérik a képet, ezért egy élő gépnek is kell némi idő.
+const PROBE_TIMEOUT_MS = 4000;
+//! Ennyit várunk legfeljebb, hogy a felhasználó rábökjön a Chrome helyi hálózati
+//! engedélykérésére. Utána az órák mindenképp indulnak — különben egy soha meg
+//! nem érkező jelzésre várva a keresés örökre beragadna.
+const PERMISSION_WAIT_MS = 20_000;
 
 //! ─── A HARMADIK SZÁM JELÖLTJEI ─────────────────────────────────────────────
 //! Sorrend = valószínűség. Előbb, amit a tanár maga beírt a mezőbe
@@ -67,18 +73,27 @@ export function discoveryAddresses(thirdOctets: number[]): ScreenAddress[] {
 }
 
 //! ─── A HELYI HÁLÓZATI ENGEDÉLY ─────────────────────────────────────────────
-//! Chrome az első helyi kérésnél megkérdezi a felhasználót. AMÍG A KÉRDÉS NYITVA
-//! VAN, A KÉRÉSEK VÁRNAK — ha közben ketyegne az időkorlát, minden próba
-//! „nem válaszolt" lenne. Ezért az órát csak az engedély megadása után
-//! indítjuk. A jogosultság neve Chrome-verziónként más, ezért mindkettőt
-//! megpróbáljuk; ha egyik sincs, nincs mire várni.
-async function localNetworkPermission(): Promise<PermissionStatus | null> {
+//! Chrome az első helyi kérésnél megkérdezi a felhasználót, és AMÍG A KÉRDÉS
+//! NYITVA VAN, A KÉRÉSEK VÁRNAK. Ha közben ketyegne az időkorlát, minden próba
+//! „nem válaszolt" lenne — ezért az órák csak az engedély után indulnak.
+//!
+//! A `change` ESEMÉNYBEN NEM BÍZUNK: Chrome ennél az engedélynél nem mindig
+//! küldi el, és a keresés tőle függve örökre beragadt („2/50"). Helyette
+//! lekérdezgetjük az állapotot, és az is kinyitja a kaput, ha bármelyik kérés
+//! magától lezárult (a böngésző már nem tartja vissza). Felső korlát: 20 mp.
+//!
+//! Engedélykérés csak nyilvános `https` lapról a helyi hálózat felé van; a
+//! `localhost`-ról vagy `http` lapról induló keresésnek nincs mire várnia.
+const PERMISSION_NAMES = ["local-network-access", "local-network"];
+
+async function localNetworkPermissionState(): Promise<PermissionState | null> {
   if (typeof navigator === "undefined" || !navigator.permissions) return null;
-  for (const name of ["local-network-access", "local-network"]) {
+  for (const name of PERMISSION_NAMES) {
     try {
-      return await navigator.permissions.query({
+      const status = await navigator.permissions.query({
         name,
       } as unknown as PermissionDescriptor);
+      return status.state;
     } catch {
       //* Ismeretlen név ebben a böngészőben — próbáljuk a következőt.
     }
@@ -86,32 +101,109 @@ async function localNetworkPermission(): Promise<PermissionStatus | null> {
   return null;
 }
 
-function probe(
+function needsLocalNetworkPermission(): boolean {
+  if (typeof window === "undefined") return false;
+  const { protocol, hostname } = window.location;
+  if (protocol !== "https:") return false;
+  return !(
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname.startsWith("127.") ||
+    hostname === "[::1]"
+  );
+}
+
+//! ─── EGY CÍM KIPRÓBÁLÁSA ────────────────────────────────────────────────────
+//! KÉT LÉPÉS. Előbb egy `fetch`: ez BÁRMILYEN HTTP-válaszra teljesül — a
+//! jelszavas ScreenTask 401-ére is, amire egy kép sosem töltene be. A
+//! `targetAddressSpace: "local"` mondja meg Chrome-nak előre, hogy helyi
+//! hálózatra megy (engedélykérés + kivétel a vegyes tartalom tilalma alól).
+//! Ha válaszolt, a képpel megnézzük, TÉNYLEG ScreenTask-e.
+type Outcome = "screentask" | "responded" | "silent";
+
+function withTimeout(
+  signal: AbortSignal,
+  clock: Promise<void>,
+): { signal: AbortSignal; dispose: () => void } {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  signal.addEventListener("abort", onAbort);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let disposed = false;
+  void clock.then(() => {
+    if (!disposed) timer = setTimeout(onAbort, PROBE_TIMEOUT_MS);
+  });
+  if (signal.aborted) controller.abort();
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      disposed = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
+//* `onSettled`: a kérés magától lezárult (válasz vagy hálózati hiba, nem a mi
+//* időkorlátunk) — a böngésző tehát már nem tartja vissza engedélyre várva.
+async function responds(
   address: ScreenAddress,
-  clockStarted: Promise<void>,
+  clock: Promise<void>,
+  signal: AbortSignal,
+  onSettled: () => void,
+): Promise<boolean> {
+  const limit = withTimeout(signal, clock);
+  try {
+    await fetch(`http://${address.host}:${address.port}/`, {
+      mode: "no-cors",
+      cache: "no-store",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+      signal: limit.signal,
+      targetAddressSpace: "local",
+    } as RequestInit);
+    onSettled();
+    return true;
+  } catch {
+    if (!limit.signal.aborted) onSettled();
+    return false;
+  } finally {
+    limit.dispose();
+  }
+}
+
+function servesScreenshot(
+  address: ScreenAddress,
   signal: AbortSignal,
 ): Promise<boolean> {
   return new Promise((resolve) => {
     const img = new Image();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const finish = (found: boolean) => {
+    const finish = (ok: boolean) => {
       clearTimeout(timer);
       signal.removeEventListener("abort", onAbort);
       img.onload = null;
       img.onerror = null;
-      if (!found) img.src = "";
-      resolve(found);
+      if (!ok) img.src = "";
+      resolve(ok);
     };
     const onAbort = () => finish(false);
-    if (signal.aborted) return resolve(false);
+    const timer = setTimeout(onAbort, PROBE_TIMEOUT_MS);
+    if (signal.aborted) return finish(false);
     signal.addEventListener("abort", onAbort);
     img.onload = () => finish(img.naturalWidth > 0);
     img.onerror = () => finish(false);
     img.src = screenTaskFrameUrl(address, `probe-${Date.now()}`);
-    void clockStarted.then(() => {
-      timer = setTimeout(() => finish(false), PROBE_TIMEOUT_MS);
-    });
   });
+}
+
+async function probe(
+  address: ScreenAddress,
+  clock: Promise<void>,
+  signal: AbortSignal,
+  onSettled: () => void,
+): Promise<Outcome> {
+  if (!(await responds(address, clock, signal, onSettled))) return "silent";
+  return (await servesScreenshot(address, signal)) ? "screentask" : "responded";
 }
 
 export type DiscoveryProgress = {
@@ -121,7 +213,9 @@ export type DiscoveryProgress = {
 };
 
 export type DiscoveryResult =
-  | { status: "found"; address: ScreenAddress }
+  //! `confirmed: false` — válaszolt, de képet nem adott. Jelszavas ScreenTask
+  //! lehet, de más eszköz is; a felület ezt kimondja.
+  | { status: "found"; address: ScreenAddress; confirmed: boolean }
   | { status: "not-found" }
   | { status: "denied" }
   | { status: "aborted" };
@@ -136,48 +230,60 @@ export async function discoverScreen(
   const total = addresses.length;
   let done = 0;
 
-  const permission = await localNetworkPermission();
-  if (permission?.state === "denied") return { status: "denied" };
+  const initialState = await localNetworkPermissionState();
+  if (initialState === "denied") return { status: "denied" };
+  const waitsForPermission =
+    needsLocalNetworkPermission() && initialState !== "granted";
 
-  //* A saját jelünk: találat, megszakítás vagy elutasított engedély állítja le.
+  //* A saját jelünk: találat vagy megszakítás állítja le.
   const stop = new AbortController();
   const onOuterAbort = () => stop.abort();
   signal.addEventListener("abort", onOuterAbort);
-  let denied = false;
 
-  const clockStarted = new Promise<void>((resolve) => {
-    if (permission?.state !== "prompt") return resolve();
-    onProgress({ phase: "permission", done, total });
-    permission.addEventListener("change", function onChange() {
-      if (permission.state === "prompt") return;
-      permission.removeEventListener("change", onChange);
-      if (permission.state === "denied") {
-        denied = true;
-        stop.abort();
-      } else {
-        onProgress({ phase: "searching", done, total });
-      }
-      resolve();
-    });
+  let openGate = () => {};
+  const clock = new Promise<void>((resolve) => {
+    openGate = resolve;
   });
-  if (permission?.state !== "prompt") {
-    onProgress({ phase: "searching", done, total });
+  let phase: DiscoveryProgress["phase"] = "searching";
+  let poll: ReturnType<typeof setInterval> | undefined;
+  let cap: ReturnType<typeof setTimeout> | undefined;
+  const startClocks = () => {
+    clearInterval(poll);
+    clearTimeout(cap);
+    if (phase === "permission") {
+      phase = "searching";
+      onProgress({ phase, done, total });
+    }
+    openGate();
+  };
+  if (waitsForPermission) {
+    phase = "permission";
+    poll = setInterval(async () => {
+      const state = await localNetworkPermissionState();
+      if (state === "granted") startClocks();
+      if (state === "denied") stop.abort();
+    }, 250);
+    cap = setTimeout(startClocks, PERMISSION_WAIT_MS);
+  } else {
+    openGate();
   }
+  onProgress({ phase, done, total });
 
   let found: ScreenAddress | null = null;
+  let maybe: ScreenAddress | null = null;
   let next = 0;
   const worker = async () => {
     while (!stop.signal.aborted && next < addresses.length) {
       const address = addresses[next++];
-      if (await probe(address, clockStarted, stop.signal)) {
+      const outcome = await probe(address, clock, stop.signal, startClocks);
+      if (outcome === "screentask") {
         found ??= address;
         stop.abort();
         return;
       }
+      if (outcome === "responded") maybe ??= address;
       done += 1;
-      if (!stop.signal.aborted) {
-        onProgress({ phase: "searching", done, total });
-      }
+      if (!stop.signal.aborted) onProgress({ phase, done, total });
     }
   };
 
@@ -186,11 +292,16 @@ export async function discoverScreen(
       Array.from({ length: Math.min(PROBE_CONCURRENCY, total) }, worker),
     );
   } finally {
+    clearInterval(poll);
+    clearTimeout(cap);
     signal.removeEventListener("abort", onOuterAbort);
   }
 
-  if (found) return { status: "found", address: found };
-  if (denied) return { status: "denied" };
+  if (found) return { status: "found", address: found, confirmed: true };
   if (signal.aborted) return { status: "aborted" };
+  if (maybe) return { status: "found", address: maybe, confirmed: false };
+  if ((await localNetworkPermissionState()) === "denied") {
+    return { status: "denied" };
+  }
   return { status: "not-found" };
 }

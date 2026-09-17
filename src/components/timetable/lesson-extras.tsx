@@ -775,7 +775,11 @@ export function ScreenForm({
     switch (result.status) {
       case "found":
         setValue(formatScreenAddress(result.address));
-        setNotice("Megvan! Ellenőrizd, és mentsd el.");
+        setNotice(
+          result.confirmed
+            ? "Megvan! Ellenőrizd, és mentsd el."
+            : "Ezen a címen válaszolt egy gép, de képet nem adott — jelszavas ScreenTask lehet. Ellenőrizd, mielőtt mented.",
+        );
         break;
       case "not-found":
         setError(
