@@ -1,7 +1,13 @@
 "use client";
 
-import { Check, Monitor, Moon, Palette, Sun } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, Droplets, Monitor, Moon, Palette, Sun } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   SHEET_POPOVER,
   SheetItemBody,
@@ -20,6 +26,8 @@ import {
   type Palette as PaletteName,
   type Theme,
 } from "@/lib/appearance";
+import { DEFAULT_FLOOD, loadFlood, saveFlood } from "@/lib/flood-pref";
+import { onPrefsChanged } from "@/lib/prefs-events";
 import type { ThemePreset } from "@/lib/theme-presets";
 import { cn } from "@/lib/utils";
 import {
@@ -243,6 +251,79 @@ function PresetPicker() {
   );
 }
 
+//! ─── AZ ÁRADÓ LAPVÁLTÁS KAPCSOLÓJA ─────────────────────────────────────────
+//! Egy valódi kétállású kérdés, ezért itt kapcsoló áll, nem pirulasor. Aki a
+//! készülékén csökkentett mozgást kér, annál a lap úgysem árad — ezt a sor
+//! kimondja, ahelyett hogy egy bekapcsolt, de hatástalan kapcsolót mutatna.
+const reducedQuery = "(prefers-reduced-motion: reduce)";
+const subscribeReduced = (onChange: () => void) => {
+  const mq = window.matchMedia(reducedQuery);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+};
+
+function FloodToggle() {
+  const on = useSyncExternalStore(
+    onPrefsChanged,
+    loadFlood,
+    () => DEFAULT_FLOOD,
+  );
+  const reduced = useSyncExternalStore(
+    subscribeReduced,
+    () => window.matchMedia(reducedQuery).matches,
+    () => false,
+  );
+
+  return (
+    <section className="border-t border-border px-1.5 py-2">
+      <h3 className="px-1.5 pb-1 text-[11px] font-semibold text-muted-foreground">
+        Mozgás
+      </h3>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        disabled={reduced}
+        onClick={() => saveFlood(!on)}
+        className={cn(
+          "flex w-full min-h-11 items-center gap-2.5 rounded-lg px-1.5 py-1 text-left transition-colors",
+          "hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
+          "disabled:cursor-not-allowed disabled:hover:bg-transparent",
+        )}
+      >
+        <Droplets
+          className="size-4 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-foreground">
+            Áradó lapváltás
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            {reduced
+              ? "A készüléked csökkentett mozgást kér, ezért nem fut"
+              : "A váltó folyadéka elönti a lapot, amíg az új betölt"}
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className={cn(
+            "relative h-5 w-9 shrink-0 rounded-full transition-colors motion-reduce:transition-none",
+            on && !reduced ? "bg-primary" : "bg-muted-foreground/30",
+          )}
+        >
+          <span
+            className={cn(
+              "absolute top-0.5 left-0.5 size-4 rounded-full bg-background shadow-sm transition-transform motion-reduce:transition-none",
+              on && !reduced && "translate-x-4",
+            )}
+          />
+        </span>
+      </button>
+    </section>
+  );
+}
+
 export function AppearanceMenu({ className }: { className?: string }) {
   const { theme, palette, setTheme, setPalette, ready } = useAppearance();
   const [open, setOpen] = useState(false);
@@ -374,6 +455,8 @@ export function AppearanceMenu({ className }: { className?: string }) {
             })}
           </div>
         </section>
+
+        <FloodToggle />
 
         <PresetPicker />
       </PopoverContent>

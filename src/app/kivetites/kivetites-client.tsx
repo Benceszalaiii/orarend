@@ -240,6 +240,7 @@ export function KivetitesRoom({ room }: { room: string }) {
                   <div className="-ml-7">
                     <ScreenForm
                       initial={screen ? formatScreenAddress(screen) : ""}
+                      room={room}
                       hint="A ScreenTask ablakában látható. Port nélkül 7070."
                       onCancel={() => setEditing(false)}
                       onSubmit={async (address) => {

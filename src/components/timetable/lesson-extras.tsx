@@ -9,12 +9,14 @@ import {
   Maximize2,
   Pencil,
   Plus,
+  Radar,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useSession } from "@/lib/auth-client";
 import {
   classKeys,
@@ -43,6 +45,13 @@ import {
   saveScreenHost,
   useLessonExtras,
 } from "@/lib/lesson-extras-store";
+import {
+  type DiscoveryProgress,
+  discoverScreen,
+  discoveryAddresses,
+  SCHOOL_HOST_PREFIX,
+  thirdOctetCandidates,
+} from "@/lib/screen-discovery";
 import {
   addTeacherLink,
   removeRoomScreen,
@@ -588,6 +597,7 @@ function ScreenBlock({
       {editing ? (
         <ScreenForm
           initial={screen ? formatScreenAddress(screen) : ""}
+          room={room}
           hint={
             editsShared
               ? `A ${room} terem címe lesz mindenkinek, amíg egy tanár át nem írja. A ScreenTask ablakában látható; port nélkül 7070.`
@@ -707,11 +717,14 @@ function ScreenBlock({
 export function ScreenForm({
   initial,
   hint,
+  room,
   onSubmit,
   onCancel,
 }: {
   initial: string;
   hint: string;
+  //* A terem neve — ebből tippeli a keresés a cím harmadik számát.
+  room: string;
   onSubmit: (address: ScreenAddress) => Promise<MutationResult>;
   onCancel: () => void;
 }) {
@@ -720,11 +733,65 @@ export function ScreenForm({
   const [value, setValue] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  //! Keresni csak ott lehet, ahol a néző is működne — ugyanazt a képet tölti.
+  const [canSearch, setCanSearch] = useState(false);
+  useEffect(() => {
+    setCanSearch(canViewInPage(`${SCHOOL_HOST_PREFIX}0.1`));
+  }, []);
+  const [progress, setProgress] = useState<DiscoveryProgress | null>(null);
+  const searchRef = useRef<AbortController | null>(null);
+  useEffect(() => () => searchRef.current?.abort(), []);
+
+  const search = async () => {
+    if (searchRef.current) {
+      searchRef.current.abort();
+      return;
+    }
+    const octets = thirdOctetCandidates(room, value);
+    setError(null);
+    setNotice(null);
+    if (octets.length === 0) {
+      setError(
+        `A terem nevéből nem derül ki a cím. Írd be az elejét (pl. ${SCHOOL_HOST_PREFIX}12.), és keress újra.`,
+      );
+      return;
+    }
+    const controller = new AbortController();
+    searchRef.current = controller;
+    const result = await discoverScreen(discoveryAddresses(octets), {
+      signal: controller.signal,
+      onProgress: setProgress,
+    });
+    searchRef.current = null;
+    setProgress(null);
+    const ranges = octets.map((o) => `${SCHOOL_HOST_PREFIX}${o}.x`).join(", ");
+    switch (result.status) {
+      case "found":
+        setValue(formatScreenAddress(result.address));
+        setNotice("Megvan! Ellenőrizd, és mentsd el.");
+        break;
+      case "not-found":
+        setError(
+          `Nem válaszolt ScreenTask (${ranges}). Fut a tanári gépen, és egy hálózaton vagy vele? Ha tudod a terem számát, írd be (pl. ${SCHOOL_HOST_PREFIX}12.), és keress újra.`,
+        );
+        break;
+      case "denied":
+        setError(
+          "A böngésző nem engedi a helyi hálózat elérését. Engedélyezd a címsor melletti ikonnál, és keress újra.",
+        );
+        break;
+      case "aborted":
+        break;
+    }
+  };
+  const searching = progress !== null;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -759,7 +826,7 @@ export function ScreenForm({
         className={`${INPUT} font-mono`}
         value={value}
         onChange={(event) => setValue(event.target.value)}
-        disabled={busy}
+        disabled={busy || searching}
         aria-invalid={error ? true : undefined}
         aria-describedby={hintId}
       />
@@ -768,14 +835,44 @@ export function ScreenForm({
           <span role="alert" className="text-destructive">
             {error}
           </span>
+        ) : progress?.phase === "permission" ? (
+          <output>
+            Engedélyezd a böngészőnek a helyi hálózat elérését a felugró
+            ablakban.
+          </output>
+        ) : progress ? (
+          <output>
+            Keresés a hálózaton… {progress.done}/{progress.total}
+          </output>
+        ) : notice ? (
+          <output>{notice}</output>
         ) : (
           hint
         )}
       </p>
       <FormButtons
         busy={busy}
-        canSubmit={value.trim() !== ""}
+        canSubmit={!searching && value.trim() !== ""}
         onCancel={onCancel}
+        extra={
+          canSearch && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="mr-auto gap-1.5 rounded-full px-3"
+              disabled={busy}
+              onClick={() => void search()}
+            >
+              {searching ? (
+                <Spinner className="size-3.5" />
+              ) : (
+                <Radar className="size-3.5" aria-hidden />
+              )}
+              {searching ? "Leállítás" : "Keresés a hálózaton"}
+            </Button>
+          )
+        }
       />
     </form>
   );
@@ -785,13 +882,16 @@ function FormButtons({
   busy,
   canSubmit,
   onCancel,
+  extra,
 }: {
   busy: boolean;
   canSubmit: boolean;
   onCancel: () => void;
+  extra?: React.ReactNode;
 }) {
   return (
     <div className="flex justify-end gap-2">
+      {extra}
       <Button
         type="button"
         size="sm"

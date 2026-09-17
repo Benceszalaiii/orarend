@@ -1189,3 +1189,28 @@
     position: static !important;
   }
 }
+
+/*//! ---------------------------------------------------------------------------
+    //! AZ ÁRADÁS ALATT A VÁLTÓ MEGFORDUL (lásd `chrome/flood.ts`)
+    //! ---------------------------------------------------------------------------
+    //! A tok a folyadék színét veszi fel, a folyadék és a felirat a tokét — így a
+    //! tok egybeolvad a képernyőt elöntő vízzel, és csak a sötét csepp marad.
+    //! A csere KÉT SZINTEN történik, mert egy elemen belül a két token nem
+    //! hivatkozhat egymásra: a `nav` rögzíti a SAJÁT (akár `.nav-glass`) értékeit,
+    //! a `contents` doboz pedig ezekből fordítva állítja vissza őket.
+    //*
+    //! Rétegen kívül áll, hogy a tok `bg-card` / `bg-background` osztályát verje. */
+[data-pill-nav] {
+  --pn-case: var(--card);
+}
+[data-pill-nav][data-floating] {
+  --pn-case: var(--background);
+}
+html[data-pn-flood] [data-pill-nav] {
+  --pn-fg: var(--foreground);
+  background-color: var(--foreground);
+}
+html[data-pn-flood] [data-pill-nav] [data-pn-ink] {
+  --foreground: var(--pn-case);
+  --background: var(--pn-fg);
+}

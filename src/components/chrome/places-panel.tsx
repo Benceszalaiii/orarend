@@ -10,6 +10,7 @@ import {
   useTransform,
 } from "motion/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   type KeyboardEvent,
   type RefObject,
@@ -21,6 +22,7 @@ import {
   useState,
 } from "react";
 import { sheetItem } from "@/components/chrome/chrome-sheet";
+import { launchFlood } from "@/components/chrome/flood";
 import { launchFlight, PLACES, type Place } from "@/components/chrome/places";
 import { launchPour } from "@/components/chrome/pour";
 import { cn } from "@/lib/utils";
@@ -642,6 +644,7 @@ function PlaceRow({
   cellRef: RefObject<HTMLButtonElement | null>;
   onPick: () => void;
 }) {
+  const router = useRouter();
   const iconRef = useRef<HTMLSpanElement>(null);
   const linkRef = useRef<HTMLAnchorElement>(null);
   const inkClip = useMotionValue(INK_HIDDEN);
@@ -763,13 +766,34 @@ function PlaceRow({
           if (event.currentTarget.matches(":focus-visible")) onHover(index);
         }}
         onClick={(event) => {
+          const cell = cellRef.current?.parentElement;
+          const nav = cell?.closest<HTMLElement>("[data-pill-nav]");
           if (current) {
+            event.preventDefault();
+          } else if (
+            //! KÉRÉSRE A SOR FOLYADÉKA ELÖNTI A LAPOT (lásd `flood.ts`), és a
+            //! helyek cellájába apad vissza. Ilyenkor nincs repülés és kiöntés:
+            //! két mozdulat ugyanarról a koppintásról egymásba futna.
+            !event.metaKey &&
+            !event.ctrlKey &&
+            !event.shiftKey &&
+            !event.altKey &&
+            event.button === 0 &&
+            nav &&
+            cell &&
+            launchFlood({
+              nav,
+              cell,
+              origin: linkRef.current,
+              label: place.label,
+              navigate: () => router.push(place.href),
+            })
+          ) {
             event.preventDefault();
           } else {
             launchFlight(place.id, iconRef.current);
             //! A SOR FOLYADÉKA VISZI ÁT A LAPOT (lásd `pour.ts`). A cél a
             //! cella dobozán, nem a gombén: a váltó folyadéka azt tölti ki.
-            const cell = cellRef.current?.parentElement;
             if (linkRef.current && cell)
               launchPour({
                 id: place.id,

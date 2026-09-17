@@ -27,6 +27,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { launchFlood, registerPillNav } from "@/components/chrome/flood";
 import { PLACES, placeOf, readFlight } from "@/components/chrome/places";
 import { PlacesPanel } from "@/components/chrome/places-panel";
 import { type Pour, readPour } from "@/components/chrome/pour";
@@ -802,6 +803,10 @@ export function PillNav({
     handoff = { view: activeView, role: identity };
   }, [activeView, identity]);
   useLayoutEffect(() => {
+    const el = navRef.current;
+    if (el) return registerPillNav(el);
+  }, []);
+  useLayoutEffect(() => {
     liveNavs++;
     return () => {
       liveNavs--;
@@ -920,6 +925,8 @@ export function PillNav({
   return (
     <nav
       ref={navRef}
+      data-pill-nav
+      data-floating={floating || undefined}
       aria-label="Nézetek"
       onPointerDown={squash}
       onPointerUp={release}
@@ -938,107 +945,141 @@ export function PillNav({
         className,
       )}
     >
-      <GooFilter id={filterId} />
-      {activeView && (
-        <div className="pointer-events-none absolute inset-1">
-          <LiquidLayer
-            order={VIEW_KEYS}
-            activeKey={activeView}
-            fromKey={fromView}
-            hoverKey={hoverView}
-            itemsRef={itemsRef}
-            filterId={filterId}
-            blob="bg-foreground"
-            shadow="drop-shadow(0 2px 4px oklch(0 0 0 / 0.3))"
-            press={press}
-            left={liquidLeft}
-            right={liquidRight}
-            restExtra={6}
-            seed={pour}
-          />
-        </div>
-      )}
-      <div ref={rowRef} className="relative flex items-stretch">
-        {VIEWS.map(({ id, label, title }) => {
-          const active = id === activeView;
-          const wasActive = fromView ? id === fromView : active;
-          return (
-            <div
-              key={id}
-              ref={(el) => {
-                if (el) itemsRef.current.set(id, el);
-                else itemsRef.current.delete(id);
-              }}
-              className="relative flex items-center"
-            >
-              <Link
-                href={id === "today" ? "/ma" : weekHref}
-                title={title}
-                aria-current={active ? "page" : undefined}
-                onPointerEnter={(e) =>
-                  e.pointerType === "mouse" && setHoverView(id)
-                }
-                onPointerLeave={() => setHoverView(null)}
-                className={cn(
-                  "group relative flex h-full items-center rounded-full pr-2 pl-3 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3.5",
-                  "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
-                  active && "cursor-default",
-                )}
-              >
-                <InkLabel
-                  label={label}
-                  rowRef={rowRef}
-                  left={liquidLeft}
-                  right={liquidRight}
-                  liquid={Boolean(activeView)}
-                  className={cn(
-                    "transition-opacity duration-200 motion-reduce:transition-none",
-                    //! SÖTÉT TOKON A TELJES FEHÉR KIABÁL. A rámutatás ott
-                    //! csak halkan erősödhet; világos tokon a teljes erő marad.
-                    idleInk(active),
-                  )}
-                />
-              </Link>
-              <motion.div
-                initial={
-                  fromView
-                    ? {
-                        width: wasActive ? "auto" : 6,
-                        opacity: wasActive ? 1 : 0,
-                      }
-                    : false
-                }
-                animate={{
-                  width: active ? "auto" : 6,
-                  opacity: active ? 1 : 0,
+      {/*//! A TOKENEK FORDÍTÓJA (lásd `flood.ts` és `globals.css`). Doboza
+          //! nincs (`contents`), csak a két színt cseréli meg az áradás alatt. */}
+      <div data-pn-ink className="contents">
+        <GooFilter id={filterId} />
+        {activeView && (
+          <div className="pointer-events-none absolute inset-1">
+            <LiquidLayer
+              order={VIEW_KEYS}
+              activeKey={activeView}
+              fromKey={fromView}
+              hoverKey={hoverView}
+              itemsRef={itemsRef}
+              filterId={filterId}
+              blob="bg-foreground"
+              shadow="drop-shadow(0 2px 4px oklch(0 0 0 / 0.3))"
+              press={press}
+              left={liquidLeft}
+              right={liquidRight}
+              restExtra={6}
+              seed={pour}
+            />
+          </div>
+        )}
+        <div ref={rowRef} className="relative flex items-stretch">
+          {VIEWS.map(({ id, label, title }) => {
+            const active = id === activeView;
+            const wasActive = fromView ? id === fromView : active;
+            return (
+              <div
+                key={id}
+                ref={(el) => {
+                  if (el) itemsRef.current.set(id, el);
+                  else itemsRef.current.delete(id);
                 }}
-                transition={
-                  reduced
-                    ? INSTANT
-                    : {
-                        width: COLLAPSE,
-                        opacity: active
-                          ? { duration: 0.22, delay: 0.14 }
-                          : { duration: 0.1 },
-                      }
-                }
-                className="flex h-full items-center [overflow-x:clip]"
+                data-pn-cell={id}
+                data-active={active || undefined}
+                className="relative flex items-center"
               >
-                <div data-liquid-extra className="shrink-0 pr-1">
-                  <RoleToggle
-                    role={identity}
-                    fromRole={fromRole}
-                    onToggle={pickIdentity}
-                    filterId={filterId}
-                    hidden={!active}
+                <Link
+                  href={id === "today" ? "/ma" : weekHref}
+                  title={title}
+                  aria-current={active ? "page" : undefined}
+                  onClick={(e) => {
+                    //! A FOLYADÉK ELÖNTI A LAPOT, ÉS CSAK VÍZ ALATT VÁLT (lásd
+                    //! `flood.ts`). Új lapra nyitás és módosított kattintás
+                    //! marad a böngészőé.
+                    const nav = navRef.current;
+                    const cell = e.currentTarget.parentElement;
+                    if (
+                      active ||
+                      !nav ||
+                      !cell ||
+                      e.button !== 0 ||
+                      e.metaKey ||
+                      e.ctrlKey ||
+                      e.shiftKey ||
+                      e.altKey
+                    )
+                      return;
+                    const href = e.currentTarget.getAttribute("href");
+                    if (
+                      href &&
+                      launchFlood({
+                        nav,
+                        cell,
+                        label,
+                        navigate: () => router.push(href),
+                      })
+                    )
+                      e.preventDefault();
+                  }}
+                  onPointerEnter={(e) =>
+                    e.pointerType === "mouse" && setHoverView(id)
+                  }
+                  onPointerLeave={() => setHoverView(null)}
+                  className={cn(
+                    "group relative flex h-full items-center rounded-full pr-2 pl-3 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3.5",
+                    "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
+                    active && "cursor-default",
+                  )}
+                >
+                  <InkLabel
+                    label={label}
+                    rowRef={rowRef}
+                    left={liquidLeft}
+                    right={liquidRight}
+                    liquid={Boolean(activeView)}
+                    className={cn(
+                      "transition-opacity duration-200 motion-reduce:transition-none",
+                      //! SÖTÉT TOKON A TELJES FEHÉR KIABÁL. A rámutatás ott
+                      //! csak halkan erősödhet; világos tokon a teljes erő marad.
+                      idleInk(active),
+                    )}
                   />
-                </div>
-              </motion.div>
-            </div>
-          );
-        })}
+                </Link>
+                <motion.div
+                  initial={
+                    fromView
+                      ? {
+                          width: wasActive ? "auto" : 6,
+                          opacity: wasActive ? 1 : 0,
+                        }
+                      : false
+                  }
+                  animate={{
+                    width: active ? "auto" : 6,
+                    opacity: active ? 1 : 0,
+                  }}
+                  transition={
+                    reduced
+                      ? INSTANT
+                      : {
+                          width: COLLAPSE,
+                          opacity: active
+                            ? { duration: 0.22, delay: 0.14 }
+                            : { duration: 0.1 },
+                        }
+                  }
+                  className="flex h-full items-center [overflow-x:clip]"
+                >
+                  <div data-liquid-extra className="shrink-0 pr-1">
+                    <RoleToggle
+                      role={identity}
+                      fromRole={fromRole}
+                      onToggle={pickIdentity}
+                      filterId={filterId}
+                      hidden={!active}
+                    />
+                  </div>
+                </motion.div>
+              </div>
+            );
+          })}
 
-        {/*//! ─── A HELYEK CELLÁJA ─────────────────────────────────────────
+          {/*//! ─── A HELYEK CELLÁJA ─────────────────────────────────────────
             //! Egy gomb, nem négy. Inaktívan egy iránytű: „innen máshová is
             //! mehetsz". Ha egy helyen állsz, a folyadék ide folyik át, az
             //! iránytű helyén a hely SAJÁT ikonja áll, és `sm`-től a neve is —
@@ -1047,98 +1088,106 @@ export function PillNav({
             //! A GOMB NYITVA IS GOMB MARAD. Újra megnyomva becsukja a
             //! buborékot; a folyadék közben nem mozdul, mert a hely, ahol
             //! állsz, nem változott. */}
-        <div
-          ref={(el) => {
-            if (el) itemsRef.current.set("places", el);
-            else itemsRef.current.delete("places");
-          }}
-          className="relative flex items-center"
-        >
-          <button
-            ref={triggerRef}
-            type="button"
-            aria-expanded={placesOpen}
-            aria-controls={placesOpen ? panelId : undefined}
-            aria-label={place ? `Helyek — most: ${place.label}` : "Helyek"}
-            title="Ügyelet, teremkereső, kivetítés, nyitólap"
-            onClick={() => setPlacesOpen((v) => !v)}
-            onPointerEnter={(e) =>
-              e.pointerType === "mouse" && setHoverView("places")
-            }
-            onPointerLeave={() => setHoverView(null)}
-            className={cn(
-              "group relative flex h-full cursor-pointer items-center rounded-full pr-1 pl-2.5 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3",
-              "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
-            )}
+          <div
+            ref={(el) => {
+              if (el) itemsRef.current.set("places", el);
+              else itemsRef.current.delete("places");
+            }}
+            data-pn-cell="places"
+            data-active={placesActive || undefined}
+            className="relative flex items-center"
           >
-            <motion.span
-              ref={iconRef}
-              className="relative flex"
-              style={{ x: flyX, y: flyY, scale: flyScale, opacity: flyOpacity }}
+            <button
+              ref={triggerRef}
+              type="button"
+              aria-expanded={placesOpen}
+              aria-controls={placesOpen ? panelId : undefined}
+              aria-label={place ? `Helyek — most: ${place.label}` : "Helyek"}
+              title="Ügyelet, teremkereső, kivetítés, nyitólap"
+              onClick={() => setPlacesOpen((v) => !v)}
+              onPointerEnter={(e) =>
+                e.pointerType === "mouse" && setHoverView("places")
+              }
+              onPointerLeave={() => setHoverView(null)}
+              className={cn(
+                "group relative flex h-full cursor-pointer items-center rounded-full pr-1 pl-2.5 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3",
+                "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
+              )}
             >
-              <InkLabel
-                label={
-                  <motion.span
-                    key={place?.id ?? "compass"}
-                    className="flex"
-                    initial={false}
-                    animate={{
-                      rotate: placesOpen && !placesActive ? 135 : 0,
-                    }}
-                    transition={reduced ? INSTANT : ROLL}
-                  >
-                    <PlaceIcon className="size-4" strokeWidth={2.25} />
-                  </motion.span>
+              <motion.span
+                ref={iconRef}
+                className="relative flex"
+                style={{
+                  x: flyX,
+                  y: flyY,
+                  scale: flyScale,
+                  opacity: flyOpacity,
+                }}
+              >
+                <InkLabel
+                  label={
+                    <motion.span
+                      key={place?.id ?? "compass"}
+                      className="flex"
+                      initial={false}
+                      animate={{
+                        rotate: placesOpen && !placesActive ? 135 : 0,
+                      }}
+                      transition={reduced ? INSTANT : ROLL}
+                    >
+                      <PlaceIcon className="size-4" strokeWidth={2.25} />
+                    </motion.span>
+                  }
+                  rowRef={rowRef}
+                  left={liquidLeft}
+                  right={liquidRight}
+                  liquid={Boolean(activeView)}
+                  follow={flyFollow}
+                  className={cn(
+                    "transition-opacity duration-200 motion-reduce:transition-none",
+                    idleInk(placesActive || placesOpen),
+                  )}
+                />
+              </motion.span>
+              <motion.span
+                initial={
+                  fromView
+                    ? {
+                        width: placesWasActive ? "auto" : 6,
+                        opacity: placesWasActive ? 1 : 0,
+                      }
+                    : false
                 }
-                rowRef={rowRef}
-                left={liquidLeft}
-                right={liquidRight}
-                liquid={Boolean(activeView)}
-                follow={flyFollow}
-                className={cn(
-                  "transition-opacity duration-200 motion-reduce:transition-none",
-                  idleInk(placesActive || placesOpen),
-                )}
-              />
-            </motion.span>
-            <motion.span
-              initial={
-                fromView
-                  ? {
-                      width: placesWasActive ? "auto" : 6,
-                      opacity: placesWasActive ? 1 : 0,
-                    }
-                  : false
-              }
-              animate={{
-                width: placesActive ? "auto" : 6,
-                opacity: placesActive ? 1 : 0,
-              }}
-              transition={
-                reduced
-                  ? INSTANT
-                  : {
-                      width: COLLAPSE,
-                      opacity: placesActive
-                        ? { duration: 0.22, delay: 0.14 }
-                        : { duration: 0.1 },
-                    }
-              }
-              className="flex h-full items-center [overflow-x:clip]"
-            >
-              <span data-liquid-extra className="block w-max min-w-1.5">
-                <span className="block pr-1.5 pl-1.5 max-sm:hidden">
-                  <InkLabel
-                    label={place?.label ?? ""}
-                    rowRef={rowRef}
-                    left={liquidLeft}
-                    right={liquidRight}
-                    liquid={placesActive}
-                  />
+                animate={{
+                  width: placesActive ? "auto" : 6,
+                  opacity: placesActive ? 1 : 0,
+                }}
+                transition={
+                  reduced
+                    ? INSTANT
+                    : {
+                        width: COLLAPSE,
+                        opacity: placesActive
+                          ? { duration: 0.22, delay: 0.14 }
+                          : { duration: 0.1 },
+                      }
+                }
+                className="flex h-full items-center [overflow-x:clip]"
+              >
+                <span data-liquid-extra className="block w-max min-w-1.5">
+                  <span className="block pr-1.5 pl-1.5 max-sm:hidden">
+                    <InkLabel
+                      label={place?.label ?? ""}
+                      rowRef={rowRef}
+                      left={liquidLeft}
+                      right={liquidRight}
+                      liquid={placesActive}
+                    />
+                  </span>
                 </span>
-              </span>
-            </motion.span>
-          </button>
+              </motion.span>
+            </button>
+          </div>
         </div>
       </div>
 
