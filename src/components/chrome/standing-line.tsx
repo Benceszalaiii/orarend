@@ -369,22 +369,41 @@ export function StandingLine({
           //! korlát (`34rem`) pedig gondoskodik arról, hogy széles kijelzőn se
           //! szakadjon el egymástól a két nyíl. A csonkulást a dátum viseli —
           //! abból egy fél is olvasható (lásd `LineButton`).
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 xl:max-w-[34rem]">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 xl:max-w-[34rem] xl:flex-none">
             {/*//! ASZTALON A LÉPTETŐ A SOR MELLETT MARAD. A hetelés tervezés
               //! közben másodpercenkénti művelet; egy lap mögé tenni ott
               //! büntetés. Telefonon nincs: ott a rács húzása lapoz, és a 44
-              //! px-es célpontokra nincs hely a sor mellett. */}
+              //! px-es célpontokra nincs hely a sor mellett.
+              //*
+              //! A KÉT NYÍL EGY PÁR, ÉS A SOR ELEJÉN ÁLL. Amíg a dátumot fogták
+              //! közre, a `›` helye a dátum hosszától függött — ezért kellett a
+              //! csoportnak nyúlnia, és ezért állt a két nyíl 34rem-re
+              //! egymástól. A sor elején egyik változó szélességű rész sincs
+              //! ELŐTTÜK: minden héten ugyanannál az x-nél állnak, a csoport
+              //! pedig a tartalmához igazodhat. */}
             {line.onStep && (
-              <button
-                type="button"
-                aria-label="Előző hét"
-                title="Előző hét (←)"
-                disabled={line.disabled}
-                onClick={() => line.onStep?.(-1)}
-                className={cn(STEP, "max-sm:hidden")}
-              >
-                <ChevronLeft className="size-4" aria-hidden />
-              </button>
+              <div className="flex shrink-0 items-center max-sm:hidden">
+                <button
+                  type="button"
+                  aria-label="Előző hét"
+                  title="Előző hét (←)"
+                  disabled={line.disabled}
+                  onClick={() => line.onStep?.(-1)}
+                  className={STEP}
+                >
+                  <ChevronLeft className="size-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Következő hét"
+                  title="Következő hét (→)"
+                  disabled={line.disabled}
+                  onClick={() => line.onStep?.(1)}
+                  className={STEP}
+                >
+                  <ChevronRight className="size-4" aria-hidden />
+                </button>
+              </div>
             )}
 
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -393,66 +412,28 @@ export function StandingLine({
                 open={open}
                 sheetId={sheetId}
                 interactive={collapsible}
+                railShown={Boolean(sheet) && wide}
                 onToggle={() => setOpen((v) => !v)}
               />
             </div>
 
-            {line.onStep && (
+            {/*//! A „MA" A DÁTUM UTÁN ÁLL. Csak akkor létezik, ha elnavigáltunk —
+              //! a megjelenése a nyilak MÖGÖTT történik, tehát semmit nem tol
+              //! el az ujj alól. */}
+            {line.onReturn && line.offCurrent && (
               <button
                 type="button"
-                aria-label="Következő hét"
-                title="Következő hét (→)"
+                title={line.returnTitle ?? "Mai hét (T)"}
                 disabled={line.disabled}
-                onClick={() => line.onStep?.(1)}
-                className={cn(STEP, "max-sm:hidden")}
+                onClick={line.onReturn}
+                className={cn(
+                  RETURN_PILL,
+                  "bg-brand/15 text-brand transition-colors hover:bg-brand/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
+                )}
               >
-                <ChevronRight className="size-4" aria-hidden />
+                {line.returnLabel ?? "Ma"}
               </button>
             )}
-
-            {/*//! A „MA" A LÉPTETŐK UTÁN ÁLL, ÉS EZ NEM ELRENDEZÉSI ÍZLÉS,
-              //! HANEM HIBAJAVÍTÁS. A gomb CSAK akkor létezik, ha elnavigáltunk
-              //! — vagyis lapozás közben jelenik meg és tűnik el. Ha bárhol a
-              //! nyilak ELŐTT állna, a megjelenése odébb tolná a „következő
-              //! hét" nyilat: a mai hétről egyet előrelapozva a nyíl kicsúszna
-              //! az ujj alól, és a második koppintás már nem lapozna, hanem a
-              //! „Ma"-t találná el — visszaugrás oda, ahonnan indultunk.
-              //*
-              //! A SOR MINDEN VÁLTOZÓ SZÉLESSÉGŰ RÉSZE A NYILAKON KÍVÜLRE
-              //! KERÜL ÍGY: a csonkuló dátum a `flex-1` dobozba balra, a „Ma"
-              //! a sor végére. A két léptető minden héten ugyanannál az x-nél
-              //! marad, akkor is, amikor a „Ma" villan be melléjük. */}
-            {line.onReturn &&
-              (line.offCurrent ? (
-                <button
-                  type="button"
-                  title={line.returnTitle ?? "Mai hét (T)"}
-                  disabled={line.disabled}
-                  onClick={line.onReturn}
-                  className={cn(
-                    RETURN_PILL,
-                    "bg-brand/15 text-brand transition-colors hover:bg-brand/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
-                  )}
-                >
-                  {line.returnLabel ?? "Ma"}
-                </button>
-              ) : (
-                //! AHOL LÉPTETŐ VAN, OTT A HELYE AKKOR IS MEGVAN, AMIKOR Ő
-                //! NINCS. A sor alatta `flex-1`: ha a „Ma" csak megjelenne, a
-                //! sor annyival keskenyebb lenne, és a `›` BALRA csúszna — épp
-                //! lapozás közben, az ujj alól. Egy ugyanakkora, láthatatlan
-                //! dobozzal a nyíl minden héten ugyanannál az x-nél marad.
-                //*
-                //* Telefonon nincs léptető, tehát nincs mit a helyén tartani:
-                //* ott a hely eltűnik a gombbal együtt (`max-sm:hidden`), és
-                //* nem eszik a sávból.
-                <span
-                  aria-hidden
-                  className={cn(RETURN_PILL, "invisible max-sm:hidden")}
-                >
-                  {line.returnLabel ?? "Ma"}
-                </span>
-              ))}
           </div>
         ) : (
           //* Sor nélkül (nyitólap, designlap) a csoport jobbra tapad — a lebegő
@@ -549,10 +530,6 @@ export function StandingLine({
 const STEP =
   "flex size-8 shrink-0 touch-target items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40 motion-reduce:transition-none";
 
-//! A „MA" ALAKJA AZÉRT ÁLL KÜLÖN, MERT KÉTSZER KELL: egyszer a gombnak,
-//! egyszer az ÜRES HELYNEK, amit a gomb távollétében is fenn kell tartani
-//! (lásd a sávban a hívás helyét). Két osztálylista ugyanarra a dobozra
-//! előbb-utóbb elcsúszna — és pont a szélessége a lényeg.
 const RETURN_PILL =
   "shrink-0 touch-target rounded-full px-2.5 py-1 text-xs font-semibold";
 
@@ -566,12 +543,15 @@ function LineButton({
   open,
   sheetId,
   interactive,
+  railShown,
   onToggle,
 }: {
   line: LineContent;
   open: boolean;
   sheetId: string;
   interactive: boolean;
+  /** Igaz, ha alatta a sáv-alak áll: ott az alany és a szűrések száma már kint van. */
+  railShown: boolean;
   onToggle: () => void;
 }) {
   const body = (
@@ -588,14 +568,24 @@ function LineButton({
           //* Gabriella" 190 — enélkül egy hosszú név kiszorítaná az egész
           //* dátumot. 9rem-nél a név is csonkul, de csak azután, hogy a dátum
           //* már elfogyott. */}
-      <span className="max-w-[9rem] shrink-0 truncate font-bold tracking-tight text-foreground">
+      {/*//! AMI A SÁVBAN KINT ÁLL, AZ A SORBAN NEM ISMÉTLŐDIK. Asztalon közvetlenül
+          //! alatta az alany választója mutatja ugyanazt a „13C"-t — a sor ott
+          //! csak a hetet mondja. A képernyőolvasónak a név megmarad. */}
+      <span
+        className={cn(
+          "max-w-[9rem] shrink-0 truncate font-bold tracking-tight text-foreground",
+          railShown && "sr-only",
+        )}
+      >
         {line.subject}
       </span>
       {line.context && (
         <>
-          <span aria-hidden className="shrink-0 text-muted-foreground">
-            ·
-          </span>
+          {!railShown && (
+            <span aria-hidden className="shrink-0 text-muted-foreground">
+              ·
+            </span>
+          )}
           {/*//! IDŐ MINDIG `tabular-nums`. A sor a hetelés közben minden
               //! lépésnél átíródik; arányos számjegyekkel a mellette álló
               //! vezérlők néhány képpontot ugranának hetenként. */}
@@ -605,9 +595,13 @@ function LineButton({
         </>
       )}
       {line.weekLetter && (
-        <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
-          <span className="sr-only">{line.weekLetter} hét</span>
-          <span aria-hidden>{line.weekLetter}</span>
+        //! A HÉT BETŰJE ÁLLÍTÁS, NEM LÁBJEGYZET. A duális diáknak ez dönti el,
+        //! iskolában vagy munkahelyen van — egy 11 px-es, 10%-os pötty a dátum
+        //! végén elveszett. Ahol van hely, kiírva áll („B hét"); telefonon a
+        //! betű marad, de ugyanazzal a súllyal.
+        <span className="flex h-6 min-w-6 shrink-0 items-center justify-center gap-1 rounded-full bg-primary/18 px-2 text-xs font-bold text-primary ring-1 ring-primary/35 ring-inset">
+          <span className="tabular-nums">{line.weekLetter}</span>
+          <span className="max-sm:sr-only font-semibold">hét</span>
         </span>
       )}
       {/*//! A SZŰRÉS SZÁMA A SORON MARAD, MERT A SOR AZ EGYETLEN FEJLÉC. Az
@@ -615,7 +609,9 @@ function LineButton({
           //! nyoma egy becsukott lapban van, a diák egy hiányos órarendet lát,
           //! és nincs miből rájönnie, hogy ő maga szűrte. Ez a `toolbar-more`
           //! badge-ének az érve, és a sor eltűnésével nem szűnt meg. */}
-      {Boolean(line.filtered) && (
+      {/*//* Sáv-alakban a szám az összevonás ikonján ül jelvényként
+          //* (`preferences-menu.tsx`) — ott, ahol a szűrés kapcsolható. */}
+      {Boolean(line.filtered) && !railShown && (
         <span className="shrink-0 rounded-full bg-brand/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-brand">
           <span className="sr-only">
             {line.filtered} összevonás szűr a nézetben

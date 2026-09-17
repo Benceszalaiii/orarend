@@ -1,6 +1,7 @@
 import "server-only";
 
 import { headers } from "next/headers";
+import { cache } from "react";
 import type { PublicAnnouncement } from "./announcements";
 import { auth } from "./auth";
 import prisma from "./prisma";
@@ -8,15 +9,19 @@ import prisma from "./prisma";
 //! A JOG AZ ADATBÁZISBÓL JÖN, NEM A MUNKAMENET-SÜTIBŐL. A süti gyorsítótára
 //! (`cookieCache`, 5 perc) egy visszavont jogot még percekig hordozhatna —
 //! írásnál ez a néhány milliszekundumos lekérdezés megéri.
-export async function requireAdmin(): Promise<{ id: string } | null> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return null;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { id: true, isAdmin: true },
-  });
-  return user?.isAdmin ? { id: user.id } : null;
-}
+//* A `cache` egy kérésen belül vonja össze: az admin pult elrendezése és lapja
+//* is rákérdez, ez így egyetlen lekérdezés marad.
+export const requireAdmin = cache(
+  async (): Promise<{ id: string; role: string | null } | null> => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return null;
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, isAdmin: true, role: true },
+    });
+    return user?.isAdmin ? { id: user.id, role: user.role } : null;
+  },
+);
 
 //* A most érvényes közlemények, a böngészőnek szánt alakban. Adatbázis nélkül
 //* (vagy ha elhasal) üres lista — a közlemény soha nem viheti magával a lapot.

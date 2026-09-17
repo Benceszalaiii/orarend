@@ -1,6 +1,13 @@
 "use client";
 
-import { Check, Fingerprint, LogOut, RefreshCw, User } from "lucide-react";
+import {
+  Check,
+  Fingerprint,
+  LogOut,
+  RefreshCw,
+  ShieldCheck,
+  User,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -77,6 +84,7 @@ export function AccountMenu({
       variant={variant}
       name={session.user.name}
       image={session.user.image}
+      isAdmin={session.user.isAdmin === true}
       open={open}
       onOpenChange={setOpen}
       busy={busy}
@@ -151,11 +159,13 @@ function SignedIn({
   onOpenChange,
   busy,
   setBusy,
+  isAdmin,
 }: {
   className?: string;
   variant: "icon" | "row";
   name: string;
   image?: string | null;
+  isAdmin: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   busy: boolean;
@@ -262,6 +272,18 @@ function SignedIn({
         <div className="flex flex-col p-1">
           <GoogleLinkRow busy={busy} setBusy={setBusy} linked={linkedGoogle} />
           <PasskeyRow busy={busy} setBusy={setBusy} />
+
+          {/*//* Csak megjelenítés: a pult maga az adatbázisból ellenőrzi a jogot. */}
+          {isAdmin && (
+            <Link
+              href="/admin"
+              onClick={() => onOpenChange(false)}
+              className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-muted-strong transition-colors hover:bg-muted hover:text-foreground motion-reduce:transition-none"
+            >
+              <ShieldCheck className="size-4 shrink-0" aria-hidden />
+              Üzemeltetés
+            </Link>
+          )}
 
           <button
             type="button"

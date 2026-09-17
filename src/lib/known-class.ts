@@ -50,6 +50,28 @@ export function looksLikeTeacher(value: unknown): value is string {
   );
 }
 
+//* A suli teljes osztálylistája (rövid nevek, rendezve) — az admin pult
+//* választójához. `null` = a lista most nem érhető el.
+export async function loadClassList(): Promise<string[] | null> {
+  try {
+    const res = await fetch(JEDLIK_CLASSES, {
+      signal: AbortSignal.timeout(5_000),
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return null;
+    const list = (await res.json()) as { short?: unknown }[];
+    if (!Array.isArray(list)) return null;
+    const shorts = list
+      .map((c) => c?.short)
+      .filter((v): v is string => looksLikeClass(v));
+    return shorts.length > 0
+      ? [...new Set(shorts)].sort((a, b) => a.localeCompare(b, "hu"))
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function isKnownClass(short: string): Promise<boolean> {
   if (typeof short !== "string" || short.length > CLASS_MAX_LENGTH) {
     return false;

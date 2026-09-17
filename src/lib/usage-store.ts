@@ -55,3 +55,20 @@ export async function readUsage(days: number): Promise<UsageDay[]> {
   );
   return dates.map((date, i) => ({ date, classes: results[i] ?? {} }));
 }
+
+export type UsageRank = { class: string; count: number };
+
+//* Az időszak összesítése osztályonként, csökkenő sorrendben. Ugyanezt adja a
+//* `GET /api/hasznalat` és az admin pult statisztika-lapja — egy helyen, hogy
+//* a kettő ne mondhasson mást.
+export function rankUsage(daily: readonly UsageDay[]): UsageRank[] {
+  const total: Record<string, number> = {};
+  for (const day of daily) {
+    for (const [short, count] of Object.entries(day.classes)) {
+      total[short] = (total[short] ?? 0) + Number(count);
+    }
+  }
+  return Object.entries(total)
+    .map(([short, count]) => ({ class: short, count }))
+    .sort((a, b) => b.count - a.count);
+}

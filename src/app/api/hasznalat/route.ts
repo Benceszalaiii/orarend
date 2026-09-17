@@ -1,5 +1,10 @@
 import { CLASS_MAX_LENGTH, isKnownClass } from "@/lib/known-class";
-import { readUsage, recordClassUse, usageStoreReady } from "@/lib/usage-store";
+import {
+  rankUsage,
+  readUsage,
+  recordClassUse,
+  usageStoreReady,
+} from "@/lib/usage-store";
 
 //! MI KERÜL A TÁROLÓBA, ÉS MI NEM
 //!
@@ -66,15 +71,7 @@ export async function GET(request: Request) {
   const usage = await readUsage(days);
 
   //* Összesítés a kért időszakra: osztályonként az eszköz-napok száma.
-  const total: Record<string, number> = {};
-  for (const day of usage) {
-    for (const [short, count] of Object.entries(day.classes)) {
-      total[short] = (total[short] ?? 0) + Number(count);
-    }
-  }
-  const ranked = Object.entries(total)
-    .map(([short, count]) => ({ class: short, count }))
-    .sort((a, b) => b.count - a.count);
+  const ranked = rankUsage(usage);
 
   return Response.json({ days, ranked, daily: usage });
 }

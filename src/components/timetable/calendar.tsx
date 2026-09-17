@@ -2654,6 +2654,7 @@ export function TimetableCalendar({
                             rows={rows}
                             onUndo={undo}
                             onReset={reset}
+                            suspended={glancing}
                           />
                         )}
                         {showDual &&

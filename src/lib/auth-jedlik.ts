@@ -164,11 +164,16 @@ export const jedlikAd = () =>
           //* Amit MINDEN belépéskor frissítünk az iskolai válaszból. A
           //* `isTeacher` csak akkor kerül bele, ha az iskola nyilatkozott róla
           //* — hiányzó adatból nem minősítünk vissza senkit (lásd `jedlik-ad.ts`).
+          //! KÉZZEL RÖGZÍTETT AZONOSSÁGNÁL (`identityLocked`, admin pult) az
+          //! osztályt és a tanár-státuszt NEM írjuk felül az iskolai válaszból.
+          const locked =
+            owner.kind === "owned" &&
+            (owner.user as Record<string, unknown>).identityLocked === true;
           const directoryData = {
             displayUsername: identity.displayName,
-            class: identity.class,
             adCheckedAt: new Date(),
-            ...(identity.isTeacher !== null
+            ...(locked ? {} : { class: identity.class }),
+            ...(!locked && identity.isTeacher !== null
               ? { isTeacher: identity.isTeacher }
               : {}),
           };

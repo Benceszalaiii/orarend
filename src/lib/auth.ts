@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { GenericEndpointContext } from "@better-auth/core";
 import { dash, sentinel } from "@better-auth/infra";
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
@@ -63,6 +64,76 @@ function safeHostname(url: string): string {
   } catch {
     return "localhost";
   }
+}
+
+//! ═══════════════════════════════════════════════════════════════════════════
+//! A GOOGLE-CÍM ELSŐBBSÉGE A SZINTETIKUS AD-CÍMMEL SZEMBEN
+//! ═══════════════════════════════════════════════════════════════════════════
+//! Az AD-fiók `<felhasználónév>@jedlik-ad.invalid` címmel született, mert az
+//! iskolai belépés nem adott valódi címet. Amint a fiókhoz Google-fiók kötődik,
+//! VAN valódi, a Google által igazolt iskolai cím — onnantól az a fiók címe.
+//! Ettől a Google-alapú szerep-újraértékelés (`resolveSchoolIdentity`) is
+//! működik a volt AD-fiókokon, és a migráció végén az AD-bővítmény törlése után
+//! nem marad `.invalid` cím az adatbázisban.
+//!
+//! HONNAN JÖN A CÍM: a fiók-sorban tárolt Google `id_token`-ből. Ezt a szerver
+//! maga kérte le a Google token-végpontjáról (TLS-en), a kliens soha nem írja
+//! — ugyanígy dekódolja aláírás-ellenőrzés nélkül a Better Auth Google-
+//! szolgáltatója is (`getUserInfo`). Csak `email_verified` és iskolai domain
+//! esetén vesszük át.
+const SYNTHETIC_EMAIL_SUFFIX = "@jedlik-ad.invalid";
+
+function googleEmailFromIdToken(idToken: string | null | undefined) {
+  const payload = idToken?.split(".")[1];
+  if (!payload) return null;
+  try {
+    const claims = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    ) as { email?: unknown; email_verified?: unknown };
+    if (claims.email_verified !== true || typeof claims.email !== "string") {
+      return null;
+    }
+    const email = claims.email.trim().toLowerCase();
+    return schoolRoleForEmail(email) ? email : null;
+  } catch {
+    return null;
+  }
+}
+
+type AuthAdapter = GenericEndpointContext["context"]["internalAdapter"];
+
+/**
+ * Ha a felhasználó címe még szintetikus, és van hozzá kötött Google-fiók,
+ * lecseréli a címet a Google-fiók igazolt iskolai címére.
+ *
+ * @returns A frissített felhasználó, vagy `null`, ha nem volt mit cserélni.
+ */
+async function adoptGoogleEmail(
+  adapter: AuthAdapter,
+  userId: string,
+  idToken?: string | null,
+) {
+  const user = await adapter.findUserById(userId);
+  if (!user?.email.endsWith(SYNTHETIC_EMAIL_SUFFIX)) return null;
+
+  let email = googleEmailFromIdToken(idToken);
+  if (!email) {
+    const accounts = await adapter.findAccounts(userId);
+    for (const account of accounts) {
+      if (account.providerId !== "google") continue;
+      email = googleEmailFromIdToken(account.idToken);
+      if (email) break;
+    }
+  }
+  if (!email) return null;
+
+  //! AZ `@@unique([email])` MIATT előbb megnézzük, foglalt-e. Elvben nem
+  //! lehet (ugyanaz a Google-fiók nem köthető két felhasználóhoz), de ha
+  //! mégis, nem írunk felül egy idegen fiókot, és a belépést sem buktatjuk.
+  const taken = await adapter.findUserByEmail(email);
+  if (taken && taken.user.id !== userId) return null;
+
+  return adapter.updateUser(userId, { email, emailVerified: true });
 }
 
 export const auth = betterAuth({
@@ -190,6 +261,16 @@ export const auth = betterAuth({
         returned: true,
         defaultValue: false,
       },
+      //! KÉZI RÖGZÍTÉS AZ ADMIN PULTRÓL (`/admin`). Ha igaz, sem az AD-, sem a
+      //! Google-belépés nem írja felül az osztályt, az `isTeacher`-t és a
+      //! `teacherName`-et. `input: false` — a kliens nem kapcsolhatja ki.
+      identityLocked: {
+        type: "boolean",
+        required: false,
+        input: false,
+        returned: false,
+        defaultValue: false,
+      },
       //* Mikor néztük meg utoljára az AD-ban, hogy az osztály és a
       //* tanár-státusz stimmel-e. Google-belépésnél nincs értelme: ott minden
       //* belépés újraértékeli a szerepet a domainből (lásd lent).
@@ -243,6 +324,10 @@ export const auth = betterAuth({
   //! — az `auth-jedlik.ts` által a `directoryData`-ban már beállított
   //! `isTeacher` érintetlen marad. Enélkül ez a hook minden AD-fiókot
   //! csendben visszaminősítene diákká.
+  //!
+  //! KIVÉTEL: ha az AD-fiókhoz már Google-fiók kötődik, a cím a Google-címre
+  //! cserélődik (`adoptGoogleEmail`), és onnantól a szerepet a Google-cím
+  //! dönti el — a Google-azonosság elsőbbséget kap az AD válaszával szemben.
   databaseHooks: {
     user: {
       create: {
@@ -271,24 +356,69 @@ export const auth = betterAuth({
     //! alkalommal munkamenetet hoz létre — ez az egyetlen közös pont, ahol a
     //! felhasználót módosítani lehet; a `validateUserInfo` csak kapu.
     //!
-    //! NEM MINŐSÍT VISSZA OK NÉLKÜL: AD-fiókot nem érint (nem iskolai Google-
-    //! cím), a lista elérhetetlenségénél nem ír, és csak eltérés esetén ír.
+    //! NEM MINŐSÍT VISSZA OK NÉLKÜL: Google nélküli AD-fiókot nem érint (nem
+    //! iskolai cím), a lista elérhetetlenségénél nem ír, és csak eltérés esetén ír.
     //! A tényleges „nincs a listán" viszont OK: épp ez a javítás lényege.
     //!
     //! ISMERT KÉSÉS: a munkamenet-süti gyorsítótára (`cookieCache`, 5 perc) még
     //! az írás ELŐTTI felhasználót hordozhatja — a változás legfeljebb ennyivel
     //! később látszik a felületen. Új fióknál nincs késés (ott a `create` hook
     //! már helyesen írt).
+    //! ─── GOOGLE-FIÓK KÖTÉSE / BELÉPÉSE: A CÍM ÁTVÉTELE ───────────────────────
+    //! `create`: a `linkSocial` új fiók-sort ír. `update`: a már kötött
+    //! Google-fiókkal való belépés frissíti a tokeneket (benne az `id_token`-t).
+    //! Mindkettő után a szintetikus cím a Google-címre cserélődik — lásd
+    //! `adoptGoogleEmail`. Hiba esetén a kötést/belépést nem buktatjuk.
+    account: {
+      create: {
+        after: async (account, ctx) => {
+          if (!ctx || account.providerId !== "google") return;
+          try {
+            await adoptGoogleEmail(
+              ctx.context.internalAdapter,
+              account.userId,
+              account.idToken,
+            );
+          } catch (error) {
+            ctx.context.logger.error("[google] cím átvétele sikertelen", error);
+          }
+        },
+      },
+      update: {
+        after: async (account, ctx) => {
+          if (!ctx || account.providerId !== "google" || !account.userId) {
+            return;
+          }
+          try {
+            await adoptGoogleEmail(
+              ctx.context.internalAdapter,
+              account.userId,
+              account.idToken,
+            );
+          } catch (error) {
+            ctx.context.logger.error("[google] cím átvétele sikertelen", error);
+          }
+        },
+      },
+    },
+
     session: {
       create: {
         before: async (session, ctx) => {
           if (!ctx) return;
           try {
             const adapter = ctx.context.internalAdapter;
+            //* PÓTLÁS A MÁR KORÁBBAN ÖSSZEKÖTÖTT FIÓKOKNAK: bármilyen belépésnél
+            //* (AD, passkey) átvesszük a kötött Google-fiók címét, ha még a
+            //* szintetikus áll a fiókon. Így a lenti újraértékelés már a
+            //* Google-cím alapján dönt — a Google-azonosság az elsődleges.
+            await adoptGoogleEmail(adapter, session.userId);
             const user = (await adapter.findUserById(session.userId)) as
               | ({ email: string; name: string } & Record<string, unknown>)
               | null;
             if (!user || !schoolRoleForEmail(user.email)) return;
+            //! Kézzel rögzített azonosság — az admin döntése erősebb a listánál.
+            if (user.identityLocked === true) return;
             const fields = await resolveSchoolIdentity({
               email: user.email,
               name: user.name,
@@ -537,8 +667,8 @@ export const auth = betterAuth({
     //! kitiltott fióknak a bővítmény a munkamenet létrehozását is megtagadja,
     //! tehát az AD- és a passkey-s belépést is lezárja.
     //!
-    //! A `role` NEM AZONOS AZ `isAdmin`-NAL. Az `isAdmin` a közleménykezelést
-    //! nyitja (`/admin` lap); a `role: "admin"` az `/api/auth/admin/*`
+    //! A `role` NEM AZONOS AZ `isAdmin`-NAL. Az `isAdmin` az üzemeltetői pultot
+    //! nyitja (`/admin`); a `role: "admin"` az `/api/auth/admin/*`
     //! végpontokat (fiók listázása, kitiltás, MEGSZEMÉLYESÍTÉS, jelszóállítás).
     //! Mindkettőt kézzel kell beállítani az adatbázisban, és a `role`-t csak
     //! annak, akire a teljes fiókkezelést rá lehet bízni. Egyik sem `input`, a

@@ -111,10 +111,9 @@ pontos időpont nem megy vele, és a szerver sem tárol ilyet: a tárolóban nap
 bontású, osztályonkénti darabszám áll. A napi deduplikáció jelölője a
 `localStorage`-ban marad, elküldve soha nincs.
 
-A számokat a **`/statisztika`** oldal mutatja meg: jelszóval védett, `noindex`,
-osztályonkénti rangsor sávokkal, napi görbe és 7 / 30 / 90 / 365 napos időszak.
-A jelszó ugyanaz a `STATS_KEY`. A belépés után egy aláírt (HMAC-SHA256), `httpOnly`
-süti tartja a munkamenetet egy hétig — a jelszó magába a sütibe SOSEM kerül bele.
+A számokat az üzemeltetői pult **`/admin/statisztika`** lapja mutatja meg
+(`isAdmin` joggal, `noindex`): osztályonkénti rangsor sávokkal, napi görbe és
+7 / 30 / 90 / 365 napos időszak. A régi `/statisztika` cím ide irányít át.
 
 Gépi kiolvasásra ugyanez elérhető végponton is:
 
@@ -128,10 +127,10 @@ A kiolvasás kulcs nélkül `404`-et ad, tehát a végpont létezése sem derül
 | Env-változó | Mire kell |
 | --- | --- |
 | `REDIS_KV_REST_API_URL`, `REDIS_KV_REST_API_TOKEN` | A számláló tárolója (Vercel marketplace → Upstash Redis) |
-| `STATS_KEY` | A `/statisztika` jelszava és a `GET` kulcsa. Beállítatlanul egyik sem működik |
+| `STATS_KEY` | A `GET /api/hasznalat` kulcsa. Beállítatlanul a gépi kiolvasás nem működik |
 
 A `STATS_KEY` legyen hosszú és véletlenszerű (`openssl rand -hex 24`): egyetlen
-titok véd mindent, és rossz jelszóra csak egy fix késleltetés jár, nem kizárás.
+titok védi a gépi kiolvasást.
 
 Redis nélkül az app változatlanul működik, csak nem számol — egy elfelejtett
 env-változó nem viheti el az órarendet.
@@ -316,7 +315,7 @@ src/
     valtozasok/    változások listája
     belepes/       opcionális iskolai belépés
     adatvedelem/   adatvédelmi tájékoztató
-    statisztika/   jelszóval védett használati kimutatás (noindex)
+    admin/         üzemeltetői pult (isAdmin): felhasználók, statisztika, közlemények
     api/auth/      bejelentkezés és passkey-végpontok
     api/beallitasok/ beállítás-szinkron végpontok
     api/hasznalat/ osztályszintű használati számláló
@@ -334,7 +333,6 @@ src/
     usage.ts            a kliens jelzése + napi deduplikáció
     usage-day.ts        a közös, budapesti naphatár (kliens és szerver)
     usage-store.ts      a Redis-számláló (csak szerveren)
-    stats-auth.ts       a statisztika-oldal beléptetése (csak szerveren)
     known-class.ts      az elfogadható osztálynevek határa (a kulcstér védelme)
     push.ts             feliratkozás és képességfelismerés (kliens)
     push-shared.ts      a kliens, a szerver és a service worker közös szerződése

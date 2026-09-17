@@ -127,6 +127,11 @@ model User {
   //!   UPDATE "user" SET "isAdmin" = true WHERE email = '…@jedlik.eu';
   isAdmin Boolean @default(false)
 
+  //! KÉZZEL RÖGZÍTETT AZONOSSÁG. Ha igaz, a belépés (AD vagy Google) nem írja
+  //! felül az osztályt, a tanár-státuszt és a tanárnevet — az admin pult
+  //! (`/admin`) állítja, amikor ezeket kézzel módosítják.
+  identityLocked Boolean @default(false)
+
   //! ─── A BETTER AUTH `admin()` BŐVÍTMÉNY MEZŐI ─────────────────────────────
   //! Lásd `src/lib/auth.ts`. A `role` MÁS, mint az `isAdmin`: `"admin"` érték a
   //! teljes fiókkezelést nyitja (kitiltás, megszemélyesítés) — csak kézzel,

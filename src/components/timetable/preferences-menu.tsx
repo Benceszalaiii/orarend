@@ -87,11 +87,14 @@ export function PreferencesMenu({
   rows,
   onUndo,
   onReset,
+  suspended = false,
   className,
 }: {
   rows: PreferenceRow[];
   onUndo: (clusterKey: string) => void;
   onReset: () => void;
+  /** Igaz, ha a rács épp szűretlen: ilyenkor a jelvény nem igaz rá. */
+  suspended?: boolean;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -102,13 +105,27 @@ export function PreferencesMenu({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" data-key="o" className={sheetItem(className)}>
-          <Merge
-            className={cn(
-              "size-4 shrink-0",
-              rows.length > 0 ? "text-primary" : "text-muted-foreground",
+          {/*//! A SZŰRÉSEK SZÁMA AZ IKONON ÜL, ÉRTESÍTÉS-JELVÉNYKÉNT. Ott mondja
+              //! ki, hogy órák hiányoznak a nézetből, ahol vissza is lehet
+              //! hozni őket — a fejléc sorában egy „3 szűrés" pirula volt, ami
+              //! semmire nem vitt. */}
+          <span className="relative flex shrink-0">
+            <Merge
+              className={cn(
+                "size-4 shrink-0",
+                rows.length > 0 ? "text-primary" : "text-muted-foreground",
+              )}
+              aria-hidden
+            />
+            {rows.length > 0 && !suspended && (
+              <span
+                aria-hidden
+                className="absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-brand px-1 text-[9px] leading-none font-bold tabular-nums text-brand-foreground ring-2 ring-background"
+              >
+                {rows.length > 9 ? "9+" : rows.length}
+              </span>
             )}
-            aria-hidden
-          />
+          </span>
           <SheetItemBody
             label="Összevonások"
             hint={

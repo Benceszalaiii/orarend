@@ -2,69 +2,108 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/announcement-store";
-import { announcementInput, parsePaths } from "@/lib/announcements";
+import { isKnownClass, looksLikeClass } from "@/lib/known-class";
 import prisma from "@/lib/prisma";
+import { loadTeacherDirectory } from "@/lib/teacher-directory";
 
 //! MINDEN ACTION NYILVÁNOS VÉGPONT. Bárki POST-olhat rá, aki ismeri az
 //! azonosítóját — a `requireAdmin` ezért nem formalitás, hanem AZ egyetlen kapu,
 //! és minden függvény ELSŐ sora.
 
-export type SaveState = { ok?: boolean; error?: string };
-
-function parseDate(value: FormDataEntryValue | null): Date | null {
-  if (typeof value !== "string" || value.length === 0) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
+export type UserSaveState = { ok?: boolean; error?: string; savedAt?: number };
 
 function text(value: FormDataEntryValue | null): string {
-  return typeof value === "string" ? value : "";
+  return typeof value === "string" ? value.trim() : "";
 }
 
-export async function saveAnnouncement(
-  _prev: SaveState,
+export async function updateUser(
+  _prev: UserSaveState,
   formData: FormData,
-): Promise<SaveState> {
-  if (!(await requireAdmin())) return { error: "Nincs jogosultságod." };
-
-  const parsed = announcementInput.safeParse({
-    kind: text(formData.get("kind")),
-    tone: text(formData.get("tone")),
-    title: text(formData.get("title")),
-    message: text(formData.get("message")),
-    paths: parsePaths(text(formData.get("paths"))),
-    active: formData.get("active") === "on",
-    //* A böngésző ISO-ra (UTC) alakítva küldi — a `datetime-local` helyi ideje
-    //* a szerveren más időzónában értelmeződne.
-    startsAt: parseDate(formData.get("startsAt")),
-    endsAt: parseDate(formData.get("endsAt")),
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Érvénytelen adat." };
-  }
+): Promise<UserSaveState> {
+  const actor = await requireAdmin();
+  if (!actor) return { error: "Nincs jogosultságod." };
 
   const id = text(formData.get("id"));
-  if (id) {
-    await prisma.announcement.update({ where: { id }, data: parsed.data });
-  } else {
-    await prisma.announcement.create({ data: parsed.data });
+  const target = id
+    ? await prisma.user.findUnique({
+        where: { id },
+        select: { id: true, role: true, isAdmin: true },
+      })
+    : null;
+  if (!target) return { error: "A felhasználó nem található." };
+
+  //* ─── Osztály ────────────────────────────────────────────────────────────
+  //! Szabad szöveg nem kerül a mezőbe: ugyanaz a határ, mint a statisztikánál
+  //! és az értesítéseknél (`known-class.ts`).
+  const rawClass = text(formData.get("class")).toLocaleUpperCase("hu");
+  let klass: string | null = null;
+  if (rawClass) {
+    if (!looksLikeClass(rawClass) || !(await isKnownClass(rawClass))) {
+      return { error: `Ismeretlen osztály: ${rawClass}` };
+    }
+    klass = rawClass;
   }
 
-  revalidatePath("/admin");
-  return { ok: true };
-}
+  //* ─── Tanárnév ───────────────────────────────────────────────────────────
+  //! A NÉV A JEDLIKINFO LISTÁBÓL JÖHET, BETŰRE PONTOSAN. A `teacherName` dönti
+  //! el, melyik tanári órarend és feed a fiók sajátja — egy elírt név rossz
+  //! jogot adna. Ha a lista nem érhető el, nem mentünk vakon.
+  const rawTeacher = text(formData.get("teacherName"));
+  let teacherName: string | null = null;
+  if (rawTeacher) {
+    const directory = await loadTeacherDirectory();
+    if (!directory) {
+      return {
+        error: "A tanárlista most nem érhető el — próbáld újra később.",
+      };
+    }
+    if (!directory.some((t) => t.name === rawTeacher)) {
+      return { error: `Nincs ilyen tanár a listában: ${rawTeacher}` };
+    }
+    teacherName = rawTeacher;
+  }
 
-export async function setAnnouncementActive(
-  id: string,
-  active: boolean,
-): Promise<void> {
-  if (!(await requireAdmin())) return;
-  await prisma.announcement.update({ where: { id }, data: { active } });
-  revalidatePath("/admin");
-}
+  //* Tanárnévvel a fiók mindenképp tanár — a kettő nem mondhat ellent.
+  const isTeacher = teacherName !== null || formData.get("isTeacher") === "on";
+  const isAdmin = formData.get("isAdmin") === "on";
+  const identityLocked = formData.get("identityLocked") === "on";
 
-export async function deleteAnnouncement(id: string): Promise<void> {
-  if (!(await requireAdmin())) return;
-  await prisma.announcement.delete({ where: { id } });
+  //! A SAJÁT ÜZEMELTETŐI JOGOT NEM LEHET ITT ELVENNI. Egy elkattintott pipa
+  //! különben kizárná az utolsó üzemeltetőt a saját pultjából.
+  if (target.id === actor.id && !isAdmin) {
+    return { error: "A saját üzemeltetői jogodat nem veheted el." };
+  }
+
+  //! A `role: "admin"` TÖBB, MINT AZ `isAdmin`: megszemélyesítést és
+  //! jelszóállítást nyit az `/api/auth/admin/*` alatt (lásd `auth.ts`). Ezt
+  //! csak az adhatja vagy veheti el, akinek MAGÁNAK is megvan.
+  const wantsRoleAdmin = formData.get("roleAdmin") === "on";
+  const hasRoleAdmin = target.role === "admin";
+  let role = target.role;
+  if (wantsRoleAdmin !== hasRoleAdmin) {
+    if (actor.role !== "admin") {
+      return {
+        error: "A teljes fiókkezelési jogot csak az adhatja, akinek megvan.",
+      };
+    }
+    if (target.id === actor.id) {
+      return { error: "A saját fiókkezelési jogodat nem veheted el." };
+    }
+    role = wantsRoleAdmin ? "admin" : null;
+  }
+
+  await prisma.user.update({
+    where: { id: target.id },
+    data: {
+      class: klass,
+      isTeacher,
+      teacherName,
+      isAdmin,
+      role,
+      identityLocked,
+    },
+  });
+
   revalidatePath("/admin");
+  return { ok: true, savedAt: Date.now() };
 }
