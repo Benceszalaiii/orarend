@@ -1,6 +1,7 @@
 "use client";
 
 import { RotateCw } from "lucide-react";
+import { AdminBypassButton } from "@/components/admin-bypass";
 import { Button } from "@/components/ui/button";
 import type { TimetableError } from "@/lib/timetable";
 import { cn } from "@/lib/utils";
@@ -14,10 +15,13 @@ export function ErrorPanel({
   error,
   pending,
   onRetry,
+  onBypass,
 }: {
   error: TimetableError;
   pending: boolean;
   onRetry: () => void;
+  //* Üzemeltetőnek: a hiba helyett a nézet (lásd `AdminBypassButton`).
+  onBypass?: () => void;
 }) {
   return (
     <section className="rounded-2xl border border-hero-foreground/15 bg-hero-foreground/[0.06] p-5 sm:p-6">
@@ -30,18 +34,26 @@ export function ErrorPanel({
           {error.hint}
         </p>
       )}
-      {error.retryable && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onRetry}
-          disabled={pending}
-          className="mt-4 h-8 touch-target rounded-full border-hero-foreground/25 bg-transparent px-3 text-xs"
-        >
-          <RotateCw className={cn(pending && "animate-spin")} aria-hidden />
-          Újra
-        </Button>
-      )}
+      <div className="mt-4 flex flex-wrap items-center gap-2 empty:hidden">
+        {error.retryable && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+            disabled={pending}
+            className="h-8 touch-target rounded-full border-hero-foreground/25 bg-transparent px-3 text-xs"
+          >
+            <RotateCw className={cn(pending && "animate-spin")} aria-hidden />
+            Újra
+          </Button>
+        )}
+        {onBypass && (
+          <AdminBypassButton
+            onBypass={onBypass}
+            className="text-hero-foreground/70"
+          />
+        )}
+      </div>
       {error.detail && (
         <p className="mt-3 font-mono text-[11px] text-hero-foreground/45">
           {error.detail}

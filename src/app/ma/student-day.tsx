@@ -213,6 +213,8 @@ function StudentDayPanel({
   const { day, dayAll, mineKeys, hiddenCount } = panel;
   const { clock, epoch, previewKey, setPreviewKey, error, pending, cached } =
     dv;
+  //* Üzemeltetőnek: a napi hibapanel helyett a nap maga (`AdminBypassButton`).
+  const [errorBypassed, setErrorBypassed] = useState(false);
 
   const dualDay = day?.dual === "dual";
   const shownDay = allGroups && dayAll ? dayAll : day;
@@ -252,11 +254,12 @@ function StudentDayPanel({
         <div className="mt-6 lg:max-w-2xl">
           {dualDay ? (
             <DualHero nowSec={clock && isToday ? clock.sec : null} />
-          ) : error && !day ? (
+          ) : error && !day && !errorBypassed ? (
             <ErrorPanel
               error={error}
               pending={pending}
               onRetry={() => dv.reload(panel.dateKey)}
+              onBypass={() => setErrorBypassed(true)}
             />
           ) : rest ? (
             //! ITT EDDIG EGY ÜRES DOBOZ ÁLLT. Óra nélküli napon a `NowBlock`-nak

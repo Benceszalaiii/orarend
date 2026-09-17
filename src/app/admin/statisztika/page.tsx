@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { loadAccountStats } from "@/lib/admin-stats";
 import { requireAdmin } from "@/lib/announcement-store";
 import { rankUsage, readUsage, usageStoreReady } from "@/lib/usage-store";
 import { AccessDenied } from "../_components/access-denied";
@@ -24,29 +25,29 @@ export default async function AdminStatisztikaPage({
     return <AccessDenied next="/admin/statisztika" />;
   }
 
-  if (!usageStoreReady()) {
-    return (
-      <main className="mt-6 max-w-2xl">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">
-          A számláló nincs beállítva
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          Hiányzik a{" "}
-          <code className="text-foreground">REDIS_KV_REST_API_URL</code> vagy a{" "}
-          <code className="text-foreground">REDIS_KV_REST_API_TOKEN</code>{" "}
-          környezeti változó, ezért nincs honnan olvasni a számokat. Az órarend
-          ettől függetlenül működik.
-        </p>
-      </main>
-    );
-  }
-
   const params = await searchParams;
   const raw = Array.isArray(params.days) ? params.days[0] : params.days;
   const requested = Number(raw);
   const days = ALLOWED_DAYS.includes(requested) ? requested : 30;
 
-  const daily = await readUsage(days);
+  //! A KÉT FORRÁS EGYMÁSTÓL FÜGGETLENÜL HIÁNYOZHAT. A névtelen számláló a
+  //! Redisben él, a fiókok a Postgresben — ha az egyik nincs beállítva vagy
+  //! épp elhasal, a másik fele a lapnak attól még mondjon valamit.
+  const [daily, accounts] = await Promise.all([
+    usageStoreReady() ? readUsage(days) : Promise.resolve(null),
+    process.env.DB_URL
+      ? loadAccountStats(days).catch((error: unknown) => {
+          console.error("[orarend] admin statisztika:", error);
+          return null;
+        })
+      : Promise.resolve(null),
+  ]);
 
-  return <StatsDashboard days={days} ranked={rankUsage(daily)} daily={daily} />;
+  return (
+    <StatsDashboard
+      days={days}
+      usage={daily ? { daily, ranked: rankUsage(daily) } : null}
+      accounts={accounts}
+    />
+  );
 }

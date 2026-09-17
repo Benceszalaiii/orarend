@@ -258,6 +258,8 @@ function TeacherDayPanel({
   const { day } = panel;
   const { clock, epoch, previewKey, setPreviewKey, error, pending, cached } =
     dv;
+  //* Üzemeltetőnek: a napi hibapanel helyett a nap maga (`AdminBypassButton`).
+  const [errorBypassed, setErrorBypassed] = useState(false);
 
   const clashes = useMemo(() => (day ? clashesOf(day.segments) : []), [day]);
 
@@ -291,11 +293,12 @@ function TeacherDayPanel({
         </div>
 
         <div className="mt-6 lg:max-w-2xl">
-          {error && !day ? (
+          {error && !day && !errorBypassed ? (
             <ErrorPanel
               error={error}
               pending={pending}
               onRetry={() => dv.reload(panel.dateKey)}
+              onBypass={() => setErrorBypassed(true)}
             />
           ) : rest ? (
             <RestHero
