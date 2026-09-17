@@ -25,7 +25,6 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
-import { AdminBypassButton } from "@/components/admin-bypass";
 import {
   SHEET_POPOVER,
   SheetDisclosure,
@@ -802,10 +801,6 @@ export function TimetableCalendar({
   //! példányból, mert a forrás nem volt elérhető. A rács ezt KIÍRJA: egy régi
   //! órarendet igazként mutatni rosszabb, mint hibát mutatni.
   const [stale, setStale] = useState<CachedWeek | null>(initialStale);
-  //! AZ ÜZEMELTETŐ ÁTLÉPTE A HIBAKÉPERNYŐT (`AdminBypassButton`). A lap
-  //! élete végéig érvényes: egy háttérbeli újrapróbálás ne rántsa vissza
-  //! minden alkalommal a hibára, amit már egyszer tudomásul vett.
-  const [errorBypassed, setErrorBypassed] = useState(false);
 
   //! ─── A LAP MOST MÁR MENET KÖZBEN IS SZÓLHAT ────────────────────────────────
   //! EZ AZ ÁLLAPOT EDDIG EGYSZER, A BELÉPÉSKOR VETTE ÁT A `initialStale`-t — és
@@ -2762,15 +2757,11 @@ export function TimetableCalendar({
           //! akkor a `subject` is üres marad — a semleges „válassz
           //! osztályt” felirat ilyenkor elhallgatná a valódi okot. Ezért előbb
           //! a nevesített hiba jön, és csak utána a felszólítás. */}
-      {!view.ok &&
-      !errorBypassed &&
-      view.error &&
-      view.error.kind !== "no-class" ? (
+      {!view.ok && view.error && view.error.kind !== "no-class" ? (
         <CalendarError
           error={view.error}
           pending={pending}
           onRetry={() => load(weekStart)}
-          onBypass={hasSubject ? () => setErrorBypassed(true) : undefined}
         />
       ) : !hasSubject && subjects.length === 0 && subjectsError ? (
         //* Nincs mit választani, mert a lista sem jött meg — a forrás hibája.
@@ -2781,12 +2772,11 @@ export function TimetableCalendar({
         />
       ) : !hasSubject ? (
         <ChoosePrompt mode={mode} hasSubjects={subjects.length > 0} />
-      ) : !view.ok && !errorBypassed ? (
+      ) : !view.ok ? (
         <CalendarError
           error={view.error}
           pending={pending}
           onRetry={() => load(weekStart)}
-          onBypass={() => setErrorBypassed(true)}
         />
       ) : (
         <div className="relative flex flex-col">
@@ -3597,12 +3587,10 @@ function CalendarError({
   error,
   pending,
   onRetry,
-  onBypass,
 }: {
   error?: TimetableErrorInfo;
   pending?: boolean;
   onRetry: () => void;
-  onBypass?: () => void;
 }) {
   const info = error ?? ERROR_FALLBACK;
   //* Az „elszakadt a kapcsolat" fajta hibáknak saját ikonja van: egy pillantásból
@@ -3631,19 +3619,16 @@ function CalendarError({
           </p>
         )}
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-2 empty:hidden">
-        {info.retryable && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onRetry}
-            disabled={pending}
-          >
-            {pending ? "Betöltés…" : "Újra"}
-          </Button>
-        )}
-        {onBypass && <AdminBypassButton onBypass={onBypass} />}
-      </div>
+      {info.retryable && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRetry}
+          disabled={pending}
+        >
+          {pending ? "Betöltés…" : "Újra"}
+        </Button>
+      )}
       {info.detail && (
         <p className="font-mono text-[11px] text-muted-foreground/70">
           {info.detail}
