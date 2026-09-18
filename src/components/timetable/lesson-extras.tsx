@@ -7,6 +7,7 @@ import {
   Link2,
   LogIn,
   Maximize2,
+  MonitorUp,
   Pencil,
   Plus,
   Radar,
@@ -60,6 +61,8 @@ import {
   useSharedExtras,
   useTeacherSelf,
 } from "@/lib/shared-extras-store";
+import { liveStreamOfTeacher, useLiveStreams } from "@/lib/webrtc-live";
+import type { StreamSummary } from "@/lib/webrtc-shared";
 import { canViewInPage, ScreenTaskViewer } from "./screentask-viewer";
 
 //* ---------------------------------------------------------------------------
@@ -100,6 +103,9 @@ export function LessonExtrasSection({
   const { status, extras } = useLessonExtras(userId);
   const { status: sharedStatus, shared } = useSharedExtras();
   const self = useTeacherSelf(userId, session?.user.isTeacher === true);
+  //* Közös, lassú lekérdezés — akárhány doboz kérdezi, egy kérés megy (lásd
+  //* `webrtc-live.ts`).
+  const live = liveStreamOfTeacher(useLiveStreams(), teacher);
   const [viewing, setViewing] = useState<{
     screen: ScreenAddress;
     room: string;
@@ -118,6 +124,13 @@ export function LessonExtrasSection({
 
   return (
     <>
+      <LiveBlock
+        live={live}
+        ownLesson={ownLesson}
+        subject={subject}
+        classes={classes}
+        rooms={distinctRooms}
+      />
       {extrasKey(subject) && (
         <LinksBlock
           userId={userId}
@@ -154,6 +167,106 @@ export function LessonExtrasSection({
         />
       )}
     </>
+  );
+}
+
+//! ═══════════════════════════════════════════════════════════════════════════
+//! „MOST ÉLŐBEN" — ÉS „MEGOSZTOM AZ ÓRÁMAT"
+//! ═══════════════════════════════════════════════════════════════════════════
+//! UGYANAZ A DOBOZ MÁST MOND A KÉT OLDALNAK, mert ugyanarra a helyzetre két
+//! kérdés van. A diáké: „látom valahol, amit a tanár mutat?" A tanáré: „hogy
+//! mutassam meg?" Két külön szakasz két külön helyen mindkettőnek rosszabb
+//! lenne: a diák a tanári gombot nem értené, a tanár meg a saját óráján a
+//! diák szemszögét látná.
+//!
+//! ─── A MEGOSZTÁS A TANÁRHOZ TARTOZIK, NEM EHHEZ AZ ÓRÁHOZ ──────────────────
+//! Ezért elég a KÁRTYA TANÁRÁT megkérdezni: ha ő épp megoszt, a jelzés
+//! megjelenik — akkor is, ha épp két osztálynak tartja ugyanazt az órát, és
+//! akkor is, ha a diák egy másik csoport kártyáján nézi. Nem kell eldönteni,
+//! „melyik" óráé a megosztás, mert nem óráé.
+//!
+//! ─── AMIT A GOMB CSAK ELŐKÉSZÍT ────────────────────────────────────────────
+//! A gomb nem indítja el a megosztást, csak ÁTVISZ a `/webrtc` lapra, kész
+//! címmel. Nem lustaságból: a képernyő megosztását a böngésző csak KÖZVETLEN
+//! felhasználói mozdulatra engedi, és egy oldalváltás után a mozdulat már nem
+//! számít „közvetlennek". Az utolsó koppintás ezért ott történik, ahol a kép
+//! is megjelenik.
+function LiveBlock({
+  live,
+  ownLesson,
+  subject,
+  classes,
+  rooms,
+}: {
+  live: StreamSummary | null;
+  ownLesson: boolean;
+  subject: string;
+  classes: string[];
+  rooms: string[];
+}) {
+  //* Semmi mondanivaló: se élő adás, se jog indítani.
+  if (!live && !ownLesson) return null;
+
+  //! A CÍM AZ ÓRÁBÓL ÁLL ÖSSZE, HOGY A TANÁRNAK NE KELLJEN GÉPELNIE. Tantárgy,
+  //! osztály(ok), terem — pont az a három dolog, amivel egy diák a listában
+  //! felismeri a saját óráját. Több osztálynál MIND ott van, mert a megosztás
+  //! is mindnek szól.
+  const suggested = [
+    subject,
+    classes.filter(Boolean).join(", ").toUpperCase(),
+    rooms.join(", "),
+  ]
+    .filter((part) => part.length > 0)
+    .join(" · ");
+
+  return (
+    <div className="px-4 py-3">
+      <SectionHead
+        icon={MonitorUp}
+        label={live ? "Képernyőmegosztás · most élőben" : "Képernyőmegosztás"}
+      />
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 pl-7">
+        {live ? (
+          <>
+            <Button
+              asChild
+              size="sm"
+              className="h-8 gap-1.5 rounded-full px-3 text-xs"
+            >
+              <Link href={`/webrtc?adas=${encodeURIComponent(live.id)}`}>
+                <span
+                  aria-hidden
+                  className="size-1.5 shrink-0 rounded-full bg-current"
+                />
+                Megnyitom
+              </Link>
+            </Button>
+            <span className="text-[11px] text-muted-foreground">
+              {live.title}
+              {live.locked && " · jelszóval"}
+            </span>
+          </>
+        ) : (
+          <>
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 rounded-full px-3 text-xs"
+            >
+              <Link href={`/webrtc?cim=${encodeURIComponent(suggested)}`}>
+                <MonitorUp className="size-3.5" aria-hidden />
+                Megosztom a képernyőmet
+              </Link>
+            </Button>
+            <span className="text-[11px] text-pretty text-muted-foreground">
+              Telepítés nélkül, a böngészőből. A diákjaid az óráik mellett
+              látják meg.
+            </span>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
