@@ -8,6 +8,7 @@ import {
   flushCandidates,
   newConnection,
 } from "./webrtc-peer";
+import { Pump } from "./webrtc-poll";
 import {
   type ChatMessage,
   type HubMessage,
@@ -130,7 +131,6 @@ export function useScreenViewer(
     const host = target.hostPeer;
     const streamId = target.id;
     let disposed = false;
-    let pollTimer: ReturnType<typeof setTimeout> | undefined;
     let joinTimer: ReturnType<typeof setTimeout> | undefined;
 
     const pc = newConnection();
@@ -202,17 +202,20 @@ export function useScreenViewer(
       switch (pc.connectionState) {
         case "connected":
           setPhase("live");
-          //* Összeállt: a jelzésre nincs több szükség. A lekérdezés itt ÁLL LE
-          //* — ez az, amitől egy órán át nézett megosztás sem terheli a szervert.
-          clearTimeout(pollTimer);
+          //! ÖSSZEÁLLT: A JELZÉSRE NINCS TÖBB SZÜKSÉG, ÉS A LEKÉRDEZÉS ITT ÁLL
+          //! LE. Ez az, amitől egy órán át nézett megosztás NULLA kérést jelent
+          //! a szerver felé — a kép és a csevegés közvetlenül megy.
+          mail.stop();
           clearTimeout(joinTimer);
           return;
         case "disconnected":
         case "failed":
           setPhase((prev) => (prev === "ended" ? prev : "lost"));
-          //* Újraindul a posta: a megosztó ICE-újraindítása új ajánlatot küld.
-          clearTimeout(pollTimer);
-          void poll();
+          //! ÚJRAINDUL A POSTA: a megosztó ICE-újraindítása új ajánlatot küld,
+          //! és azt csak a ládából tudjuk kivenni. A `restart` akkor is
+          //! biztonságos, ha épp fut egy kör — nem lesz belőle két hurok
+          //! (lásd `webrtc-poll.ts`).
+          mail.restart();
           return;
         default:
           return;
@@ -270,17 +273,20 @@ export function useScreenViewer(
       }
     };
 
-    async function poll() {
-      if (disposed) return;
+    //! A SZIVATTYÚ A KAPCSOLAT ELŐTT GYORS, UTÁNA NINCS. Amíg épül a kapcsolat,
+    //! minden 700 ms számít (az SDP és a jelöltek ilyenkor mozognak); amint
+    //! összeállt, a `connected` ág leállítja, és a szerver többé nem hall
+    //! felőlünk.
+    const mail = new Pump(async () => {
+      if (disposed) return null;
       const messages = await drainSignals(meRef.current.peer);
       for (const envelope of messages) {
-        if (disposed) return;
+        if (disposed) return null;
         await handle(envelope);
       }
-      if (!disposed && pc.connectionState !== "connected") {
-        pollTimer = setTimeout(poll, VIEWER_POLL_MS);
-      }
-    }
+      if (disposed || pc.connectionState === "connected") return null;
+      return VIEWER_POLL_MS;
+    });
 
     //! A LENYOMAT MINDEN JELENTKEZÉSNÉL ÚJRA KÉSZÜL, de mindig ugyanaz lesz: a
     //! só a megosztás azonosítója. A számítás azért van a hívásban és nem
@@ -320,11 +326,11 @@ export function useScreenViewer(
     });
 
     void join();
-    void poll();
+    mail.restart();
 
     return () => {
       disposed = true;
-      clearTimeout(pollTimer);
+      mail.stop();
       clearTimeout(joinTimer);
       cancelEscalation();
       //! ELKÖSZÖNÜNK, HOGY A NÉVSOR NE HAZUDJON. Enélkül a megosztó csak a

@@ -106,7 +106,10 @@ export async function POST(req: NextRequest) {
     payload: body.payload ?? null,
     at: Date.now(),
   };
-  await pushSignal(to, envelope);
+  //* Lásd a `/api/webrtc/streams` melletti indoklást: a tároló kiesése 503.
+  if (!(await pushSignal(to, envelope))) {
+    return json({ error: "store-unavailable" }, 503);
+  }
   return new Response(null, { status: 204 });
 }
 

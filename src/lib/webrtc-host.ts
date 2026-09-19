@@ -2,6 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  classifyFile,
+  type FileBody,
+  Inbox,
+  readFrame,
+  sanitizeFileName,
+  sendBlob,
+  useFileVault,
+} from "./webrtc-files";
+import {
   acceptCandidate,
   type CandidateQueue,
   escalateAfterGrace,
@@ -10,16 +19,22 @@ import {
   requestScreen,
   tuneScreenSender,
 } from "./webrtc-peer";
+import { afterFailure, Pump } from "./webrtc-poll";
 import {
   CHAT_HISTORY_LENGTH,
+  type ChatAttachment,
   type ChatMessage,
+  FILE_RETENTION_BYTES,
   HEARTBEAT_MS,
+  HOST_ACTIVE_WINDOW_MS,
   HOST_POLL_MS,
   type HubMessage,
   isProof,
   joinProof,
+  MAX_FILE_BYTES,
   newPeerId,
   type Participant,
+  PEEK_GAP_MS,
   type PeerIdentity,
   type SignalEnvelope,
   sameProof,
@@ -64,6 +79,15 @@ type Link = {
   who: PeerIdentity;
   open: boolean;
   cancelEscalation: () => void;
+  //! EGY NÉZŐNEK EGYSZERRE EGY FÁJLT KÜLDÜNK LE. Enélkül egy néző tíz
+  //! kéréssel tízszeresen terhelné a megosztó feltöltését — pont azt, amiből a
+  //! kép megy. A második kérés nem hiba, csak vár a sorára: elutasítjuk, és a
+  //! felület újrapróbálhatóként mutatja.
+  serving: boolean;
+  //! MINDEN NÉZŐNEK SAJÁT POSTAFIÓKJA VAN A FÁJLOKHOZ. Közös fiókkal az egyik
+  //! néző elkezdhetne egy átvitelt a másik azonosítójával — így viszont a
+  //! bejövő keret csak abba a fiókba kerülhet, amelyik csatornán érkezett.
+  inbox: Inbox;
 };
 
 export type HostPhase = "idle" | "asking" | "live" | "ended";
@@ -84,6 +108,20 @@ export type HostSession = {
   locked: boolean;
   /** Hány csatlakozást utasítottunk el rossz jelszó miatt. */
   refused: number;
+  //! ─── „NÉZŐK KERESÉSE" ─────────────────────────────────────────────────────
+  //! A megosztó üresjáratban félpercenként néz a ládájába (lásd az ütemet). Ez
+  //! a hívás AZONNAL megnézi, és egy percre ébren is tartja — ennyi a teljes
+  //! különbség a türelmetlen és a türelmes tanár között.
+  lookNow: () => void;
+  //* ── Fájlok ──────────────────────────────────────────────────────────────
+  /** Amit már ismerünk: csatolmány-azonosító → tartalom. */
+  files: ReadonlyMap<string, FileBody>;
+  /** Épp mozgásban lévő átvitelek: azonosító → 0…1. */
+  transfers: ReadonlyMap<string, number>;
+  sendFile: (file: File, text: string) => void;
+  //* A megosztónál minden fájl helyben van (ő a forrás), ezért ez csak azt
+  //* mondja meg, ha egy régi már kiesett a raktárból.
+  requestFile: (attachment: ChatAttachment) => void;
 };
 
 export function useScreenHost(me: Me): HostSession {
@@ -115,6 +153,35 @@ export function useScreenHost(me: Me): HostSession {
   const expectedProof = useRef<string | null>(null);
   const [locked, setLocked] = useState(false);
   const [refused, setRefused] = useState(0);
+  //* Az ütemet indító hurkokhoz a felületnek is hozzá kell férnie („Nézők
+  //* keresése" gomb), de azok az effektben születnek — ezért refen át.
+  const wakeRef = useRef<(() => void) | null>(null);
+  const beatRef = useRef<Pump | null>(null);
+
+  //! ─── A MEGOSZTÓ AZ EGYETLEN FORRÁS ────────────────────────────────────────
+  //! Minden fájl nála áll meg, és tőle kérik el a nézők. Ez nem külön szerep:
+  //! ugyanaz a csillag, mint a csevegésnél — csak itt a raktárnak MÉRETE is
+  //! van, ezért korlátos (`FILE_RETENTION_BYTES`), és a régi kiesik.
+  const vault = useFileVault(FILE_RETENTION_BYTES);
+  const [transfers, setTransfers] = useState<ReadonlyMap<string, number>>(
+    () => new Map(),
+  );
+
+  //* A folyamatjelző MINDIG csak a saját gépen zajló mozgásról szól: amit épp
+  //* feltöltenek hozzánk, vagy amit épp leküldünk valakinek.
+  const mark = useCallback((id: string, ratio: number | null) => {
+    setTransfers((prev) => {
+      if (ratio === null) {
+        if (!prev.has(id)) return prev;
+        const next = new Map(prev);
+        next.delete(id);
+        return next;
+      }
+      const next = new Map(prev);
+      next.set(id, ratio);
+      return next;
+    });
+  }, []);
 
   //* ── A névsor és a csevegés kiküldése ─────────────────────────────────────
 
@@ -153,23 +220,195 @@ export function useScreenHost(me: Me): HostSession {
   //! Így a megosztó és a nézők ugyanazt a beszélgetést látják, ugyanabban a
   //! sorrendben.
   const publishChat = useCallback(
-    (from: PeerIdentity, text: string) => {
+    (from: PeerIdentity, text: string, attachment?: ChatAttachment) => {
       const clean = sanitizeChatText(text);
-      if (!clean) return;
+      //* Üres üzenetet nem küldünk — hacsak nincs mellette fájl. Egy csatolmány
+      //* önmagában is teljes üzenet; kísérőszöveg nélkül is.
+      if (!clean && !attachment) return;
       const message: ChatMessage = {
         id: newPeerId(),
         from,
-        text: clean,
+        text: clean ?? "",
         at: Date.now(),
+        ...(attachment ? { attachment } : {}),
       };
       history.current = [...history.current, message].slice(
         -CHAT_HISTORY_LENGTH,
       );
       setChat(history.current);
+      //! A CSATOLMÁNY LEÍRÁSA MEGY KI, A TARTALMA NEM. Aki megnyitja, az kéri
+      //! el (`file-request`) — lásd a `ChatAttachment` melletti indoklást.
       post({ t: "chat", message });
     },
     [post],
   );
+
+  //* ── Fájlok ───────────────────────────────────────────────────────────────
+
+  //! A `vault` minden rendereléskor új tárgy, a benne lévő függvények viszont
+  //! állandóak — ezért ezeket vesszük ki, és NEM magát a tárgyat írjuk a
+  //! függőségek közé. Enélkül minden visszahívás minden képkockán újraszületne.
+  const { put: putFile, get: getFile } = vault;
+
+  //! ─── EGY FELTÖLTÉS BEFEJEZÉSE ─────────────────────────────────────────────
+  //! A RAKTÁRI AZONOSÍTÓT MI ADJUK, NEM A KÜLDŐ. A küldő azonosítója csak az
+  //! ÁTVITELT nevezi meg (a keretek előtagja), és eddig a pontig él. Ha az ő
+  //! azonosítója alatt raktároznánk, két néző — szándékosan vagy véletlenül —
+  //! ugyanarra a névre írhatna, és a második felülírná az első fájlját. Így
+  //! viszont a raktár kulcsait EGYEDÜL a megosztó osztja.
+  const finishUpload = useCallback(
+    (link: Link, transferId: string) => {
+      const done = link.inbox.take(transferId);
+      mark(transferId, null);
+      if (!done) return;
+      const id = newPeerId();
+      putFile(id, done.blob);
+      //* A feltöltő megtudja, milyen kulcsot kapott — így a saját fájlját nem
+      //* kéri vissza magának (lásd `file-ready`).
+      post({ t: "file-ready", transferId, id }, link.channel);
+      publishChat(link.who, done.meta.text ?? "", {
+        id,
+        name: done.meta.name,
+        mime: done.meta.mime,
+        size: done.meta.size,
+        kind: done.meta.kind,
+      });
+    },
+    [mark, post, publishChat, putFile],
+  );
+
+  const takeChunk = useCallback(
+    (link: Link, data: ArrayBuffer) => {
+      const part = readFrame(data);
+      if (!part) return;
+      const result = link.inbox.chunk(part.id, part.body);
+      if (result === "unknown") return;
+      if (result === "overflow") {
+        //! TÖBBET KÜLDÖTT, MINT AMENNYIT BEJELENTETT. Ez nem hálózati hiba,
+        //! hanem szabályszegés — az átvitel itt véget ér, és a küldő meg is
+        //! tudja, miért.
+        post(
+          { t: "file-abort", id: part.id, reason: "tul-nagy" },
+          link.channel,
+        );
+        mark(part.id, null);
+        return;
+      }
+      const at = link.inbox.progress(part.id);
+      if (at) mark(part.id, at.received / at.size);
+      //* A bejelentett méret együtt van — nem várunk a `file-end`-re.
+      if (result === "done") finishUpload(link, part.id);
+    },
+    [finishUpload, mark, post],
+  );
+
+  const openUpload = useCallback(
+    (link: Link, message: Extract<HubMessage, { t: "file-begin" }>) => {
+      const name = sanitizeFileName(message.name);
+      //* A MIME-típus csak egy felirat: a hosszát vágjuk, a tartalmát nem
+      //* hisszük el (lásd `Inbox`).
+      const mime =
+        typeof message.mime === "string" ? message.mime.slice(0, 100) : "";
+      const accepted = link.inbox.begin({
+        id: message.id,
+        name,
+        mime,
+        size: message.size,
+        //! A FAJTÁT MI DÖNTJÜK EL A NÉVBŐL, nem a küldő állításából. Így nem
+        //! lehet egy bináris fájlt „kódnak" hazudni, hogy a többiek felülete
+        //! szövegként próbálja megnyitni.
+        kind: classifyFile(name, mime),
+        text: message.text,
+      });
+      if (!accepted) {
+        post(
+          { t: "file-abort", id: message.id, reason: "elutasitva" },
+          link.channel,
+        );
+        return;
+      }
+      mark(message.id, 0);
+    },
+    [mark, post],
+  );
+
+  //! ─── EGY FÁJL LEKÜLDÉSE ANNAK, AKI KÉRTE ──────────────────────────────────
+  //! A LEÍRÁS A CSEVEGÉS-ELŐZMÉNYBŐL JÖN, nem a kérésből: a kérő csak egy
+  //! azonosítót küld, a nevet és a méretet mi tesszük hozzá. Így egy elkért
+  //! fájl neve nem hamisítható meg útközben.
+  const serveFile = useCallback(
+    async (link: Link, id: string) => {
+      const body = getFile(id);
+      const known = history.current.find((m) => m.attachment?.id === id);
+      const meta = known?.attachment;
+      if (!body || !meta) {
+        post({ t: "file-gone", id }, link.channel);
+        return;
+      }
+      if (link.serving) {
+        post({ t: "file-abort", id, reason: "epp-mas-megy" }, link.channel);
+        return;
+      }
+
+      link.serving = true;
+      post(
+        {
+          t: "file-begin",
+          id,
+          name: meta.name,
+          mime: meta.mime,
+          size: meta.size,
+          kind: meta.kind,
+        },
+        link.channel,
+      );
+      const ok = await sendBlob(link.channel, id, body.blob, {
+        onProgress: (sent, total) => mark(id, sent / total),
+        cancelled: () => !liveRef.current,
+      });
+      link.serving = false;
+      mark(id, null);
+      post(
+        ok
+          ? { t: "file-end", id }
+          : { t: "file-abort", id, reason: "megszakadt" },
+        link.channel,
+      );
+    },
+    [getFile, mark, post],
+  );
+
+  //! A MEGOSZTÓ SAJÁT FÁJLJA SEHOVA NEM UTAZIK FELFELÉ: ő a forrás. A raktárba
+  //! kerül, és a többiek ugyanúgy elkérik, mint bármelyik másikat.
+  const sendFile = useCallback(
+    (file: File, text: string) => {
+      const self = selfRef.current;
+      if (!self || !liveRef.current) return;
+      if (file.size <= 0 || file.size > MAX_FILE_BYTES) return;
+      const id = newPeerId();
+      const name = sanitizeFileName(file.name);
+      putFile(id, file);
+      publishChat(self, text, {
+        id,
+        name,
+        mime: file.type,
+        size: file.size,
+        kind: classifyFile(name, file.type),
+      });
+    },
+    [publishChat, putFile],
+  );
+
+  //* A megosztónál nincs mit elkérni: ami megvan, az helyben van, ami nincs, az
+  //* kiesett a raktárból. A felület a `files`-ból tudja, melyik eset áll fenn.
+  const requestFile = useCallback(() => {}, []);
+
+  //* A szívverést is meglökjük: a nézőszám és a cím így egyszerre frissül a
+  //* listában, nem csak a postát nézzük meg.
+  const lookNow = useCallback(() => {
+    wakeRef.current?.();
+    beatRef.current?.restart();
+  }, []);
 
   //* ── Egy néző kapcsolata ──────────────────────────────────────────────────
 
@@ -248,6 +487,11 @@ export function useScreenHost(me: Me): HostSession {
       //* A csevegés és a névsor csatornája. A képpel EGY hálózati úton megy
       //* (lásd `bundlePolicy` a `webrtc-peer.ts`-ben).
       const channel = pc.createDataChannel("hub", { ordered: true });
+      //! A FÁJLKERETEK BINÁRISAK. Alapértelmezésben a böngésző `Blob`-ként adná
+      //! oda őket, amiből az azonosító-előtagot csak aszinkron lehetne
+      //! kiolvasni — és az üzenetek sorrendje felborulhatna. Az `arraybuffer`
+      //! szinkron, tehát a keret ott helyben a helyére kerül.
+      channel.binaryType = "arraybuffer";
       const link: Link = {
         pc,
         channel,
@@ -255,6 +499,8 @@ export function useScreenHost(me: Me): HostSession {
         who,
         open: false,
         cancelEscalation: () => {},
+        serving: false,
+        inbox: new Inbox(),
       };
       links.current.set(who.peer, link);
 
@@ -303,17 +549,44 @@ export function useScreenHost(me: Me): HostSession {
         publishRoster();
       };
       channel.onmessage = (event) => {
-        if (typeof event.data !== "string") return;
+        //! ─── BINÁRIS KERET = FÁJLDARAB ────────────────────────────────────
+        //! A darab MINDIG annak a nézőnek a fiókjába megy, akinek a csatornáján
+        //! érkezett (`link.inbox`). Egy idegen azonosítóra hivatkozó keret így
+        //! nem tud más átvitelébe belenyúlni: abban a fiókban nincs ilyen.
+        if (typeof event.data !== "string") {
+          takeChunk(link, event.data as ArrayBuffer);
+          return;
+        }
         let message: HubMessage;
         try {
           message = JSON.parse(event.data) as HubMessage;
         } catch {
           return;
         }
-        //! A NÉZŐTŐL EGYETLEN ÜZENETFAJTÁT FOGADUNK EL, ÉS ABBÓL IS CSAK A
-        //! SZÖVEGET. A nevet a `link.who` adja — az, amit a SZERVER hitelesített
-        //! a jelzésben. Ha az üzenet nevet is hozna, az itt elvész.
-        if (message.t === "say") publishChat(link.who, message.text);
+        //! A NÉZŐTŐL NÉGY ÜZENETFAJTÁT FOGADUNK EL, ÉS EGYIKBŐL SEM A NEVET. Azt
+        //! a `link.who` adja — amit a SZERVER hitelesített a jelzésben. Ha az
+        //! üzenet nevet is hozna, az itt elvész.
+        switch (message.t) {
+          case "say":
+            publishChat(link.who, message.text);
+            return;
+          case "file-begin":
+            openUpload(link, message);
+            return;
+          case "file-end":
+            finishUpload(link, message.id);
+            return;
+          case "file-abort":
+            link.inbox.drop(message.id);
+            mark(message.id, null);
+            return;
+          case "file-request":
+            void serveFile(link, message.id);
+            return;
+          default:
+            //* A többi üzenet iránya megosztó → néző; nézőtől nem értelmes.
+            return;
+        }
       };
 
       link.cancelEscalation = escalateAfterGrace(pc, () => {
@@ -323,7 +596,19 @@ export function useScreenHost(me: Me): HostSession {
 
       void offerTo(link, false);
     },
-    [dropLink, offerTo, participants, post, publishChat, publishRoster],
+    [
+      dropLink,
+      finishUpload,
+      mark,
+      offerTo,
+      openUpload,
+      participants,
+      post,
+      publishChat,
+      publishRoster,
+      serveFile,
+      takeChunk,
+    ],
   );
 
   //* ── A jelzések feldolgozása ──────────────────────────────────────────────
@@ -458,19 +743,20 @@ export function useScreenHost(me: Me): HostSession {
           }
         }
 
-        const record = await announceStream(
+        const first = await announceStream(
           meRef.current,
           id,
           clean,
           0,
           proof !== null,
         );
-        if (!record) {
+        if (!first) {
           for (const track of media.getTracks()) track.stop();
           setPhase("idle");
           setError("Nem sikerült meghirdetni a megosztást. Próbáld újra.");
           return;
         }
+        const record = first.stream;
 
         idRef.current = id;
         expectedProof.current = proof;
@@ -518,66 +804,126 @@ export function useScreenHost(me: Me): HostSession {
     [publishChat],
   );
 
-  //! ─── AZ ÜTEM ──────────────────────────────────────────────────────────────
-  //! Két óra fut, amíg él a megosztás: a postáé és a szívverésé. Mindkettő
-  //! `setTimeout`-lánc, nem `setInterval` — egy lassú válasz így nem torlaszol
-  //! fel kéréseket egymás mögé.
-  //*
-  //! HÁTTÉRBE TETT LAPNÁL A BÖNGÉSZŐ RITKÍTJA AZ ÓRÁKAT. Chrome az aktív
-  //! WebRTC-kapcsolattal rendelkező lapot felmenti ez alól, tehát amint van egy
-  //! néző, az ütem helyreáll — de az ELSŐ néző becsatlakozása egy percig is
-  //! késhet, ha a tanár közben átváltott egy másik lapra. Ezért a lap
-  //! visszatérésekor azonnal kérdezünk egyet, hogy a várakozó `join` ne álljon
-  //! ott feleslegesen.
+  //! ─── AZ ÜTEM: EGY RENDSZERES KÉRÉS, A TÖBBI ROHAMOKBAN ────────────────────
+  //! A MEGOSZTÓNAK ÜRESJÁRATBAN EGYETLEN ÁLLANDÓ KÉRÉSE VAN: a szívverés,
+  //! félpercenként. Ennek a válasza megmondja, vár-e levél (`mail`) — tehát a
+  //! postaládához csak akkor nyúlunk, ha VAN benne valami.
+  //!
+  //! Ez a lap eredetileg két, egymástól független hurkot járatott (szívverés
+  //! 15 mp + posta 1,5 mp), vagyis percenként közel ötven kérést egy olyan
+  //! ládáért, ami az idő 99%-ában üres. Most percenként kettő.
+  //!
+  //! ─── MIKOR VAGYUNK MÉGIS ÉBREN ────────────────────────────────────────────
+  //! Egy csatlakozás nem tűrne félperces késleltetést, ezért a posta ROHAMOKBAN
+  //! fut, gyorsan (`HOST_POLL_MS`), és a roham egy percig tart az utolsó
+  //! eseménytől (`HOST_ACTIVE_WINDOW_MS`). Rohamot indít:
+  //!
+  //!   • a megosztás indulása (ekkor jönnek be a diákok),
+  //!   • egy levelet jelző szívverés,
+  //!   • a lap visszatérése a háttérből,
+  //!   • és a tanár „Nézők keresése" gombja.
+  //!
+  //! Minden beérkezett jelzés újraindítja az egy percet, tehát egy folyamatosan
+  //! csatlakozó osztály alatt a posta végig gyors marad, és csak utána hallgat
+  //! el.
   useEffect(() => {
     if (phase !== "live") return;
-    let disposed = false;
-    let pollTimer: ReturnType<typeof setTimeout> | undefined;
-    let beatTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const poll = async () => {
-      if (disposed || !liveRef.current) return;
+    //* Eddig marad ébren a posta. A `start` utáni első perc mindenképp ébren
+    //* telik — ekkor kattintanak rá a diákok.
+    let awakeUntil = Date.now() + HOST_ACTIVE_WINDOW_MS;
+
+    const mail = new Pump(async () => {
+      if (!liveRef.current) return null;
       const messages = await drainSignals(meRef.current.peer);
-      for (const envelope of messages) {
-        if (disposed) return;
-        await handle(envelope);
-      }
-      if (!disposed) pollTimer = setTimeout(poll, HOST_POLL_MS);
-    };
+      for (const envelope of messages) await handle(envelope);
+      //* Bármi érkezett: kezdődik elölről az ébren töltött perc.
+      if (messages.length > 0) awakeUntil = Date.now() + HOST_ACTIVE_WINDOW_MS;
+      //! A ROHAM VÉGE NEM SZÜNET, HANEM LEÁLLÁS. A `null` megállítja a
+      //! szivattyút; innen a következő szívverés (vagy a tanár gombja) ébreszti.
+      return Date.now() < awakeUntil ? HOST_POLL_MS : null;
+    });
 
-    const beat = async () => {
-      if (disposed || !liveRef.current) return;
-      const id = idRef.current;
-      if (id) {
-        const viewers = [...links.current.values()].filter(
-          (l) => l.open,
-        ).length;
-        await announceStream(
-          meRef.current,
-          id,
-          titleRef.current,
-          viewers,
-          expectedProof.current !== null,
-        );
-      }
-      if (!disposed) beatTimer = setTimeout(beat, HEARTBEAT_MS);
-    };
-
+    //! ─── KÉT ÉBRESZTÉS, ÉS A KÜLÖNBSÉG SZÁMÍT ────────────────────────────
+    //! `wake()` — „VÁRHATÓAN TÖRTÉNIK MÉG VALAMI": egy teljes percre ébren
+    //! marad. Ezt az indítás, egy levelet jelző szívverés, egy beérkezett
+    //! jelzés és a tanár gombja váltja ki.
+    //!
+    //! `peek()` — „NÉZZÜK MEG EGYSZER": pontosan EGY kör, utána visszaalszik,
+    //! hacsak nem talált valamit. Ez kell a lapváltáshoz.
+    //!
+    //! MIÉRT NEM ELÉG EGY. Mert a `visibilitychange` sűrűbben jön, mint hinnénk:
+    //! egy ablakot váltogató tanárnál mérve HÚSZ MÁSODPERC ALATT HATSZOR. Ha
+    //! mindegyik egy teljes percet nyitna, a megosztó SOHA nem aludna el, és a
+    //! takarékosságból nem maradna semmi — pontosan ez a hiba volt itt.
     const wake = () => {
-      if (document.visibilityState !== "visible" || disposed) return;
-      clearTimeout(pollTimer);
-      void poll();
+      awakeUntil = Date.now() + HOST_ACTIVE_WINDOW_MS;
+      mail.restart();
     };
-    document.addEventListener("visibilitychange", wake);
+    wakeRef.current = wake;
 
-    void poll();
-    beatTimer = setTimeout(beat, HEARTBEAT_MS);
+    //* Az `awakeUntil` MOSTRA állítása azt jelenti: a kör lefut egyszer, és a
+    //* végén már nem lesz igaz, hogy ébren kell maradni — hacsak közben nem
+    //* érkezett valami, mert az felülírja.
+    let lastPeek = 0;
+    const peek = () => {
+      const now = Date.now();
+      //* Egymás hegyén-hátán érkező lapváltásokból egy nézés legyen.
+      if (now - lastPeek < PEEK_GAP_MS) return;
+      lastPeek = now;
+      awakeUntil = now;
+      mail.restart();
+    };
+
+    //! A SZÍVVERÉS AZ EGYETLEN ÁLLANDÓ KÉRÉS, ezért ITT SZÁMÍT LEGINKÁBB, hogy
+    //! egy tartós kiesés ne váljon kérés-özönné: elbukott kör után a várakozás
+    //! duplázódik, az első sikeres után visszaáll.
+    let failures = 0;
+    const beat = new Pump(async () => {
+      if (!liveRef.current) return null;
+      const id = idRef.current;
+      if (!id) return HEARTBEAT_MS;
+
+      const viewers = [...links.current.values()].filter((l) => l.open).length;
+      const pulse = await announceStream(
+        meRef.current,
+        id,
+        titleRef.current,
+        viewers,
+        expectedProof.current !== null,
+      );
+      if (!pulse) {
+        failures += 1;
+        return afterFailure(failures, HEARTBEAT_MS);
+      }
+      failures = 0;
+      //* A szívverés a posta helyett is megkérdezte: ha van levél, ébredünk.
+      if (pulse.mail > 0) wake();
+      return HEARTBEAT_MS;
+    });
+    beatRef.current = beat;
+
+    const onVisible = () => {
+      //! HÁTTÉRBE TETT LAPNÁL A BÖNGÉSZŐ RITKÍTJA AZ ÓRÁKAT. Chrome az aktív
+      //! WebRTC-kapcsolattal rendelkező lapot felmenti ez alól, de az ELSŐ néző
+      //! előtt még nincs ilyen kapcsolat — ezért a visszatérés MEGNÉZETI a
+      //! ládát. Egyszer: a lapváltás önmagában nem esemény, csak alkalom.
+      if (document.visibilityState === "visible") peek();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    mail.restart();
+    //* A szívverés első köre egy periódus múlva esedékes: a bejegyzést a
+    //* `start` már felvitte.
+    const first = setTimeout(() => beat.restart(), HEARTBEAT_MS);
 
     return () => {
-      disposed = true;
-      clearTimeout(pollTimer);
-      clearTimeout(beatTimer);
-      document.removeEventListener("visibilitychange", wake);
+      clearTimeout(first);
+      mail.stop();
+      beat.stop();
+      wakeRef.current = null;
+      beatRef.current = null;
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [phase, handle]);
 
@@ -606,5 +952,10 @@ export function useScreenHost(me: Me): HostSession {
     say,
     locked,
     refused,
+    lookNow,
+    files: vault.files,
+    transfers,
+    sendFile,
+    requestFile,
   };
 }

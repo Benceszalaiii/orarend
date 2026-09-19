@@ -40,6 +40,47 @@ const url = process.env.REDIS_KV_REST_API_URL;
 const token = process.env.REDIS_KV_REST_API_TOKEN;
 const redis = url && token ? new Redis({ url, token }) : null;
 
+//! ═══════════════════════════════════════════════════════════════════════════
+//! A TÁROLÓ KIESÉSE NEM LEHET 500-AS HIBA
+//! ═══════════════════════════════════════════════════════════════════════════
+//! EZ EGY MEGTÖRTÉNT ESETBŐL SZÁRMAZIK. A Redis neve egy időre feloldhatatlanná
+//! vált (`ENOTFOUND`), és ettől MINDEN `/api/webrtc/*` hívás 4,3 másodpercig
+//! várt a DNS-időkorlátra, majd 500-zal elszállt. A kliensek erre — helyesen —
+//! újrapróbálkoztak, és a szerver tele lett négy és fél másodperces, elbukó
+//! kérésekkel: a naplóban ez ezer sor, a felhasználónak pedig egy lap, ami
+//! „tölt".
+//!
+//! KÉT DOLGOT TANULTUNK BELŐLE, ÉS MINDKETTŐ ITT VAN LEKÓDOLVA:
+//!
+//!   1. A TÁROLÓ HIBÁJA NEM A FELHASZNÁLÓ HIBÁJA. Minden hívás elnyeli a
+//!      kivételt, és üres/„nem sikerült" választ ad. A végpont ebből 503-at
+//!      csinál, nem 500-at — az egyik azt jelenti, „most nem megy, gyere
+//!      később", a másik azt, hogy elromlottunk.
+//!   2. A NAPLÓ NE ISMÉTELJEN. Egy tartós kiesés percenként egyszer kerül a
+//!      naplóba, nem kérésenként.
+//!
+//! A kliens oldali lassulás ehhez a párja: elbukó kérés után a szivattyúk
+//! ritkítanak (lásd `webrtc-client.tsx` és `webrtc-host.ts`).
+let lastComplaint = 0;
+
+function complain(where: string, error: unknown): void {
+  const now = Date.now();
+  if (now - lastComplaint < 60_000) return;
+  lastComplaint = now;
+  console.error(`[webrtc] a tároló nem elérhető (${where})`, error);
+}
+
+//* A `fallback` az az érték, amivel a hívó tovább tud menni: üres lista, nulla,
+//* „nem sikerült". Sosem kivétel.
+async function guard<T>(where: string, run: () => Promise<T>, fallback: T) {
+  try {
+    return await run();
+  } catch (error) {
+    complain(where, error);
+    return fallback;
+  }
+}
+
 /** Több szerverpéldányon csak Redisszel megbízható — a felület ezt kiírja. */
 export function webrtcStoreDistributed(): boolean {
   return redis !== null;
@@ -79,27 +120,48 @@ function readLocal<T>(map: Map<string, Expiring<T>>, key: string): T | null {
 //! külön „létrehozás" és „frissítés" — ugyanaz a hívás. Így egy hálózati
 //! zökkenő (egy kimaradt szívverés) nem hagy félkész állapotot: a következő
 //! írás mindent helyrerak.
-export async function putStream(stream: StoredStream): Promise<void> {
+export async function putStream(stream: StoredStream): Promise<boolean> {
   if (redis) {
-    await redis.set(STREAM_KEY(stream.id), stream, { ex: STREAM_TTL_SECONDS });
-    await redis.sadd(STREAM_INDEX, stream.id);
-    return;
+    return await guard(
+      "putStream",
+      async () => {
+        await redis.set(STREAM_KEY(stream.id), stream, {
+          ex: STREAM_TTL_SECONDS,
+        });
+        await redis.sadd(STREAM_INDEX, stream.id);
+        return true;
+      },
+      false,
+    );
   }
   localStreams.set(stream.id, {
     value: stream,
     expiresAt: Date.now() + STREAM_TTL_SECONDS * 1000,
   });
+  return true;
 }
 
 export async function getStream(id: string): Promise<StoredStream | null> {
-  if (redis) return await redis.get<StoredStream>(STREAM_KEY(id));
+  if (redis) {
+    return await guard(
+      "getStream",
+      () => redis.get<StoredStream>(STREAM_KEY(id)),
+      null,
+    );
+  }
   return readLocal(localStreams, id);
 }
 
 export async function dropStream(id: string): Promise<void> {
   if (redis) {
-    await redis.del(STREAM_KEY(id));
-    await redis.srem(STREAM_INDEX, id);
+    await guard(
+      "dropStream",
+      async () => {
+        await redis.del(STREAM_KEY(id));
+        await redis.srem(STREAM_INDEX, id);
+      },
+      undefined,
+    );
     return;
   }
   localStreams.delete(id);
@@ -119,21 +181,23 @@ export async function listStreams(): Promise<StreamSummary[]> {
     return out.sort((a, b) => b.startedAt - a.startedAt);
   }
 
-  const ids = (await redis.smembers(STREAM_INDEX)) ?? [];
-  if (ids.length === 0) return [];
-  const rows = await Promise.all(
-    ids.map((id) => redis.get<StoredStream>(STREAM_KEY(id))),
-  );
+  return await guard("listStreams", async () => {
+    const ids = (await redis.smembers(STREAM_INDEX)) ?? [];
+    if (ids.length === 0) return [];
+    const rows = await Promise.all(
+      ids.map((id) => redis.get<StoredStream>(STREAM_KEY(id))),
+    );
 
-  const stale: string[] = [];
-  const live: StreamSummary[] = [];
-  rows.forEach((row, i) => {
-    if (row) live.push(row);
-    else stale.push(ids[i]);
-  });
-  if (stale.length > 0) await redis.srem(STREAM_INDEX, ...stale);
+    const stale: string[] = [];
+    const live: StreamSummary[] = [];
+    rows.forEach((row, i) => {
+      if (row) live.push(row);
+      else stale.push(ids[i]);
+    });
+    if (stale.length > 0) await redis.srem(STREAM_INDEX, ...stale);
 
-  return live.sort((a, b) => b.startedAt - a.startedAt);
+    return live.sort((a, b) => b.startedAt - a.startedAt);
+  }, []);
 }
 
 //* ---------------------------------------------------------------------------
@@ -153,12 +217,18 @@ export async function listStreams(): Promise<StreamSummary[]> {
 export async function pushSignal(
   to: string,
   envelope: SignalEnvelope,
-): Promise<void> {
+): Promise<boolean> {
   if (redis) {
-    await redis.rpush(BOX_KEY(to), JSON.stringify(envelope));
-    await redis.ltrim(BOX_KEY(to), -MAILBOX_MAX, -1);
-    await redis.expire(BOX_KEY(to), MAILBOX_TTL_SECONDS);
-    return;
+    return await guard(
+      "pushSignal",
+      async () => {
+        await redis.rpush(BOX_KEY(to), JSON.stringify(envelope));
+        await redis.ltrim(BOX_KEY(to), -MAILBOX_MAX, -1);
+        await redis.expire(BOX_KEY(to), MAILBOX_TTL_SECONDS);
+        return true;
+      },
+      false,
+    );
   }
   const box = readLocal(localBoxes, to) ?? [];
   box.push(envelope);
@@ -166,6 +236,27 @@ export async function pushSignal(
     value: box.slice(-MAILBOX_MAX),
     expiresAt: Date.now() + MAILBOX_TTL_SECONDS * 1000,
   });
+  return true;
+}
+
+//! ─── VÁR-E LEVÉL ───────────────────────────────────────────────────────────
+//! CSAK A DARABSZÁM, A TARTALOM NÉLKÜL. Ezt a szívverés válaszába tesszük
+//! (lásd `HEARTBEAT_MS`), és ettől lesz a megosztó rendszeres kérése EGY, nem
+//! kettő: amíg a láda üres, nincs miért hozzányúlni.
+//*
+//! Egy `LLEN` a Redisben állandó idejű — nem számolja végig a listát, hanem
+//! egy már meglévő számot ad vissza.
+export async function mailboxSize(peer: string): Promise<number> {
+  if (redis) {
+    return await guard(
+      "mailboxSize",
+      async () => {
+        return (await redis.llen(BOX_KEY(peer))) ?? 0;
+      },
+      0,
+    );
+  }
+  return readLocal(localBoxes, peer)?.length ?? 0;
 }
 
 //! ─── AZ OLVASÁS ÜRÍT ───────────────────────────────────────────────────────
@@ -181,6 +272,21 @@ export async function pushSignal(
 //! `join`-t pedig a néző megismétel, amíg nem kap ajánlatot.
 export async function drainSignals(peer: string): Promise<SignalEnvelope[]> {
   if (redis) {
+    return await guard("drainSignals", () => drainFromRedis(peer), []);
+  }
+
+  const box = readLocal(localBoxes, peer);
+  if (!box || box.length === 0) return [];
+  localBoxes.set(peer, {
+    value: [],
+    expiresAt: Date.now() + MAILBOX_TTL_SECONDS * 1000,
+  });
+  return box;
+}
+
+async function drainFromRedis(peer: string): Promise<SignalEnvelope[]> {
+  if (!redis) return [];
+  {
     //* Az `lpop` darabszámmal atomi: ami kijött, az biztosan csak egyszer jött ki.
     const raw = await redis.lpop<unknown[]>(BOX_KEY(peer), MAILBOX_MAX);
     if (!raw || raw.length === 0) return [];
@@ -198,12 +304,4 @@ export async function drainSignals(peer: string): Promise<SignalEnvelope[]> {
       return item ? [item as SignalEnvelope] : [];
     });
   }
-
-  const box = readLocal(localBoxes, peer);
-  if (!box || box.length === 0) return [];
-  localBoxes.set(peer, {
-    value: [],
-    expiresAt: Date.now() + MAILBOX_TTL_SECONDS * 1000,
-  });
-  return box;
 }

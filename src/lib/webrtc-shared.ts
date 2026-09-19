@@ -119,12 +119,38 @@ export type SignalEnvelope = {
 //! `say` az EGYETLEN üzenet, ami nézőtől jöhet. Minden más iránya megosztó → néző.
 export type Participant = PeerIdentity & { host: boolean };
 
+//! ─── A CSATOLMÁNY LEÍRÁSA ÉS A TARTALMA KÜLÖN ÚTON JÁR ─────────────────────
+//! EZ A TÍPUS CSAK AZT MONDJA MEG, HOGY VAN EGY FÁJL — a bájtjait nem
+//! tartalmazza, és nem is tartalmazhatná: az üzenet JSON-ként megy át a
+//! csatornán, egy 5 MB-os fájl base64-ben 6,7 MB-nyi SZÖVEG lenne, egyetlen
+//! üzenetben. Az SCTP ekkora üzenetet nem is visz át.
+//!
+//! ÉS AZÉRT SEM, MERT A TARTALMAT NEM MINDENKI AKARJA. Egy 5 MB-os fájl 30
+//! nézőnek automatikusan kiküldve 150 MB feltöltés a megosztó gépéről — egy
+//! iskolai wifin ez megölné magát a képmegosztást, amiért az egész lap van. A
+//! LEÍRÁS megy mindenkinek, a TARTALMAT az kéri el, aki megnyitja (lásd
+//! `file-request`).
+export type AttachmentKind = "code" | "image" | "other";
+
+export type ChatAttachment = {
+  /** Ezzel kérhető el a tartalma a megosztótól. */
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  //* A felület ebből dönti el, mit mutasson: kódrészletet, képet vagy csak egy
+  //* letöltő sort. A KÜLDŐ mondja meg, tehát nem hit kérdése — a megnyitás
+  //* módja a fogadó döntése marad (lásd `attachment-view.tsx`).
+  kind: AttachmentKind;
+};
+
 export type ChatMessage = {
   id: string;
   /** A küldő SZERVER által hitelesített neve — lásd a `PeerIdentity` blokkot. */
   from: PeerIdentity;
   text: string;
   at: number;
+  attachment?: ChatAttachment;
 };
 
 export type HubMessage =
@@ -139,7 +165,41 @@ export type HubMessage =
   //* A megosztó abbahagyta. A néző ezt látja, nem egy néma, megfagyott képet.
   | { t: "bye"; reason: string }
   //* Néző → megosztó. Csak a szöveget küldi: a nevet a megosztó teszi hozzá.
-  | { t: "say"; text: string };
+  | { t: "say"; text: string }
+  //! ─── A FÁJLÁTVITEL ÖT ÜZENETE ───────────────────────────────────────────
+  //! A BÁJTOK NEM EZEKBEN UTAZNAK, hanem külön, BINÁRIS keretekben, ugyanazon
+  //! a csatornán (lásd `webrtc-files.ts`). Ezek csak a keretek köré tesznek
+  //! zárójelet: mi jön, kinek, és mikor van vége.
+  //!
+  //! `file-begin` — „most küldöm X azonosító bájtjait". KÉT irányban él, és a
+  //! JELENTÉSE az iránytól függ: nézőtől a megosztónak FELTÖLTÉS (ilyenkor a
+  //! `text` a kísérő üzenet), megosztótól a nézőnek a kért fájl LEKÜLDÉSE.
+  | {
+      t: "file-begin";
+      id: string;
+      name: string;
+      mime: string;
+      size: number;
+      kind: AttachmentKind;
+      /** Csak feltöltésnél: a fájl mellé írt üzenet. */
+      text?: string;
+    }
+  //* Az utolsó keret után. A fogadó ettől függetlenül is figyeli a bájtszámot
+  //* — egy elmaradt lezárás nem hagyhat félkész fájlt „készen" állni.
+  | { t: "file-end"; id: string }
+  | { t: "file-abort"; id: string; reason: string }
+  //* Néző → megosztó: „ezt a fájlt kérem". Ettől indul a letöltés.
+  | { t: "file-request"; id: string }
+  //! Megosztó → feltöltő: „megjött, és EZ lett az azonosítója". A raktári
+  //! kulcsot a megosztó osztja (lásd `finishUpload`), tehát a feltöltőnek is
+  //! meg kell tudnia — különben a saját, épp most elküldött fájlját NEM ISMERNÉ
+  //! FEL a csevegésben, és visszatöltené magának azt, ami már nála van.
+  | { t: "file-ready"; transferId: string; id: string }
+  //! Megosztó → néző: „ez már nincs meg". A megosztó korlátos helyen tartja a
+  //! fájlokat (lásd `FILE_RETENTION_BYTES`), és a régieket elengedi — egy óra
+  //! végéig élő csevegésben ez helyes, de KI KELL MONDANI, nem elhallgatni egy
+  //! soha be nem érkező válasszal.
+  | { t: "file-gone"; id: string };
 
 //* ---------------------------------------------------------------------------
 //* KORLÁTOK
@@ -152,13 +212,55 @@ export const MAX_CHAT_LENGTH = 500;
 /** Ennyit kap az újonnan érkező a `welcome`-ban. */
 export const CHAT_HISTORY_LENGTH = 50;
 
+//! ─── A FÁJLOK KORLÁTAI ─────────────────────────────────────────────────────
+//! ÖT MEGABÁJT. Ez nem technikai határ, hanem szándék: ide SQL-lekérdezés,
+//! kódrészlet, egy feladatlap kerül, nem videó. A korlátot a KÜLDŐ és a
+//! FOGADÓ is betartatja — egy hamis méretet bejelentő küldő a fogadónál akad
+//! el (lásd `webrtc-files.ts`).
+export const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+//! A KERET MÉRETE 16 KB, ÉS EZ SZÁNDÉKOSAN ÓVATOS. Az SCTP üzenethatárát a
+//! böngészők eltérően szabják meg (`pc.sctp.maxMessageSize`); 16 KB az a
+//! méret, amit minden ma használt böngésző elvisz, darabolás nélkül. 5 MB így
+//! 320 keret — ez a néhány száz `send()` hívás semmibe nem kerül.
+export const FILE_CHUNK_BYTES = 16 * 1024;
+
+//! MENNYI FÁJLT TART MEG A MEGOSZTÓ. A csevegés a megosztással együtt megszűnik,
+//! de amíg tart, a később érkező is elkérheti a korábbi fájlokat. A keret
+//! azért kell, mert a megosztó gépének memóriájáról van szó: 24 MB néhány
+//! kódrészlet és feladatlap, nem egy fájlszerver. A régiek esnek ki előbb.
+export const FILE_RETENTION_BYTES = 24 * 1024 * 1024;
+
+//! EDDIG A MÉRETIG MAGÁTÓL LEHOZZUK. Egy 4 kB-os SQL-fájlnál a „Letöltés" gomb
+//! csak egy fölösleges koppintás — egy 3 MB-os PDF-nél viszont a néző döntse
+//! el, akarja-e. A határ fölött a leírás látszik, a tartalom kérésre jön.
+export const FILE_AUTO_FETCH_BYTES = 256 * 1024;
+
+export const MAX_FILE_NAME_LENGTH = 120;
+
 //! ─── A MEGOSZTÁS ÉLETIDEJE ─────────────────────────────────────────────────
 //! A bejegyzés MAGÁTÓL ELMÚLIK. Nincs „takarító" feladat, és nincs olyan
 //! állapot, amiből egy lezuhant lap szemetet hagyna: ha a megosztó lapja
-//! bezárul, a szívverés elmarad, és a bejegyzés 45 másodpercen belül lejár.
-//! A `bye` csak gyorsít ezen, nem ő a megoldás.
-export const STREAM_TTL_SECONDS = 45;
-export const HEARTBEAT_MS = 15_000;
+//! bezárul, a szívverés elmarad, és a bejegyzés lejár. A `bye` csak gyorsít
+//! ezen, nem ő a megoldás.
+//*
+//! A HATÁRIDŐ A SZÍVVERÉS HÁROMSZORosa. Két kimaradt szívverés (rossz wifi,
+//! alvó gép) még nem tünteti el a megosztást a listáról; a harmadik igen.
+export const STREAM_TTL_SECONDS = 90;
+
+//! ─── A SZÍVVERÉS EGYBEN A POSTA IS ─────────────────────────────────────────
+//! HARMINC MÁSODPERC, ÉS EZ A MEGOSZTÓ EGYETLEN RENDSZERES KÉRÉSE. Korábban
+//! kettő volt: egy szívverés (15 mp) és egy külön postalekérdezés (1,5–4 mp).
+//! A kettő közül a posta volt a drága, pedig az idő 99%-ában ÜRESET hozott.
+//!
+//! Ezért a szívverés válasza MOST MEGMONDJA, VÁR-E LEVÉL (`mail`). Ez ugyanaz
+//! az egy kérés, egy `LLEN`-nyi többletmunkával a szerveren — és ebből a
+//! megosztó pontosan tudja, mikor ÉRDEMES egyáltalán a ládához nyúlnia.
+//!
+//! AZ EREDMÉNY: egy üresjáratban futó megosztás 0,03 kérés/másodperc. Egy
+//! 45 perces óra alatt kilencven kérés, nem tízezer.
+export const HEARTBEAT_MS = 30_000;
+
 /** A postaláda is lejár — egy meg nem érkezett néző nem hagy nyomot. */
 export const MAILBOX_TTL_SECONDS = 120;
 /** Egy ládában legfeljebb ennyi üzenet áll; a régiek kiesnek. */
@@ -178,7 +280,28 @@ export const MAILBOX_MAX = 200;
 //! tartott SSE ennél nem kevesebb, csak nehezebben látszik.
 export const VIEWER_POLL_MS = 700;
 export const HOST_POLL_MS = 1500;
-/** A felfedező lista frissítése. Ritkább: ide senki nem másodpercre vár. */
+
+//! ─── AZ ÉBREN TÖLTÖTT IDŐ ──────────────────────────────────────────────────
+//! A MEGOSZTÓ NEM FOLYAMATOSAN FIGYEL, HANEM ROHAMOKBAN. Ébren van
+//!
+//!   • a megosztás indítása után egy percig (ekkor csatlakoznak a diákok),
+//!   • és minden olyan szívverés után, ami levelet jelzett,
+//!
+//! utána pedig elhallgat: a következő szívverésig egyetlen kérést sem küld.
+//! Minden beérkező jelzés újraindítja ezt az egy percet, tehát egy folyamatosan
+//! csatlakozó osztály alatt végig ébren marad.
+//*
+//! AMI EBBŐL KÖVETKEZIK, ÉS AMIT A FELÜLET KI IS MOND: egy csendes óra közepén
+//! becsatlakozó diákra a megosztó legrosszabb esetben a következő szívverésig
+//! (30 mp) nem figyel fel. A tanár a „Nézők keresése" gombbal ezt azonnal
+//! lerövidítheti — ezért van ott a gomb.
+export const HOST_ACTIVE_WINDOW_MS = 60_000;
+
+//! KÉT „NÉZZÜK MEG" KÖZÖTT ENNYINEK EL KELL TELNIE. A lapváltás sűrűbben jön,
+//! mint hinnénk (mérve: húsz másodperc alatt hatszor egy ablakok között váltó
+//! gépen), és mindegyikre lekérdezni ugyanoda vezetne, ahonnan indultunk.
+export const PEEK_GAP_MS = 10_000;
+
 export const DISCOVERY_POLL_MS = 4000;
 
 //! ─── ELŐBB A HELYI HÁLÓ, CSAK AZTÁN A VILÁG ────────────────────────────────
