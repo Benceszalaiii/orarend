@@ -259,6 +259,16 @@ function Room({
         viewer={viewer}
         me={me}
         onLeave={() => setMode({ kind: "browse" })}
+        //! AZ ÚJRAPRÓBÁLKOZÁS EGY ÚJ KÍSÉRLET, nem a régi folytatása: friss
+        //! `JoinAttempt` tárgy, tehát a horog mindent elölről kezd (új
+        //! kapcsolat, új jelöltgyűjtés). Lásd `JoinAttempt`.
+        onRetry={() =>
+          setMode({
+            kind: "watch",
+            stream: mode.stream,
+            attempt: { password: mode.attempt.password },
+          })
+        }
       />
     );
   }
@@ -828,10 +838,12 @@ function WatchView({
   viewer,
   me,
   onLeave,
+  onRetry,
 }: {
   viewer: ReturnType<typeof useScreenViewer>;
   me: Me;
   onLeave: () => void;
+  onRetry: () => void;
 }) {
   const { phase } = viewer;
 
@@ -845,7 +857,9 @@ function WatchView({
             ? "kapcsolódás…"
             : phase === "lost"
               ? "megszakadt, újrapróbálom…"
-              : "vége"
+              : phase === "givenup"
+                ? "nem sikerült a kapcsolat"
+                : "vége"
       }
       tone={
         phase === "live" ? "live" : phase === "connecting" ? "wait" : "lost"
@@ -865,6 +879,8 @@ function WatchView({
               <p className="text-sm text-white/80">
                 Vége — {viewer.ended ?? "a megosztó abbahagyta"}.
               </p>
+            ) : phase === "givenup" ? (
+              <Unreachable onRetry={onRetry} />
             ) : viewer.screen ? null : phase === "lost" ? (
               <Unreachable />
             ) : (
@@ -1255,7 +1271,7 @@ function RoomShell({
 //! leggyakoribb ok az iskolai wifi kliensizolációja: ilyenkor a két gép egy
 //! hálózaton van, de nem látják egymást. Ezen a lap nem tud segíteni, viszont
 //! ki tudja mondani, hogy a diák ne a saját készülékét hibáztassa.
-function Unreachable() {
+function Unreachable({ onRetry }: { onRetry?: () => void }) {
   return (
     <div className="max-w-sm text-sm text-white/80">
       <p className="flex items-center justify-center gap-2 font-semibold text-white">
@@ -1274,9 +1290,31 @@ function Unreachable() {
             : "A kapcsolat csak a helyi hálózaton belül épülhet fel."}
         </li>
       </ul>
-      <p className="mt-3 text-xs text-white/50">
-        A háttérben tovább próbálkozom.
-      </p>
+      {onRetry ? (
+        <>
+          {/*//! A LEÁLLÁS UTÁN A DÖNTÉS A DIÁKÉ. Nem próbálkozunk tovább
+              //! magunktól — egy reménytelen kapcsolat percekig tartó
+              //! kérdezgetése se neki, se a szervernek nem használ —, de a
+              //! gomb ott van, ha közben változott valami (átváltott a suli
+              //! wifijére, elindult a megosztás). */}
+          <Button
+            onClick={onRetry}
+            size="sm"
+            className="mt-4 gap-1.5 rounded-full px-4"
+          >
+            <RefreshCw className="size-3.5" aria-hidden />
+            Újrapróbálom
+          </Button>
+          <p className="mt-2 text-xs text-white/50">
+            Ha ugyanarra a wifire csatlakozol, mint a megosztó, jó eséllyel
+            összeáll.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 text-xs text-white/50">
+          A háttérben tovább próbálkozom.
+        </p>
+      )}
     </div>
   );
 }

@@ -279,6 +279,40 @@ export const MAILBOX_MAX = 200;
 //! Egy élő megosztás így nagyságrendileg 40 kérés percenként. Egy órán át nyitva
 //! tartott SSE ennél nem kevesebb, csak nehezebben látszik.
 export const VIEWER_POLL_MS = 700;
+
+//! ─── A NÉZŐ NEM PRÓBÁLKOZIK A VÉGTELENSÉGIG ────────────────────────────────
+//! EZ EGY ÉLES NAPLÓBÓL TANULT LECKE. A `/webrtc` nyilvános címen fut, a diákok
+//! pedig nem mind ugyanazon a wifin vannak: van, aki mobilnetről nyitja meg. A
+//! közvetlen kapcsolat ilyenkor TURN nélkül NEM JÖN LÉTRE — és ez nem hiba,
+//! hanem a szándékolt korlát (lásd `webrtc-peer.ts`).
+//!
+//! A baj az volt, hogy a néző ezt SOHA nem mondta ki: másodpercenként kérdezte
+//! a postáját, háromemásodpercenként újra jelentkezett, és ezt tette percekig.
+//! Egy ilyen lap magában 1,4 kérés/másodperc — húsz reménytelenül próbálkozó
+//! diák pedig harminc.
+//!
+//! Ezért a próbálkozás LÉPCSŐZETESEN RITKUL, majd VÉGET ÉR. A lépcsők:
+//!   • 0–10 mp: sűrűn (a kapcsolatok többsége itt áll össze),
+//!   • 10–30 mp: ritkábban (lassú hálózat, második ICE-kör STUN-nal),
+//!   • 30–75 mp: még ritkábban (utolsó esély),
+//!   • utána: leállunk, és a felület KIMONDJA, hogy nem sikerült.
+//!
+//! A leállás NEM bontja a kapcsolatot: az ICE a háttérben tovább próbálkozik a
+//! már kicserélt jelöltekkel. Csak a SZERVERT hagyjuk békén — onnan úgysem jön
+//! már semmi új.
+export const VIEWER_STEPS: readonly { until: number; every: number }[] = [
+  { until: 10_000, every: VIEWER_POLL_MS },
+  { until: 30_000, every: 2_000 },
+  { until: 75_000, every: 5_000 },
+];
+
+/** `null`: elfogyott a türelem — a felület újrapróbálkozást ajánl. */
+export function viewerDelay(elapsedMs: number): number | null {
+  for (const step of VIEWER_STEPS) {
+    if (elapsedMs < step.until) return step.every;
+  }
+  return null;
+}
 export const HOST_POLL_MS = 1500;
 
 //! ─── AZ ÉBREN TÖLTÖTT IDŐ ──────────────────────────────────────────────────

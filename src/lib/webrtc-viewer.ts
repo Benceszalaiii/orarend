@@ -16,9 +16,15 @@ import {
   type Participant,
   type SignalEnvelope,
   type StreamSummary,
-  VIEWER_POLL_MS,
+  viewerDelay,
 } from "./webrtc-shared";
-import { drainSignals, type Me, sendSignal } from "./webrtc-signal";
+import {
+  drainSignals,
+  IceOutbox,
+  type Me,
+  readCandidates,
+  sendSignal,
+} from "./webrtc-signal";
 
 //! ═══════════════════════════════════════════════════════════════════════════
 //! A NÉZŐ
@@ -45,7 +51,11 @@ export type ViewerPhase =
   //* Volt kapcsolat, és megszakadt — a képet még mutatjuk, amíg visszajön.
   | "lost"
   //* A megosztó abbahagyta, vagy mi léptünk ki. Ez nem hiba.
-  | "ended";
+  | "ended"
+  //! ELFOGYOTT A TÜRELEM. Nem hiba, és nem is vég: a kapcsolat a háttérben
+  //! tovább épülhet a már kicserélt jelöltekből — csak a szervert nem
+  //! kérdezgetjük tovább. A felület újrapróbálkozást ajánl.
+  | "givenup";
 
 export type ViewerSession = {
   phase: ViewerPhase;
@@ -145,15 +155,13 @@ export function useScreenViewer(
       if (media) setScreen(media);
     };
 
+    //* A jelölteket kötegelve adjuk fel — lásd `IceOutbox`. Öt külön kérés
+    //* helyett jellemzően egy.
+    const ice = new IceOutbox(() => meRef.current, host, streamId);
     pc.onicecandidate = (event) => {
-      if (!event.candidate) return;
-      void sendSignal(
-        meRef.current,
-        host,
-        streamId,
-        "ice",
-        event.candidate.toJSON(),
-      );
+      if (event.candidate) ice.add(event.candidate.toJSON());
+      //* `null` jelölt = vége a gyűjtésnek; ami maradt, az most megy.
+      else ice.flush();
     };
 
     const wire = (channel: RTCDataChannel) => {
@@ -246,11 +254,9 @@ export function useScreenViewer(
           return;
         }
         case "ice":
-          await acceptCandidate(
-            pc,
-            queue,
-            envelope.payload as RTCIceCandidateInit,
-          );
+          for (const candidate of readCandidates(envelope.payload)) {
+            await acceptCandidate(pc, queue, candidate);
+          }
           return;
         case "bye": {
           const reason = (envelope.payload as { reason?: unknown } | null)
@@ -273,10 +279,15 @@ export function useScreenViewer(
       }
     };
 
-    //! A SZIVATTYÚ A KAPCSOLAT ELŐTT GYORS, UTÁNA NINCS. Amíg épül a kapcsolat,
-    //! minden 700 ms számít (az SDP és a jelöltek ilyenkor mozognak); amint
-    //! összeállt, a `connected` ág leállítja, és a szerver többé nem hall
-    //! felőlünk.
+    //! A SZIVATTYÚ A KAPCSOLAT ELŐTT GYORS, UTÁNA NINCS, ÉS KÖZBEN RITKUL.
+    //! Amíg épül a kapcsolat, az első másodpercekben minden lekérdezés számít
+    //! (az SDP és a jelöltek ilyenkor mozognak); ahogy telik az idő, egyre
+    //! kevésbé valószínű, hogy a szerveren vár még valami — ezért lépcsőzetesen
+    //! ritkul, majd `viewerDelay` egyszer csak `null`-t ad, és megállunk.
+    //!
+    //! Amint összeállt a kapcsolat, a `connected` ág azonnal leállítja, és a
+    //! szerver többé nem hall felőlünk.
+    const startedAt = Date.now();
     const mail = new Pump(async () => {
       if (disposed) return null;
       const messages = await drainSignals(meRef.current.peer);
@@ -285,7 +296,19 @@ export function useScreenViewer(
         await handle(envelope);
       }
       if (disposed || pc.connectionState === "connected") return null;
-      return VIEWER_POLL_MS;
+
+      const next = viewerDelay(Date.now() - startedAt);
+      if (next === null) {
+        //! KIMONDJUK, HOGY FELADTUK. Némán abbahagyni a legrosszabb: a diák egy
+        //! örökké pörgő jelzést nézne, és nem tudná, hogy rajta már nem múlik
+        //! semmi.
+        clearTimeout(joinTimer);
+        setPhase((prev) =>
+          prev === "ended" || prev === "live" ? prev : "givenup",
+        );
+        return null;
+      }
+      return next;
     });
 
     //! A LENYOMAT MINDEN JELENTKEZÉSNÉL ÚJRA KÉSZÜL, de mindig ugyanaz lesz: a
@@ -314,9 +337,14 @@ export function useScreenViewer(
         "join",
         proof ? { proof } : null,
       );
-      //* Amíg nincs távoli leírás, nincs miből válaszolni — ilyenkor ismétlünk.
+      //! AZ ISMÉTLÉS IS ELFOGY. Amíg nincs távoli leírás, nincs miből
+      //! válaszolni — de ha a megosztó fél perce nem felel, a további
+      //! jelentkezés sem fog rajta segíteni. Ugyanaz a türelem szabja meg,
+      //! mint a postát (`viewerDelay`).
       joinTimer = setTimeout(() => {
-        if (!disposed && !pc.remoteDescription) void join();
+        if (disposed || pc.remoteDescription) return;
+        if (viewerDelay(Date.now() - startedAt) === null) return;
+        void join();
       }, REJOIN_MS);
     };
 
@@ -333,6 +361,7 @@ export function useScreenViewer(
       mail.stop();
       clearTimeout(joinTimer);
       cancelEscalation();
+      ice.close();
       //! ELKÖSZÖNÜNK, HOGY A NÉVSOR NE HAZUDJON. Enélkül a megosztó csak a
       //! kapcsolat elhalásából tudná meg, hogy elmentünk — és addig a többiek
       //! egy ott sem lévő nézőt látnának a listában.

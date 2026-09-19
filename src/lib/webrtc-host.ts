@@ -44,7 +44,9 @@ import {
   announceStream,
   drainSignals,
   endStream,
+  IceOutbox,
   type Me,
+  readCandidates,
   sendSignal,
 } from "./webrtc-signal";
 
@@ -84,6 +86,8 @@ type Link = {
   //! kép megy. A második kérés nem hiba, csak vár a sorára: elutasítjuk, és a
   //! felület újrapróbálhatóként mutatja.
   serving: boolean;
+  //* A jelöltek kötegelve mennek ennek a nézőnek — lásd `IceOutbox`.
+  ice: IceOutbox;
   //! MINDEN NÉZŐNEK SAJÁT POSTAFIÓKJA VAN A FÁJLOKHOZ. Közös fiókkal az egyik
   //! néző elkezdhetne egy átvitelt a másik azonosítójával — így viszont a
   //! bejövő keret csak abba a fiókba kerülhet, amelyik csatornán érkezett.
@@ -418,6 +422,7 @@ export function useScreenHost(me: Me): HostSession {
       if (!link) return;
       links.current.delete(peer);
       link.cancelEscalation();
+      link.ice.close();
       try {
         link.pc.close();
       } catch {
@@ -500,6 +505,7 @@ export function useScreenHost(me: Me): HostSession {
         open: false,
         cancelEscalation: () => {},
         serving: false,
+        ice: new IceOutbox(() => meRef.current, who.peer, id),
         inbox: new Inbox(),
       };
       links.current.set(who.peer, link);
@@ -509,14 +515,9 @@ export function useScreenHost(me: Me): HostSession {
       }
 
       pc.onicecandidate = (event) => {
-        if (!event.candidate) return;
-        void sendSignal(
-          meRef.current,
-          who.peer,
-          id,
-          "ice",
-          event.candidate.toJSON(),
-        );
+        if (event.candidate) link.ice.add(event.candidate.toJSON());
+        //* `null` jelölt = vége a gyűjtésnek; ami maradt, az most megy.
+        else link.ice.flush();
       };
 
       pc.onconnectionstatechange = () => {
@@ -642,11 +643,9 @@ export function useScreenHost(me: Me): HostSession {
         }
         case "ice": {
           if (!link) return;
-          await acceptCandidate(
-            link.pc,
-            link.queue,
-            envelope.payload as RTCIceCandidateInit,
-          );
+          for (const candidate of readCandidates(envelope.payload)) {
+            await acceptCandidate(link.pc, link.queue, candidate);
+          }
           return;
         }
         case "bye":
@@ -671,6 +670,7 @@ export function useScreenHost(me: Me): HostSession {
       const id = idRef.current;
       for (const link of links.current.values()) {
         link.cancelEscalation();
+        link.ice.close();
         if (id) {
           void sendSignal(meRef.current, link.who.peer, id, "bye", {
             reason: "vege",
