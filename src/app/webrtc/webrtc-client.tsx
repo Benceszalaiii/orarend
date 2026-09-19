@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { useScreenHost } from "@/lib/webrtc-host";
 import { useWebrtcIdentity } from "@/lib/webrtc-me";
 import { canShareScreen, canWatch, hasWideFallback } from "@/lib/webrtc-peer";
+import { afterFailure, Pump } from "@/lib/webrtc-poll";
 import {
   DISCOVERY_POLL_MS,
   MAX_NICKNAME_LENGTH,
@@ -171,7 +172,7 @@ function Room({
   identity: ReturnType<typeof useWebrtcIdentity>;
 }) {
   const [mode, setMode] = useState<Mode>({ kind: "browse" });
-  const list = useStreamList();
+  const list = useStreamList(mode.kind === "browse");
   const host = useScreenHost(me);
   const viewer = useScreenViewer(
     me,
@@ -443,45 +444,70 @@ function NicknameGate({
 export type StreamListState = StreamList & {
   loading: boolean;
   refresh: () => void;
+  /** Igaz, amíg a frissítés jelzése látszik (lásd `SPIN_MS`). */
+  spinning: boolean;
 };
 
-function useStreamList(): StreamListState {
+//* Egy teljes fordulat. Rövidebbnél a szem nem fogja fel, hosszabbnál a gomb
+//* lomhának tűnik egy olyan műveletnél, ami valójában azonnal kész.
+const SPIN_MS = 600;
+
+function useStreamList(active: boolean): StreamListState {
   const [streams, setStreams] = useState<StreamSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [distributed, setDistributed] = useState(true);
-  const tick = useRef(0);
-  const [, force] = useState(0);
+  //! A FRISSÍTÉS LÁTHATÓ IDEJE. Egy helyi hálózaton a válasz 8 ms alatt
+  //! megjön, és a pörgés egyetlen képkockára villanna — a felhasználó számára
+  //! ez megkülönbözhetetlen attól, mintha a gomb nem is működne. Ezért a
+  //! forgás egy rövid, FIX ideig mindenképp látszik.
+  const [spinning, setSpinning] = useState(false);
+  const pump = useRef<Pump | null>(null);
 
   const refresh = useCallback(() => {
-    tick.current += 1;
-    force((n) => n + 1);
+    setSpinning(true);
+    //! EZ KORÁBBAN NEM CSINÁLT SEMMIT. A régi változat egy refet léptetett és
+    //! újrarajzolt — de a lekérdező effekt függőségei üresek voltak, tehát a
+    //! kérés SOHA nem indult újra. A gomb megnyomható volt, forgott volna is,
+    //! és pontosan semmi nem történt. Most a szivattyút indítja újra.
+    pump.current?.restart();
+    setTimeout(() => setSpinning(false), SPIN_MS);
   }, []);
 
+  //! ─── CSAK AKKOR KÉRDEZÜNK, AMIKOR VALAKI NÉZI IS ─────────────────────────
+  //! A lista a `Room` szintjén él, hogy az órarendről érkező `?adas=` linket
+  //! fel tudjuk oldani — de amíg valaki MEGOSZT vagy NÉZ, a listát senki nem
+  //! látja. Az `active` ilyenkor hamis, és a lekérdezés áll. Enélkül egy egész
+  //! órán át nézett megosztás négymásodpercenként kérdezett volna rá egy
+  //! listára, ami nincs is a képernyőn.
   useEffect(() => {
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (!active) return;
     const controller = new AbortController();
-
-    const pull = async () => {
+    let failures = 0;
+    const mail = new Pump(async () => {
       const list = await fetchStreams(controller.signal);
-      if (disposed) return;
-      if (list) {
-        setStreams(list.streams);
-        setDistributed(list.distributed);
-      }
       setLoading(false);
-      timer = setTimeout(pull, DISCOVERY_POLL_MS);
-    };
-    void pull();
+      if (!list) {
+        //* A lista hibája nem tünteti el a korábbi választ — csak ritkítunk,
+        //* amíg a szerver vissza nem jön (lásd `afterFailure`).
+        failures += 1;
+        return afterFailure(failures, DISCOVERY_POLL_MS);
+      }
+      failures = 0;
+      setStreams(list.streams);
+      setDistributed(list.distributed);
+      return DISCOVERY_POLL_MS;
+    });
+    pump.current = mail;
+    mail.restart();
 
     return () => {
-      disposed = true;
-      clearTimeout(timer);
+      mail.stop();
+      pump.current = null;
       controller.abort();
     };
-  }, []);
+  }, [active]);
 
-  return { streams, loading, distributed, refresh };
+  return { streams, loading, distributed, refresh, spinning };
 }
 
 function Browse({
@@ -497,7 +523,7 @@ function Browse({
   hostError: string | null;
   onWatch: (stream: StreamSummary) => void;
 }) {
-  const { streams, loading, distributed, refresh } = list;
+  const { streams, loading, distributed, refresh, spinning } = list;
   //! A CÍM AZ ÓRARENDRŐL IS JÖHET (`?cim=…`, lásd `LiveBlock`): a tanár az óra
   //! mellől indul, és a tantárgy, az osztály és a terem már ki van töltve. Ez
   //! KEZDŐÉRTÉK, nem kényszer — át lehet írni.
@@ -645,10 +671,23 @@ function Browse({
             size="icon-sm"
             variant="ghost"
             onClick={refresh}
+            disabled={spinning}
             aria-label="Lista frissítése"
             className="ml-auto text-muted-foreground"
           >
-            <RefreshCw />
+            {/*//! A FORGÁS A GOMB EGYETLEN VISSZAJELZÉSE. A lista tartalma
+                //! jellemzően NEM változik egy frissítéstől (ugyanaz megy, mint
+                //! az előbb), tehát ha az ikon sem mozdulna, a felhasználó azt
+                //! látná, hogy a koppintása elveszett. A `motion-reduce` ág
+                //! azoknak szól, akik a mozgást kikapcsolták: nekik a halványítás
+                //! marad a jelzés. */}
+            <RefreshCw
+              className={cn(
+                "transition-opacity",
+                spinning && "animate-spin motion-reduce:animate-none",
+                spinning && "motion-reduce:opacity-50",
+              )}
+            />
           </Button>
         </div>
 
@@ -741,10 +780,20 @@ function HostView({
       }
       tone={live ? "live" : "wait"}
       action={
-        <Button variant="destructive" onClick={onLeave} className="gap-1.5">
-          <MonitorOff className="size-4" aria-hidden />
-          Leállítom
-        </Button>
+        <>
+          {/*//! EZ A GOMB A TAKARÉKOSSÁG ÁRÁT FIZETI KI. A megosztó
+              //! üresjáratban félpercenként néz a postájára (lásd az ütemet a
+              //! `webrtc-host.ts`-ben) — ez egy 45 perces órán néhány száz
+              //! kérést spórol, cserébe egy középen becsatlakozó diákra fél
+              //! percet késhet. A tanár ezzel a gombbal nézeti meg azonnal.
+              //*
+              //! Csak akkor van itt, amikor van értelme: élő megosztásnál. */}
+          {live && <LookNowButton onLook={host.lookNow} />}
+          <Button variant="destructive" onClick={onLeave} className="gap-1.5">
+            <MonitorOff className="size-4" aria-hidden />
+            Leállítom
+          </Button>
+        </>
       }
       stage={
         <Stage
@@ -819,10 +868,7 @@ function WatchView({
             ) : viewer.screen ? null : phase === "lost" ? (
               <Unreachable />
             ) : (
-              <p className="flex items-center gap-2 text-sm text-white/70">
-                <Spinner className="size-4" />
-                Kapcsolódás…
-              </p>
+              <Connecting />
             )
           }
         />
@@ -860,6 +906,75 @@ function WatchView({
 //! marad (16:9), a beszéd alá kerül. Egy 375 px-es kijelzőn egy 20rem-es
 //! oldalsáv nem oldalsáv, hanem a kép halála.
 //! ═══════════════════════════════════════════════════════════════════════════
+
+//! A FORGÁS ITT UGYANAZT JELENTI, MINT A LISTA FRISSÍTÉSÉNÉL, ÉS UGYANANNYI
+//! IDEIG TART (`SPIN_MS`): „megnéztem". A keresés eredménye jellemzően nem
+//! látszik azonnal (a néző csak pár másodperc múlva épül be a névsorba), ezért
+//! a gombnak MAGÁNAK kell visszajeleznie — enélkül a tanár azt hinné, nem
+//! történt semmi.
+function LookNowButton({ onLook }: { onLook: () => void }) {
+  const [spinning, setSpinning] = useState(false);
+  //* Az óra a leszereléskor sem állíthat állapotot — a gomb eltűnhet a
+  //* megosztás leállításával, miközben a `setTimeout` még függőben van.
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  return (
+    <Button
+      variant="outline"
+      className="gap-1.5"
+      disabled={spinning}
+      onClick={() => {
+        onLook();
+        setSpinning(true);
+        timer.current = setTimeout(() => setSpinning(false), SPIN_MS);
+      }}
+      title="Megnézi, jelentkezett-e új néző"
+    >
+      <RefreshCw
+        className={cn(
+          "size-4",
+          spinning && "animate-spin motion-reduce:animate-none",
+        )}
+      />
+      Nézők keresése
+    </Button>
+  );
+}
+
+//! ─── A VÁRAKOZÁS OKÁT KI KELL MONDANI ─────────────────────────────────────
+//! A megosztó gépe üresjáratban félpercenként néz a postájára (lásd az ütemet
+//! a `webrtc-host.ts`-ben), ezért egy óra közepén becsatlakozó diák akár fél
+//! percig is állhat a „Kapcsolódás…" felirat előtt. Ez nem hiba, de NÉMÁN
+//! elviselhetetlen: pár másodperc után mindenki azt hiszi, elromlott.
+//*
+//! Ezért a magyarázat csak KÉSVE jelenik meg. A csatlakozások többsége két
+//! másodperc alatt lezajlik (a megosztás indítása utáni első percben a
+//! megosztó végig ébren van), és ott ez a mondat fölösleges ijesztgetés lenne.
+const PATIENCE_MS = 2500;
+
+function Connecting() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), PATIENCE_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="max-w-xs text-sm text-white/70">
+      <p className="flex items-center justify-center gap-2">
+        <Spinner className="size-4" />
+        Kapcsolódás…
+      </p>
+      {slow && (
+        <p className="mt-2 text-pretty text-xs text-white/50">
+          A megosztó gépe fél percenként nézi meg, jelentkezett-e valaki. Ha
+          sokáig tart, szólj neki — nála a „Nézők keresése" gomb azonnal megnéz.
+        </p>
+      )}
+    </div>
+  );
+}
 
 function RoomShell({
   title,

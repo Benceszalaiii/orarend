@@ -10,6 +10,7 @@ import {
   dropStream,
   getStream,
   listStreams,
+  mailboxSize,
   putStream,
   webrtcStoreDistributed,
 } from "@/lib/webrtc-store";
@@ -129,8 +130,24 @@ export async function POST(req: NextRequest) {
     updatedAt: Date.now(),
   };
 
-  await putStream(stream);
-  return json({ stream });
+  //! A TÁROLÓ KIESÉSE 503, NEM 500. A kettő különbsége nem kozmetikai: az
+  //! 500 azt jelenti, „elromlottunk", és a kliens jogosan próbálkozik újra
+  //! azonnal; az 503 azt, „most nem megy", és a kliens erre RITKÍT (lásd a
+  //! szivattyúk hibaszámlálóit). Egy Redis-kiesés így nem fordul át kérés-
+  //! özönné.
+  if (!(await putStream(stream))) {
+    return json({ error: "store-unavailable" }, 503);
+  }
+
+  //! ─── A SZÍVVERÉS VÁLASZA MEGMONDJA, VÁR-E LEVÉL ─────────────────────────
+  //! EZ A MEZŐ SZÜNTET MEG EGY MÁSODIK, ÁLLANDÓ KÉRÉST. A megosztónak eddig
+  //! külön kellett a ládájára kérdeznie, másodpercenként — és az esetek
+  //! túlnyomó részében üreset kapott. Most ugyanabban a válaszban megtudja,
+  //! amit amúgy is kérdezni akart, és a ládához csak akkor nyúl, ha van miért.
+  //*
+  //! A SZÁM NEM TITOK, ÉS NEM IS ÁRUL EL SEMMIT: a saját postaládájáé, aminek
+  //! a címét csak ő ismeri. A tartalmát ez a válasz nem hozza.
+  return json({ stream, mail: await mailboxSize(who.identity.peer) });
 }
 
 export async function DELETE(req: NextRequest) {

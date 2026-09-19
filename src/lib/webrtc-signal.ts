@@ -93,13 +93,19 @@ export async function fetchStreams(
 //! A VÁLASZ AZÉRT ÉRDEKES, mert a szerver a megosztó HITELESÍTETT nevét írja
 //! bele — ebből tudja meg a megosztó, milyen néven látják őt a nézők, és ezt
 //! teszi a saját csevegő-üzeneteire is. A név itt sem a kliensé.
+export type Heartbeat = {
+  stream: StreamSummary;
+  /** Hány jelzés vár a megosztó postaládájában — lásd `HEARTBEAT_MS`. */
+  mail: number;
+};
+
 export async function announceStream(
   me: Me,
   id: string,
   title: string,
   viewers: number,
   locked: boolean,
-): Promise<StreamSummary | null> {
+): Promise<Heartbeat | null> {
   try {
     const res = await fetch("/api/webrtc/streams", {
       method: "POST",
@@ -115,8 +121,11 @@ export async function announceStream(
       }),
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as { stream?: StreamSummary };
-    return body.stream ?? null;
+    const body = (await res.json()) as {
+      stream?: StreamSummary;
+      mail?: number;
+    };
+    return body.stream ? { stream: body.stream, mail: body.mail ?? 0 } : null;
   } catch {
     return null;
   }
