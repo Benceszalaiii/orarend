@@ -5,7 +5,12 @@
 //! a képernyőn lát. Hogy az API útja mindkét oldalon jó legyen, azt egyetlen
 //! hely dönti el: `jedlik-api.ts`.
 
-import { API_BASE, FETCH_TIMEOUT_MS, JEDLIK_API_ORIGIN } from "./jedlik-api";
+import {
+  API_BASE,
+  FETCH_TIMEOUT_MS,
+  JEDLIK_API_ORIGIN,
+  JEDLIK_POST_HEADERS,
+} from "./jedlik-api";
 import { notifyPrefsChanged } from "./prefs-events";
 import {
   loadDayBells,
@@ -882,7 +887,7 @@ export async function getTimetableWeek(options: {
   try {
     const res = await fetch(`${API_BASE}/timetable/cards`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: JEDLIK_POST_HEADERS,
       //! A HÁROM SZŰRŐBŐL PONTOSAN EGY VAN KITÖLTVE. A végpont mindhármat
       //! ismeri, és ami üresen marad, arra nem szűkít — két kitöltött mezőből
       //! nem metszet lesz, hanem kiszámíthatatlan válasz.

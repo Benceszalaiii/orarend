@@ -14,6 +14,23 @@ export const JEDLIK_API_ORIGIN = "https://jedlikinfo.jedlik.eu/api/api";
 export const API_BASE =
   typeof window === "undefined" ? JEDLIK_API_ORIGIN : "/api/jedlik";
 
+//! A `timetable/cards` CSAK A SAJÁT OLDALÁNAK VÁLASZOL. A Jedlikinfo a POST
+//! kéréseket 403-mal utasítja el, ha nem a saját felülete felől jönnek:
+//! `Origin` ÉS `Referer` együtt kell (bármelyik egyedül kevés — ellenőrizve
+//! 2026-09-23). A böngészőben ezeket nem mi állítjuk (tiltott fejlécek), a
+//! SZERVEREN viszont semmi nem küldi őket helyettünk — enélkül a teremkereső
+//! 71 kérése mind elbukik, és a `/api/termek` 503-at ad.
+const JEDLIK_SITE = "https://jedlikinfo.jedlik.eu";
+
+export const JEDLIK_POST_HEADERS: Record<string, string> =
+  typeof window === "undefined"
+    ? {
+        "Content-Type": "application/json",
+        Origin: JEDLIK_SITE,
+        Referer: `${JEDLIK_SITE}/`,
+      }
+    : { "Content-Type": "application/json" };
+
 export const FETCH_TIMEOUT_MS = 15_000;
 
 //! A KIEGÉSZÍTŐ ADAT NEM VÁRATHATJA MEG A RÁCSOT. A tanév rendje és a napi

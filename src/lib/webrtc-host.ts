@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   classifyFile,
-  type FileBody,
+  type FileSession,
   Inbox,
   readFrame,
   sanitizeFileName,
@@ -29,6 +29,7 @@ import {
   HOST_ACTIVE_WINDOW_MS,
   HOST_POLL_MS,
   type HubMessage,
+  isPeerId,
   isProof,
   joinProof,
   MAX_FILE_BYTES,
@@ -117,16 +118,10 @@ export type HostSession = {
   //! a hívás AZONNAL megnézi, és egy percre ébren is tartja — ennyi a teljes
   //! különbség a türelmetlen és a türelmes tanár között.
   lookNow: () => void;
-  //* ── Fájlok ──────────────────────────────────────────────────────────────
-  /** Amit már ismerünk: csatolmány-azonosító → tartalom. */
-  files: ReadonlyMap<string, FileBody>;
-  /** Épp mozgásban lévő átvitelek: azonosító → 0…1. */
-  transfers: ReadonlyMap<string, number>;
-  sendFile: (file: File, text: string) => void;
-  //* A megosztónál minden fájl helyben van (ő a forrás), ezért ez csak azt
-  //* mondja meg, ha egy régi már kiesett a raktárból.
-  requestFile: (attachment: ChatAttachment) => void;
-};
+  //* A fájlok a nézőével azonos alakban — lásd `FileSession`. A megosztónál
+  //* minden fájl helyben van (ő a forrás), tehát a `requestFile` üres, és az
+  //* `unavailable` csak azt mondja meg, ha egy régi már kiesett a raktárból.
+} & FileSession;
 
 export function useScreenHost(me: Me): HostSession {
   const [phase, setPhase] = useState<HostPhase>("idle");
@@ -252,7 +247,17 @@ export function useScreenHost(me: Me): HostSession {
   //! A `vault` minden rendereléskor új tárgy, a benne lévő függvények viszont
   //! állandóak — ezért ezeket vesszük ki, és NEM magát a tárgyat írjuk a
   //! függőségek közé. Enélkül minden visszahívás minden képkockán újraszületne.
-  const { put: putFile, get: getFile } = vault;
+  const { put: putFile, get: getFile, clear: clearFiles } = vault;
+
+  //! EGY NÉZŐ FÉLKÉSZ FELTÖLTÉSEI VELE EGYÜTT MENNEK. Enélkül egy félúton
+  //! bezárt fül folyamatjelzője a megosztónál örökre ott állna, és a fiók a
+  //! kapcsolat szemetévé válna.
+  const abandon = useCallback(
+    (link: Link) => {
+      for (const id of link.inbox.clear()) mark(id, null);
+    },
+    [mark],
+  );
 
   //! ─── EGY FELTÖLTÉS BEFEJEZÉSE ─────────────────────────────────────────────
   //! A RAKTÁRI AZONOSÍTÓT MI ADJUK, NEM A KÜLDŐ. A küldő azonosítója csak az
@@ -308,6 +313,11 @@ export function useScreenHost(me: Me): HostSession {
 
   const openUpload = useCallback(
     (link: Link, message: Extract<HubMessage, { t: "file-begin" }>) => {
+      //! AZ AZONOSÍTÓ A KERETEK ELŐTAGJA, ÉS AZ FIX 36 BÁJT (lásd `readFrame`).
+      //! Ami nem UUID, arra egyetlen keret sem illene — csak a helyet foglalná.
+      if (!isPeerId(message.id)) return;
+      //* Mielőtt új helyet adnánk, kidobjuk, ami félúton elhalt.
+      for (const id of link.inbox.sweep()) mark(id, null);
       const name = sanitizeFileName(message.name);
       //* A MIME-típus csak egy felirat: a hosszát vágjuk, a tartalmát nem
       //* hisszük el (lásd `Inbox`).
@@ -407,6 +417,15 @@ export function useScreenHost(me: Me): HostSession {
   //* kiesett a raktárból. A felület a `files`-ból tudja, melyik eset áll fenn.
   const requestFile = useCallback(() => {}, []);
 
+  const unavailable = useMemo(() => {
+    const gone = new Set<string>();
+    for (const message of chat) {
+      const id = message.attachment?.id;
+      if (id && !vault.files.has(id)) gone.add(id);
+    }
+    return gone;
+  }, [chat, vault.files]);
+
   //* A szívverést is meglökjük: a nézőszám és a cím így egyszerre frissül a
   //* listában, nem csak a postát nézzük meg.
   const lookNow = useCallback(() => {
@@ -423,6 +442,7 @@ export function useScreenHost(me: Me): HostSession {
       links.current.delete(peer);
       link.cancelEscalation();
       link.ice.close();
+      abandon(link);
       try {
         link.pc.close();
       } catch {
@@ -430,7 +450,7 @@ export function useScreenHost(me: Me): HostSession {
       }
       publishRoster();
     },
-    [publishRoster],
+    [abandon, publishRoster],
   );
 
   const offerTo = useCallback(
@@ -547,6 +567,7 @@ export function useScreenHost(me: Me): HostSession {
       };
       channel.onclose = () => {
         link.open = false;
+        abandon(link);
         publishRoster();
       };
       channel.onmessage = (event) => {
@@ -598,6 +619,7 @@ export function useScreenHost(me: Me): HostSession {
       void offerTo(link, false);
     },
     [
+      abandon,
       dropLink,
       finishUpload,
       mark,
@@ -683,6 +705,11 @@ export function useScreenHost(me: Me): HostSession {
         }
       }
       links.current.clear();
+      //! A FÁJLOK A MEGOSZTÁSSAL EGYÜTT SZŰNNEK MEG — lásd `Vault.clear`. A
+      //! csevegés látható marad (a tanár visszaolvashatja), a csatolmányai
+      //! viszont „már nem elérhetők".
+      clearFiles();
+      setTransfers(new Map());
 
       //! A SÁVOKAT LE KELL ÁLLÍTANI, KÜLÖNBEN A BÖNGÉSZŐ TOVÁBB MUTATJA A
       //! „megosztás folyamatban" sávot — a tanár azt hinné, még látják.
@@ -697,7 +724,10 @@ export function useScreenHost(me: Me): HostSession {
       setStreamId(null);
       setPhase("ended");
     },
-    [post],
+    //! MINDEN FÜGGŐSÉG ÁLLANDÓ, ÉS ENNEK ÍGY KELL MARADNIA: a `pagehide`
+    //! effekt a `teardown`-ra figyel, és a takarításában MEGHÍVJA — egy új
+    //! `teardown` a futó megosztást állítaná le.
+    [clearFiles, post],
   );
 
   const start = useCallback(
@@ -955,6 +985,8 @@ export function useScreenHost(me: Me): HostSession {
     lookNow,
     files: vault.files,
     transfers,
+    unavailable,
+    upload: null,
     sendFile,
     requestFile,
   };

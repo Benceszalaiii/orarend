@@ -828,31 +828,43 @@ export function PillNav({
   //* Amíg a kiöntött csepp úton van, az ikon a HEGYÉN utazik (lásd `pour.ts`)
   //* — a cella saját ikonja addig nem látszik, különben kettő lenne.
   const flyOpacity = useMotionValue(pour ? 0 : 1);
+  //! A CSEPPET NEM A TAKARÍTÁS VESZI ÁT. Fejlesztéskor a Strict Mode minden
+  //! effektet fel-le-fel szerel; ha a takarítás azonnal elnyelte volna a
+  //! cseppet, az a sugár közepén eltűnt, és az ikon be se repült. Az elnyelés
+  //! ezért egy ütemmel később jön, és az újra felálló effekt visszavonja.
+  const absorbLater = useRef<number | undefined>(undefined);
   useLayoutEffect(() => {
     const el = iconRef.current;
     if (!pour || !el) return;
+    window.clearTimeout(absorbLater.current);
     let cancelled = false;
     let runs: { stop: () => void }[] = [];
+    flyOpacity.jump(0);
+    //* A csepp az ikon HELYÉRE fut, nem a régi cella közepére: a cella itt
+    //* szétnyílik, az ikon közben odébb kerül. A mért doboz az elrendezésé —
+    //* érkezésig a repülés eltolása nulla.
+    pour.follow(() => {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0) return null;
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
     pour.arrived.then(() => {
       if (cancelled) return;
       pour.absorb();
       flyOpacity.jump(1);
       const r = el.getBoundingClientRect();
       if (r.width === 0) return;
-      //* A csepp közepéből ugrik a helyére — a cella közben szétnyílhat.
+      //* A kör közepéről veszi át a repülő ikont, ugyanakkorán — a csepp az
+      //* ikon helyére érkezett, tehát az eltolás itt jellemzően nulla.
       flyX.jump(pour.cx - (r.left + r.width / 2));
       flyY.jump(pour.cy - (r.top + r.height / 2));
-      flyScale.jump(0.85);
-      runs = [
-        animate(flyX, 0, FLY_X),
-        animate(flyY, 0, FLY_Y),
-        animate(flyScale, 1, FLY_S),
-      ];
+      runs = [animate(flyX, 0, FLY_X), animate(flyY, 0, FLY_Y)];
     });
     return () => {
       cancelled = true;
       for (const run of runs) run.stop();
-      pour.absorb();
+      pour.follow(null);
+      absorbLater.current = window.setTimeout(pour.absorb, 0);
       flyOpacity.jump(1);
       flyX.jump(0);
       flyY.jump(0);

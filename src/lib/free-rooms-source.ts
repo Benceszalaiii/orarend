@@ -41,6 +41,7 @@ import {
 import {
   API_BASE,
   FETCH_TIMEOUT_MS,
+  JEDLIK_POST_HEADERS,
   SIDE_FETCH_TIMEOUT_MS,
 } from "./jedlik-api";
 import { budapestNow } from "./push-plan";
@@ -186,7 +187,7 @@ async function fetchRoomWeek(
     try {
       const res = await fetch(`${API_BASE}/timetable/cards`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: JEDLIK_POST_HEADERS,
         //! PONTOSAN EGY SZŰRŐ. Lásd a fejlécet: két kitöltött mezőből nem
         //! metszet lesz, üres mindháromból pedig CSENDBEN az első osztály.
         body: JSON.stringify({

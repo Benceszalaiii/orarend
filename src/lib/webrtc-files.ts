@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AttachmentKind,
+  type ChatAttachment,
   FILE_CHUNK_BYTES,
   MAX_FILE_BYTES,
   MAX_FILE_NAME_LENGTH,
@@ -157,7 +158,16 @@ type Open = {
   meta: IncomingMeta;
   parts: Uint8Array<ArrayBuffer>[];
   received: number;
+  //* Az utolsó életjel ideje — ebből tudjuk, melyik átvitel halt meg félúton.
+  touched: number;
 };
+
+//! ─── A FÉLBEHAGYOTT ÁTVITEL NEM FOGLALHAT HELYET ÖRÖKRE ─────────────────────
+//! Egy `file-begin` után elmaradó keretek (bezárt fül, elaludt laptop, vagy
+//! szándék) különben a `MAX_OPEN` egyik helyét a kapcsolat végéig ülnék — három
+//! ilyen, és az a néző többé semmit nem tud feltölteni. Tizenöt másodperc
+//! csend egy 16 kB-os keretek között haladó átvitelben már nem lassúság.
+export const STALE_TRANSFER_MS = 15_000;
 
 export type ChunkResult = "ok" | "done" | "unknown" | "overflow";
 
@@ -169,7 +179,12 @@ export class Inbox {
     if (!Number.isInteger(meta.size) || meta.size <= 0) return false;
     if (meta.size > MAX_FILE_BYTES) return false;
     if (this.open.has(meta.id) || this.open.size >= MAX_OPEN) return false;
-    this.open.set(meta.id, { meta, parts: [], received: 0 });
+    this.open.set(meta.id, {
+      meta,
+      parts: [],
+      received: 0,
+      touched: Date.now(),
+    });
     return true;
   }
 
@@ -186,6 +201,7 @@ export class Inbox {
     //* nézet lehet, amit a böngésző a következő üzenetnél felülír.
     entry.parts.push(new Uint8Array(body));
     entry.received += body.byteLength;
+    entry.touched = Date.now();
     return entry.received === entry.meta.size ? "done" : "ok";
   }
 
@@ -207,8 +223,26 @@ export class Inbox {
     this.open.delete(id);
   }
 
-  clear(): void {
+  /** Mindent eldob; a visszaadott azonosítók folyamatjelzőit a hívó törli. */
+  clear(): string[] {
+    const ids = [...this.open.keys()];
     this.open.clear();
+    return ids;
+  }
+
+  /** Eldobja, ami `idleMs` óta nem mozdult, és visszaadja az azonosítóikat. */
+  sweep(idleMs: number = STALE_TRANSFER_MS): string[] {
+    const cutoff = Date.now() - idleMs;
+    const dead: string[] = [];
+    for (const [id, entry] of this.open) {
+      if (entry.touched < cutoff) dead.push(id);
+    }
+    for (const id of dead) this.open.delete(id);
+    return dead;
+  }
+
+  get size(): number {
+    return this.open.size;
   }
 
   /** Épp érkezik-e, és hol tart. A felület ebből rajzol folyamatjelzőt. */
@@ -336,6 +370,10 @@ export type Vault = {
   //! érvényes volt.
   get: (id: string) => FileBody | undefined;
   drop: (id: string) => void;
+  //! A MEGOSZTÁS VÉGE A FÁJLOK VÉGE IS. Nem elég, hogy többé senki nem kérheti
+  //! el őket: amíg a raktárban vannak, a memóriában is ott ülnek — a fejléc
+  //! ígérete („a megosztás végével a fájlok megszűnnek létezni") csak ezzel igaz.
+  clear: () => void;
 };
 
 export function useFileVault(budget: number): Vault {
@@ -390,6 +428,13 @@ export function useFileVault(budget: number): Vault {
     setFiles(next);
   }, []);
 
+  const clear = useCallback(() => {
+    if (held.current.size === 0) return;
+    for (const body of held.current.values()) URL.revokeObjectURL(body.url);
+    held.current = new Map();
+    setFiles(held.current);
+  }, []);
+
   //! A LAP ELHAGYÁSAKOR MINDEN CÍMET VISSZAVONUNK. Enélkül egy hosszú órán
   //! végignézett megosztás után a fül a bezárásáig tartaná a fájlokat.
   useEffect(
@@ -400,5 +445,31 @@ export function useFileVault(budget: number): Vault {
     [],
   );
 
-  return { files, put, get, drop };
+  return { files, put, get, drop, clear };
 }
+
+//* ---------------------------------------------------------------------------
+//* AMIT A FELÜLET LÁT — A MEGOSZTÓNÁL ÉS A NÉZŐNÉL UGYANAZ
+//* ---------------------------------------------------------------------------
+//! EGY FELÜLET, KÉT FORRÁS. A csevegőpanel nem tudja (és nem is kell tudnia),
+//! hogy a fájl helyben van-e, mert a megosztó ő maga, vagy mert elkérte. Ezért
+//! mindkét horog ugyanezt az alakot adja ki.
+export type UploadState = {
+  name: string;
+  /** 0…1 */
+  ratio: number;
+  failed: boolean;
+};
+
+export type FileSession = {
+  /** Ami már nálunk van: csatolmány-azonosító → tartalom. */
+  files: ReadonlyMap<string, FileBody>;
+  /** Épp érkező vagy menő átvitelek: azonosító → 0…1. */
+  transfers: ReadonlyMap<string, number>;
+  /** Amit a megosztó már nem tart — ezt hiába kérnénk el. */
+  unavailable: ReadonlySet<string>;
+  /** A saját, épp futó feltöltésünk. A megosztónál mindig `null`. */
+  upload: UploadState | null;
+  sendFile: (file: File, text: string) => void;
+  requestFile: (attachment: ChatAttachment) => void;
+};
