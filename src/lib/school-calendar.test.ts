@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { json, stubFetch } from "@/test/browser";
-import { loadDayBells, loadRingSystemNames, loadSchoolPlan } from "./school-calendar";
+
+//! SAJÁT PÉLDÁNY. A Bun egy folyamatban futtat minden tesztfájlt, közös
+//! modul-gyorsítótárral — a `timetable.test.ts` különben ugyanezt a
+//! memóriatárat töltené fel előttünk. A lekérdezés-rész új modult ad.
+const { loadDayBells, loadRingSystemNames, loadSchoolPlan } = (await import(
+  "./school-calendar.ts?isolated"
+)) as typeof import("./school-calendar");
 
 //! A modul memóriában gyorsítótáraz (hónaponként, naponként). Minden teszt
 //! ezért MÁS hónapot / napot kér — különben egy korábbi teszt válasza jönne.
