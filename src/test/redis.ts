@@ -36,6 +36,12 @@ export function redisDump(): Record<string, unknown> {
   return out;
 }
 
+//* Kulcs törlése a tárolók megkerülésével — egy lejárat vagy külső takarítás
+//* utánzása.
+export function redisDel(...keys: string[]): void {
+  for (const key of keys) data.delete(key);
+}
+
 export function redisTtl(key: string): number | null {
   const entry = live(key);
   if (!entry?.expiresAt) return null;

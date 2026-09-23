@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { redisControl, redisDump, resetRedis } from "@/test/redis";
+import { FakeRedis, redisControl, redisDel, redisDump, resetRedis } from "@/test/redis";
 import { MAILBOX_MAX, type SignalEnvelope, STREAM_TTL_SECONDS } from "./webrtc-shared";
 import type { StoredStream } from "./webrtc-store";
 import * as redisStore from "./webrtc-store";
@@ -106,8 +106,7 @@ describe("Redisszel — részletek", () => {
   test("a lejárt közvetítés kikerül az indexből listázáskor", async () => {
     await redisStore.putStream(stream("y"));
     //* Csak a kulcs tűnik el (lejárt), az index még emlegeti.
-    const fake = new (await import("@upstash/redis")).Redis({} as never);
-    await fake.del("rtc:stream:y");
+    redisDel("rtc:stream:y");
     await redisStore.dropStream("nincs"); //* üríti a lista gyorsítótárát
     expect(await redisStore.listStreams()).toEqual([]);
     expect(redisDump()["rtc:streams"]).toBeUndefined();
@@ -126,8 +125,7 @@ describe("Redisszel — részletek", () => {
   });
 
   test("a sérült levél kimarad", async () => {
-    const fake = new (await import("@upstash/redis")).Redis({} as never);
-    await fake.rpush("rtc:box:q", "{nem json", JSON.stringify(envelope(7)));
+    await new FakeRedis().rpush("rtc:box:q", "{nem json", JSON.stringify(envelope(7)));
     expect((await redisStore.drainSignals("q")).map((e) => e.at)).toEqual([7]);
   });
 });

@@ -136,6 +136,10 @@ export function installBrowser(options: Options = {}): FakeBrowser {
     }),
     setTimeout: globalThis.setTimeout,
     clearTimeout: globalThis.clearTimeout,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval,
+    atob: globalThis.atob,
+    btoa: globalThis.btoa,
   }) as unknown as FakeBrowser["window"];
   window.dispatchEvent = (event: Event) => {
     events.push(event.type);

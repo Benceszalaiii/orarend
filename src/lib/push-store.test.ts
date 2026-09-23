@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { lesson } from "@/test/fixtures";
-import { redisDump, resetRedis } from "@/test/redis";
+import { redisDel, redisDump, resetRedis } from "@/test/redis";
 import {
   leaseChange,
   leaseReminder,
@@ -81,10 +81,8 @@ describe("feliratkozások", () => {
     const key = Object.keys(redisDump()).find(
       (k) => k.startsWith("push:sub:") && (redisDump()[k] as string).includes("push/1"),
     );
-    const fake = new (await import("@upstash/redis")).Redis({} as never);
-    await fake.del(key as string);
+    redisDel(key as string);
     expect((await subscribersOf("class", "12A")).map((s) => s.endpoint)).toEqual(["https://push/2"]);
-    expect(redisDump()["push:class:12A"]).toEqual(new Set([key?.slice("push:sub:".length)]).size === 1 ? expect.any(Set) : undefined);
     expect((redisDump()["push:class:12A"] as Set<string>).size).toBe(1);
   });
 });
