@@ -22,8 +22,10 @@ Two distinct situations, both confirmed by what the code already optimizes for:
 - **Wall print.** `@page { size: A4 landscape }` with its own light palette and
   retained subject colors. The printed week is a second medium, not a fallback.
 
-Teachers and parents are **not** confirmed as an audience; nothing in the code
-targets them.
+Teachers are an audience in two roles: reading their own timetable (`/tanari`,
+the teacher view of `/ma`), and — with the clubs feature — **running clubs and
+competitions**: a teacher creates a club, or approves one a student proposed.
+Parents are **not** confirmed as an audience; nothing in the code targets them.
 
 ## Product Purpose
 
@@ -32,9 +34,16 @@ screen, no login, on a phone, with the group-split conflicts (csoportbontás)
 resolved to the student's own subset. Success is that a student stops opening
 the school portal.
 
+**Clubs and competitions (in progress, branch `szakkor-support`).** The school
+fails to get the schedule of its clubs (szakkörök) and competitions (versenyek)
+to students. The goal is that a student finds a club they would attend — and
+its time and room — without anyone telling them. Success is that a student
+learns about a club for their year from their own timetable, not from a notice
+board.
+
 ## Positioning
 
-Two mechanisms a generic timetable viewer could not truthfully copy:
+Mechanisms a generic timetable viewer could not truthfully copy:
 
 1. **Group-split merging.** Jedlikinfo returns every parallel group's card for a
    class. `src/lib/timetable-merge.ts` clusters the overlapping identities, lets
@@ -44,6 +53,16 @@ Two mechanisms a generic timetable viewer could not truthfully copy:
    days from the API's own A/B week letter (B week Wed–Fri + A week Mon–Tue)
    rather than counting from a hardcoded start date, so a holiday shifting the
    cycle does not desynchronize the app.
+3. **Class-less cards, surfaced (in progress).** Most clubs already exist in
+   Jedlikinfo — as cards in the room and teacher timetables with an empty class
+   (`rightBottom`), often titled only "Tehetséggondozó szakkör". A card with no
+   class never appears on any class timetable, which is exactly why students
+   don't know the schedule. The app stores each club's identity (name, audience,
+   organizers) and matches its expected slots against those cards via the room
+   sweep that already powers `/teremkereso` — so the time and room are confirmed
+   by the school's own data each week, and a club aimed at a class shows up on
+   that class's grid without a login. Verified on the week of 2026-09-21: 39 of
+   the 47 clubs on the school's list were found this way.
 
 ## Operating Context
 
@@ -57,10 +76,20 @@ Two mechanisms a generic timetable viewer could not truthfully copy:
 
 ## Capabilities and Constraints
 
-- **No auth, no accounts.** Deployed on Vercel. All user-facing state is
-  localStorage: selected class (`orarend:class:v1`), merge preferences
-  (`orarend:merge-prefs:v1`), and the local-only daily marker that keeps the
-  usage counter from double-counting one device (`orarend:usage:v1`).
+- **Login is optional, and reading never needs it.** The timetable works fully
+  as a guest, with state in localStorage: selected class (`orarend:class:v1`),
+  merge preferences (`orarend:merge-prefs:v1`), and the local-only daily marker
+  that keeps the usage counter from double-counting one device
+  (`orarend:usage:v1`). School login (Jedlikinfo AD or a school-domain Google
+  account) syncs preferences across devices.
+- **Clubs and competitions: public to read, login to take part.** Club and
+  competition pages, schedules and **member lists are public** — who attends a
+  club is itself information. Joining a club or entering a competition needs a
+  school login. Teachers create clubs; a student can propose one, and it only
+  goes live when the teacher they named approves it (`src/lib/club-access.ts`).
+  Competitions start with individual entries only. The app **cannot send
+  email** (addresses are synthetic `.invalid`), so every notification is push
+  or in-app.
 - **One server-side endpoint, and only one.** `/api/hasznalat` counts how many
   devices opened each class's timetable per day (Upstash Redis). It stores the
   class name and nothing else — no device id, no IP, no precise timestamp — so
@@ -86,7 +115,7 @@ Two mechanisms a generic timetable viewer could not truthfully copy:
 - Name: **Órarend**.
 - Existing routes: `/orarend` (week grid, default), `/ma` (today's view),
   `/adatvedelem` (privacy), `/statisztika` (operator-only usage report,
-  password-gated, noindex).
+  password-gated, noindex). Planned: `/szakkorok` and `/versenyek`.
 - The subject-color system is **data, not decoration**: a hash of the subject
   seeds one of 12 accent hues (`src/lib/accent.ts`), and print explicitly
   re-requests those backgrounds because the color identifies the subject.
@@ -116,12 +145,17 @@ Two mechanisms a generic timetable viewer could not truthfully copy:
    print because they are information.
 3. **The phone question is "where now", the desktop question is "what week".**
    The same data, two genuinely different jobs.
-4. **Client-only is a feature.** No login, no account, no per-user server-held
-   data — which also means every capability must be derivable on-device. The
-   one exception is the class-level usage counter, which is aggregate by
-   construction: if a measurement could describe one student, it does not ship.
+4. **Reading is free; only taking part is tied to an account.** Everything a
+   student needs to *know* — the timetable, clubs, competitions, deadlines —
+   works without a login. Per-user server data exists only where the student
+   acted on purpose: synced preferences, a club membership, a competition
+   entry. Anonymous measurements stay aggregate by construction: if a
+   measurement could describe one student, it does not ship.
 5. **Legibility outranks fitting.** The grid refuses to shrink below a scale
    where the subject name survives; it scrolls instead.
+6. **Say how you know.** A club time is either confirmed by the school's
+   timetable this week, stated only by the organizer, or still being scheduled
+   — and the page says which. A wrong schedule is worse than a missing one.
 
 ## Accessibility & Inclusion
 

@@ -1,6 +1,7 @@
 //! ─── AZ ADATBÁZIS SÉMÁJA ────────────────────────────────────────────────────
-//! Ez a séma a bejelentkezést, a beállítás-szinkront és a diák saját, órához
-//! kötött linkjeit / kivetítő-címeit szolgálja ki.
+//! Ez a séma a bejelentkezést, a beállítás-szinkront, a diák saját, órához
+//! kötött linkjeit / kivetítő-címeit, valamint a szakköröket és a versenyeket
+//! szolgálja ki.
 //! Az órarend adata NEM kerül ide: az a Jedlikinfóé, mi csak megjelenítjük. A
 //! használati statisztika és a push-feliratkozások továbbra is a Redisben élnek
 //! (`lib/usage-store.ts`, `lib/push-store.ts`) — azok NÉVTELENEK, és nem szabad,
@@ -149,6 +150,11 @@ model User {
   screenTaskHosts    ScreenTaskHost[]
   classroomScreens   ClassroomScreen[]
   teacherLessonLinks TeacherLessonLink[]
+
+  clubMemberships     ClubMember[]
+  proposedClubs       Club[]             @relation("clubProposer")
+  competitionEntries  CompetitionEntry[]
+  createdCompetitions Competition[]      @relation("competitionCreator")
 
   @@unique([email])
   @@map("user")
@@ -435,4 +441,278 @@ model Announcement {
 
   @@index([active])
   @@map("announcement")
+}
+
+//! ═══════════════════════════════════════════════════════════════════════════
+//! SZAKKÖRÖK
+//! ═══════════════════════════════════════════════════════════════════════════
+//! MIÉRT KELL EZ EGYÁLTALÁN, HA A JEDLIKINFO TUDJA AZ IDŐPONTOKAT. A szakkörök
+//! TÖBBSÉGE ott van a Jedlikinfóban — a terem és a tanár órarendjében, OSZTÁLY
+//! NÉLKÜLI kártyaként (üres `rightBottom`). Egy osztály nélküli kártya viszont
+//! egyetlen osztály órarendjében sem jelenik meg: a suli tudja, mikor van a
+//! szakkör, a diák nem látja. (Ellenőrizve 2026-09-21 hetére: a kiinduló lista
+//! 47 szakköréből 39 megvan így, sokszor csak „Tehetséggondozó szakkör" néven.)
+//!
+//! A FELOSZTÁS EZÉRT: a szakkör KILÉTE (neve, leírása, kinek szól, ki vezeti)
+//! itt él, mert a Jedlikinfo ezt nem tudja; az IDŐPONT itt csak VÁRAKOZÁS
+//! (`ClubSlot`), amit a teremkereső heti seprése igazol vagy cáfol. Egy
+//! elmaradt hét (tanítás nélküli nap) így nem hazudik „van szakkör"-t.
+//!
+//! A TANÁR A JELÉVEL SZEREPEL, NEM A FIÓKJÁVAL. A szakkört vezető tanárnak nem
+//! kell fiókja legyen ahhoz, hogy a szakköre látsszon; a Jedlikinfo jele (`BNM`)
+//! stabil, és ugyanez a kulcs a `TeacherLessonLink`-ben is. Belépett tanárnál a
+//! `User.teacherName`-ből oldjuk fel a jelet (`src/lib/classroom-store.ts`
+//! mintájára), és a jogosultság ezen a jelen múlik (`src/lib/club-access.ts`).
+
+//* A szakkör jellege — a szűréshez és a felirathoz. A felirat magyarul a
+//* `src/lib/clubs.ts`-ben él.
+enum ClubKind {
+  //* szakkör
+  CLUB
+  //* emelt szintű (érettségi) felkészítő
+  EXAM_PREP
+  //* versenyfelkészítő
+  COMPETITION_PREP
+  //* korrepetálás
+  TUTORING
+  //* felzárkóztató
+  CATCH_UP
+  //* kompetenciafejlesztés (egy osztálynak szól)
+  COMPETENCY
+}
+
+enum ClubStatus {
+  //! DIÁK JAVASOLTA, TANÁR MÉG NEM HAGYTA JÓVÁ. Ilyenkor NEM nyilvános: egy
+  //! diák javaslata attól lesz szakkör, hogy egy tanár vállalja.
+  PROPOSED
+  ACTIVE
+  //* Megszűnt — a lap megmarad (linkek, tagság), de a listákból kiesik.
+  ARCHIVED
+}
+
+model Club {
+  id   String @id @default(cuid())
+  //* Az URL-ben (`/szakkorok/<slug>`). Ékezet nélkül — lásd `clubSlug`.
+  slug String @unique
+
+  name        String
+  description String?    @db.Text
+  kind        ClubKind   @default(CLUB)
+  status      ClubStatus @default(ACTIVE)
+
+  //! ─── KINEK SZÓL ──────────────────────────────────────────────────────────
+  //! Ebből tudja a lap, hogy egy 09A-s diák órarendjére felkerül-e — belépés
+  //! nélkül is, pusztán a kiválasztott osztályból. A kettő VAGY kapcsolatban
+  //! áll: az évfolyam (`9`) vagy az osztály (`09A`) egyezése elég. Mindkettő
+  //! üres = mindenkinek szól (akkor a rácsra nem tesszük ki magától).
+  grades       Int[]
+  //* Osztálynevek pontosan a Jedlikinfo alakjában (`09A`, `13D`).
+  classes      String[]
+  //* Amit a két mező nem tud kifejezni, pl. „13D páros, 13E páratlan héten".
+  audienceNote String?
+
+  //* Ki javasolta (diák). `null` = tanár vagy admin hozta létre.
+  proposedById      String?
+  proposedBy        User?     @relation("clubProposer", fields: [proposedById], references: [id], onDelete: SetNull)
+  //* Melyik tanár hagyta jóvá a javaslatot (a JELE). Tanári létrehozásnál üres.
+  approvedByTeacher String?
+  approvedAt        DateTime?
+
+  //! A FRISSESSÉG TÁMPONTJA. Mikor erősítette meg utoljára egy vezető, hogy az
+  //! adatok stimmelnek. A Jedlikinfóval igazolt időpontokhoz nem kell (azokat a
+  //! heti seprés igazolja); a csak-tanár-szerinti időpontoknál ebből látszik,
+  //! mennyire régi az állítás.
+  confirmedAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizers   ClubOrganizer[]
+  slots        ClubSlot[]
+  members      ClubMember[]
+  //* A versenyfelkészítő szakkör és a verseny, amire készít.
+  competitions Competition[]
+
+  @@index([status])
+  @@map("club")
+}
+
+//! A szakkört vezető tanárok. Több is lehet (Média: HZ és MT). Az első
+//! vezetőnél `lead = true` — ő a szakkör arca a listában.
+model ClubOrganizer {
+  clubId  String
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  //* A Jedlikinfo tanárjele (`looksLikeTeacher`).
+  teacher String
+  lead    Boolean @default(false)
+
+  @@id([clubId, teacher])
+  @@index([teacher])
+  @@map("club_organizer")
+}
+
+//! HONNAN TUDJUK AZ IDŐPONTOT — ettől függ, mit mondhat a lap, ha egy héten
+//! nem találjuk a Jedlikinfóban.
+enum ClubSlotSource {
+  //* A Jedlikinfóban osztály nélküli kártyaként szerepel. Ha egy héten nincs
+  //* ott, a lap azt mondja: „ezen a héten nincs az órarendben".
+  TIMETABLE
+  //* Csak a vezető tanár szerint van. A lap ezt ki is mondja.
+  ORGANIZER
+}
+
+//! EGY RENDSZERES IDŐPONT: hét napja + kezdet + vég + terem. Nincs időpontja =
+//! a szakkör „egyeztetés alatt" — ezt NEM tároljuk külön, a slotok hiányából
+//! következik, így nem csúszhat el egymástól a kettő.
+//!
+//! PERCBEN, NEM ÓRASZÁMBAN. A Jedlikinfo kártyái percben adják az időt
+//! (`startMinuteFromMidnight`), és a szakkörök nem mindig órahatáron kezdenek
+//! (Forgácsolás 15:15–16:40). Az órasorszám a megjelenítésé.
+model ClubSlot {
+  id     String @id @default(cuid())
+  clubId String
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  //* 1 = hétfő … 5 = péntek (a Jedlikinfo `dayOfWeek`-je).
+  weekday     Int
+  startMinute Int
+  endMinute   Int
+  //* A terem Jedlikinfo-jele (`203`, `B5`, `CNC`, `Stúdió`). `null` = nincs
+  //* megadva (csak `ORGANIZER` forrásnál fordulhat elő).
+  room        String?
+  //! MELYIK VEZETŐ(K) KÁRTYÁJA. Ezzel illesztjük a Jedlikinfo kártyájára
+  //! (`leftBottom` a terem órarendjében). A Lego két napja két tanáré, ezért
+  //! két slot; a Média egy idősávja két tanáré, ezért egy slot két jellel.
+  teachers    String[]
+  source      ClubSlotSource @default(TIMETABLE)
+
+  //* Opcionális érvényesség (félévváltás, átszervezés). `null` = nyitott.
+  validFrom  DateTime?
+  validUntil DateTime?
+
+  @@index([clubId])
+  @@index([weekday, room])
+  @@map("club_slot")
+}
+
+//! A TAGSÁG NYILVÁNOS — a szakkör lapján bárki látja, ki jár oda. Ez döntés,
+//! nem mulasztás: a szakkör közösség, és a „ki jár még oda" maga is információ.
+model ClubMember {
+  clubId   String
+  club     Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt DateTime @default(now())
+
+  @@id([clubId, userId])
+  @@index([userId])
+  @@map("club_member")
+}
+
+//! ═══════════════════════════════════════════════════════════════════════════
+//! VERSENYEK
+//! ═══════════════════════════════════════════════════════════════════════════
+//! ELŐSZÖR CSAK EGYÉNI NEVEZÉS. A csapatok (kapitány, meghívó, névsorzárás)
+//! később jönnek; a meghívó akkor is csak alkalmazáson belüli lehet, mert ez az
+//! app e-mailt nem tud küldeni (lásd `User.email`).
+
+enum CompetitionCategory {
+  PROGRAMMING
+  NETWORKING
+  ENGINEERING
+  MATH
+  SCIENCE
+  LANGUAGE
+  HUMANITIES
+  OTHER
+}
+
+enum CompetitionStatus {
+  //* Szerkesztés alatt, csak a létrehozó látja.
+  DRAFT
+  //* Nevezés nyitva.
+  OPEN
+  //* Nevezés lezárva, még nem zajlott le.
+  CLOSED
+  FINISHED
+  CANCELLED
+}
+
+enum CompetitionVenue {
+  //* Iskolai terem — a `room` a Jedlikinfo-jele.
+  SCHOOL
+  //* Külső helyszín — a `location` a cím.
+  EXTERNAL
+  ONLINE
+}
+
+model Competition {
+  id   String @id @default(cuid())
+  //* Az URL-ben (`/versenyek/<slug>`).
+  slug String @unique
+
+  name        String
+  description String?             @db.Text
+  category    CompetitionCategory @default(OTHER)
+  status      CompetitionStatus   @default(DRAFT)
+  //* A hivatalos oldal (OSZTV, Dusza stb.), ha van. Csak `http`/`https`.
+  externalUrl String?
+
+  venue    CompetitionVenue @default(SCHOOL)
+  room     String?
+  location String?
+
+  startsAt             DateTime
+  endsAt               DateTime?
+  //! A NEVEZÉSI HATÁRIDŐ AZ, AMIT A DIÁK ELMULASZT. Ezért kap külön mezőt és
+  //! külön emlékeztetőt; `null` = a kezdésig lehet nevezni.
+  registrationDeadline DateTime?
+
+  //* Ki nevezhet: ugyanaz a VAGY-szabály, mint a `Club`-nál. Üres = mindenki.
+  grades   Int[]
+  classes  String[]
+  //* Létszámkorlát (fő). `null` = korlátlan.
+  capacity Int?
+
+  //* A felelős tanár(ok) jele — ők kezelik a nevezéseket.
+  teachers String[]
+
+  createdById String?
+  createdBy   User?   @relation("competitionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  phases  CompetitionPhase[]
+  entries CompetitionEntry[]
+  clubs   Club[]
+
+  @@index([status, startsAt])
+  @@map("competition")
+}
+
+//! Forduló / határidő: iskolai forduló → országos forduló → döntő.
+model CompetitionPhase {
+  id            String      @id @default(cuid())
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  title         String
+  startsAt      DateTime?
+  endsAt        DateTime?
+  order         Int         @default(0)
+
+  @@index([competitionId, order])
+  @@map("competition_phase")
+}
+
+model CompetitionEntry {
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@id([competitionId, userId])
+  @@index([userId])
+  @@map("competition_entry")
 }
