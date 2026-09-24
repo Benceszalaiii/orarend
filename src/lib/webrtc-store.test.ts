@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { FakeRedis, redisControl, redisDel, redisDump, resetRedis } from "@/test/redis";
-import { MAILBOX_MAX, type SignalEnvelope, STREAM_TTL_SECONDS } from "./webrtc-shared";
+import {
+  FakeRedis,
+  redisControl,
+  redisDel,
+  redisDump,
+  resetRedis,
+} from "@/test/redis";
+import {
+  MAILBOX_MAX,
+  type SignalEnvelope,
+  STREAM_TTL_SECONDS,
+} from "./webrtc-shared";
 import type { StoredStream } from "./webrtc-store";
 import * as redisStore from "./webrtc-store";
 
@@ -12,7 +22,9 @@ const saved = {
 };
 delete process.env.REDIS_KV_REST_API_URL;
 delete process.env.REDIS_KV_REST_API_TOKEN;
-const localStore = (await import("./webrtc-store.ts?local")) as typeof redisStore;
+const localStore = (await import(
+  `./webrtc-store.ts?${"local"}`
+)) as typeof redisStore;
 process.env.REDIS_KV_REST_API_URL = saved.url;
 process.env.REDIS_KV_REST_API_TOKEN = saved.token;
 
@@ -74,13 +86,16 @@ for (const [label, store] of [
     test("a postaláda sorrendben ürül, és üres marad", async () => {
       await store.pushSignal("peer-1", envelope(1));
       await store.pushSignal("peer-1", envelope(2));
-      expect((await store.drainSignals("peer-1")).map((e) => e.at)).toEqual([1, 2]);
+      expect((await store.drainSignals("peer-1")).map((e) => e.at)).toEqual([
+        1, 2,
+      ]);
       expect(await store.drainSignals("peer-1")).toEqual([]);
       expect(await store.drainSignals("senki")).toEqual([]);
     });
 
     test("a láda legfeljebb MAILBOX_MAX levelet tart, a régiek esnek ki", async () => {
-      for (let i = 0; i < MAILBOX_MAX + 5; i++) await store.pushSignal("peer-2", envelope(i));
+      for (let i = 0; i < MAILBOX_MAX + 5; i++)
+        await store.pushSignal("peer-2", envelope(i));
       const got = await store.drainSignals("peer-2");
       expect(got).toHaveLength(MAILBOX_MAX);
       expect(got[0].at).toBe(5);
@@ -125,7 +140,11 @@ describe("Redisszel — részletek", () => {
   });
 
   test("a sérült levél kimarad", async () => {
-    await new FakeRedis().rpush("rtc:box:q", "{nem json", JSON.stringify(envelope(7)));
+    await new FakeRedis().rpush(
+      "rtc:box:q",
+      "{nem json",
+      JSON.stringify(envelope(7)),
+    );
     expect((await redisStore.drainSignals("q")).map((e) => e.at)).toEqual([7]);
   });
 });

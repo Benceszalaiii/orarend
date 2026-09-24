@@ -123,7 +123,9 @@ describe("applyAppearance", () => {
   });
 
   test("a <html> osztálya, adatai és color-scheme-je", () => {
-    const b = installBrowser({ media: { "(prefers-color-scheme: dark)": false } });
+    const b = installBrowser({
+      media: { "(prefers-color-scheme: dark)": false },
+    });
     const root = b.document.documentElement;
     applyAppearance("dark", "prizma");
     expect(root.classList.contains("dark")).toBe(true);
@@ -141,7 +143,9 @@ describe("appearanceScript", () => {
   //* A festés előtti szkriptet ugyanazon a hamis böngészőn futtatjuk, mint
   //* amit az `applyAppearance` lát — a kettőnek ugyanazt kell eredményeznie.
   function run(storage: Record<string, string>, dark: boolean) {
-    const b = installBrowser({ media: { "(prefers-color-scheme: dark)": dark } });
+    const b = installBrowser({
+      media: { "(prefers-color-scheme: dark)": dark },
+    });
     for (const [k, v] of Object.entries(storage)) b.localStorage.setItem(k, v);
     const g = globalThis as Record<string, unknown>;
     g.matchMedia = b.window.matchMedia;

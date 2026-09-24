@@ -8,7 +8,11 @@ import {
   spanFraction,
 } from "./now";
 
-function item(startMin: number, endMin: number, over: Partial<AgendaItem> = {}): AgendaItem {
+function item(
+  startMin: number,
+  endMin: number,
+  over: Partial<AgendaItem> = {},
+): AgendaItem {
   return {
     key: `${over.dateKey ?? "2026-09-14"}-${startMin}`,
     kind: "lesson",
@@ -49,7 +53,11 @@ describe("nowState", () => {
   });
 
   test("üres nap, van holnap: done + dayEmpty", () => {
-    expect(nowState([], [tomorrow], 500)).toEqual({ phase: "done", next: tomorrow, dayEmpty: true });
+    expect(nowState([], [tomorrow], 500)).toEqual({
+      phase: "done",
+      next: tomorrow,
+      dayEmpty: true,
+    });
   });
 
   test("első óra előtt egy órás felvezetés", () => {
@@ -84,8 +92,16 @@ describe("nowState", () => {
   });
 
   test("utolsó óra után: done, a következő napra mutat", () => {
-    expect(nowState([first], [tomorrow], 700)).toEqual({ phase: "done", next: tomorrow, dayEmpty: false });
-    expect(nowState([first], [], 700)).toEqual({ phase: "done", next: null, dayEmpty: false });
+    expect(nowState([first], [tomorrow], 700)).toEqual({
+      phase: "done",
+      next: tomorrow,
+      dayEmpty: false,
+    });
+    expect(nowState([first], [], 700)).toEqual({
+      phase: "done",
+      next: null,
+      dayEmpty: false,
+    });
   });
 });
 

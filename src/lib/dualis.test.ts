@@ -35,7 +35,11 @@ describe("dualStatusOf", () => {
   });
 
   test("minden állapotnak van felirata", () => {
-    expect(Object.keys(DUAL_LABEL).sort()).toEqual(["dual", "school", "unknown"]);
+    expect(Object.keys(DUAL_LABEL).sort()).toEqual([
+      "dual",
+      "school",
+      "unknown",
+    ]);
   });
 });
 

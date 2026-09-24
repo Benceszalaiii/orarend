@@ -5,7 +5,7 @@ import { json, stubFetch } from "@/test/browser";
 //! modul-gyorsítótárral — a `timetable.test.ts` különben ugyanezt a
 //! memóriatárat töltené fel előttünk. A lekérdezés-rész új modult ad.
 const { loadDayBells, loadRingSystemNames, loadSchoolPlan } = (await import(
-  "./school-calendar.ts?isolated"
+  `./school-calendar.ts?${"isolated"}`
 )) as typeof import("./school-calendar");
 
 //! A modul memóriában gyorsítótáraz (hónaponként, naponként). Minden teszt
@@ -31,17 +31,29 @@ describe("loadSchoolPlan", () => {
             ringSystemId: 1,
             events: " Szalagavató \n\n Fogadóóra ",
           },
-          { date: "2031-01-31", week: "x", teachingDay: false, ringSystemId: null },
+          {
+            date: "2031-01-31",
+            week: "x",
+            teachingDay: false,
+            ringSystemId: null,
+          },
           { date: "nem dátum" },
           null,
         ]);
       }
       if (url.includes("year=2031&month=2")) {
-        return json([{ date: "2031-02-02", week: "B", teachingDay: true, ringSystemId: 2 }]);
+        return json([
+          { date: "2031-02-02", week: "B", teachingDay: true, ringSystemId: 2 },
+        ]);
       }
       return new Response("", { status: 404 });
     });
-    const plan = await loadSchoolPlan(["2031-01-30", "2031-01-31", "2031-02-02", "rossz"]);
+    const plan = await loadSchoolPlan([
+      "2031-01-30",
+      "2031-01-31",
+      "2031-02-02",
+      "rossz",
+    ]);
     expect(calls).toHaveLength(2);
     expect(plan.get("2031-01-30")).toEqual({
       dateKey: "2031-01-30",
@@ -73,7 +85,10 @@ describe("loadSchoolPlan", () => {
 
   test("egyidejű kérések egyetlen hálózati hívást osztanak", async () => {
     const { calls } = serve(() => json([{ date: "2031-04-01" }]));
-    await Promise.all([loadSchoolPlan(["2031-04-01"]), loadSchoolPlan(["2031-04-02"])]);
+    await Promise.all([
+      loadSchoolPlan(["2031-04-01"]),
+      loadSchoolPlan(["2031-04-02"]),
+    ]);
     expect(calls).toHaveLength(1);
   });
 
@@ -100,7 +115,12 @@ describe("loadRingSystemNames", () => {
   test("csak a teljes (id + név) bejegyzések, levágott névvel", async () => {
     serve((url) =>
       url.endsWith("timetable/ringsystem")
-        ? json([{ id: 1, name: " Normál " }, { id: "2", name: "x" }, { id: 3 }, null])
+        ? json([
+            { id: 1, name: " Normál " },
+            { id: "2", name: "x" },
+            { id: 3 },
+            null,
+          ])
         : new Response("", { status: 404 }),
     );
     const names = await loadRingSystemNames();

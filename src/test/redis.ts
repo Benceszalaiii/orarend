@@ -72,8 +72,6 @@ function decode(raw: unknown): unknown {
 }
 
 export class FakeRedis {
-  constructor(_config?: unknown) {}
-
   private track(cmd: string, args: unknown[]): void {
     redisCalls.push({ cmd, args });
     if (redisControl.broken) throw new Error("redis down");
@@ -145,7 +143,9 @@ export class FakeRedis {
     const entry = live(key);
     if (!entry) return null;
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(entry.value as Record<string, string>)) {
+    for (const [k, v] of Object.entries(
+      entry.value as Record<string, string>,
+    )) {
       out[k] = decode(v);
     }
     return out as T;
@@ -249,7 +249,12 @@ export class FakeRedis {
             };
           }
           return (...args: unknown[]) => {
-            const method = (self as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>)[prop];
+            const method = (
+              self as unknown as Record<
+                string,
+                (...a: unknown[]) => Promise<unknown>
+              >
+            )[prop];
             queue.push(() => method.apply(self, args));
             return chain;
           };

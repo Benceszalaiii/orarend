@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { installBrowser, json, stubFetch, uninstallBrowser } from "@/test/browser";
+import {
+  installBrowser,
+  json,
+  stubFetch,
+  uninstallBrowser,
+} from "@/test/browser";
 import {
   addDays,
   buildTimetableView,
@@ -64,17 +69,33 @@ describe("subjectStoreKey", () => {
 
 describe("groupHalf", () => {
   test("egész osztály vagy egy csoport: null", () => {
-    expect(groupHalf({ wholeClass: true, groupColumn: 0, groupCount: 2 })).toBeNull();
-    expect(groupHalf({ wholeClass: false, groupColumn: 0, groupCount: 1 })).toBeNull();
+    expect(
+      groupHalf({ wholeClass: true, groupColumn: 0, groupCount: 2 }),
+    ).toBeNull();
+    expect(
+      groupHalf({ wholeClass: false, groupColumn: 0, groupCount: 1 }),
+    ).toBeNull();
   });
 
   test("a csoportoszlop melyik félbe esik", () => {
-    expect(groupHalf({ wholeClass: false, groupColumn: 0, groupCount: 2 })).toBe(0);
-    expect(groupHalf({ wholeClass: false, groupColumn: 1, groupCount: 2 })).toBe(1);
-    expect(groupHalf({ wholeClass: false, groupColumn: 1, groupCount: 4 })).toBe(0);
-    expect(groupHalf({ wholeClass: false, groupColumn: 2, groupCount: 4 })).toBe(1);
-    expect(groupHalf({ wholeClass: false, groupColumn: 1, groupCount: 3 })).toBe(0);
-    expect(groupHalf({ wholeClass: false, groupColumn: 2, groupCount: 3 })).toBe(1);
+    expect(
+      groupHalf({ wholeClass: false, groupColumn: 0, groupCount: 2 }),
+    ).toBe(0);
+    expect(
+      groupHalf({ wholeClass: false, groupColumn: 1, groupCount: 2 }),
+    ).toBe(1);
+    expect(
+      groupHalf({ wholeClass: false, groupColumn: 1, groupCount: 4 }),
+    ).toBe(0);
+    expect(
+      groupHalf({ wholeClass: false, groupColumn: 2, groupCount: 4 }),
+    ).toBe(1);
+    expect(
+      groupHalf({ wholeClass: false, groupColumn: 1, groupCount: 3 }),
+    ).toBe(0);
+    expect(
+      groupHalf({ wholeClass: false, groupColumn: 2, groupCount: 3 }),
+    ).toBe(1);
   });
 });
 
@@ -82,9 +103,13 @@ describe("periodsOfDay", () => {
   const week = { periods: [{ number: 1, startMin: 480, endMin: 525 }] };
   test("eltérő csengetés csak akkor, ha ismert a rendje", () => {
     expect(periodsOfDay(week, { bells: null })).toBe(week.periods);
-    expect(periodsOfDay(week, { bells: { id: 2, name: "x", periods: [] } })).toBe(week.periods);
+    expect(
+      periodsOfDay(week, { bells: { id: 2, name: "x", periods: [] } }),
+    ).toBe(week.periods);
     const own = [{ number: 1, startMin: 480, endMin: 510 }];
-    expect(periodsOfDay(week, { bells: { id: 2, name: "x", periods: own } })).toBe(own);
+    expect(
+      periodsOfDay(week, { bells: { id: 2, name: "x", periods: own } }),
+    ).toBe(own);
   });
 });
 
@@ -96,7 +121,9 @@ describe("describeTimetableFailure", () => {
   }
 
   test("időtúllépés és megszakítás", () => {
-    expect(describeTimetableFailure(named("TimeoutError")).kind).toBe("timeout");
+    expect(describeTimetableFailure(named("TimeoutError")).kind).toBe(
+      "timeout",
+    );
     expect(describeTimetableFailure(named("AbortError")).kind).toBe("timeout");
   });
 
@@ -109,7 +136,9 @@ describe("describeTimetableFailure", () => {
   test("offline eszköz", () => {
     const b = installBrowser();
     (b.navigator as Record<string, unknown>).onLine = false;
-    expect(describeTimetableFailure(new TypeError("fetch failed"))).toEqual(timetableOffline());
+    expect(describeTimetableFailure(new TypeError("fetch failed"))).toEqual(
+      timetableOffline(),
+    );
   });
 
   test("egyéb: elérhetetlen, a kivétel nevével", () => {
@@ -149,7 +178,8 @@ describe("tárolt alany", () => {
 
     const replaced: string[] = [];
     b.window.history = {
-      replaceState: (_: unknown, __: string, url: URL) => replaced.push(url.toString()),
+      replaceState: (_: unknown, __: string, url: URL) =>
+        replaced.push(url.toString()),
     };
     loc.href = "https://orarend.test/orarend?class=12A";
     saveUrlSubject("class", "12A");
@@ -208,12 +238,28 @@ const WEEK = {
     { name: "Hétfő", date: "2032.01.05", week: "A", dayOfWeek: 1 },
     { name: "Kedd", date: "2032.01.06", week: "A", dayOfWeek: 2 },
   ],
-  periods: [{ number: 1, startHour: 8, startMinute: 0, endHour: 8, endMinute: 45 }],
+  periods: [
+    { number: 1, startHour: 8, startMinute: 0, endHour: 8, endMinute: 45 },
+  ],
   cards: [
     card({}),
     card({ text: "fiz", week: "B", dayOfWeek: 2, date: "2032.01.06" }),
-    card({ text: "tör", week: "A", dayOfWeek: 2, date: "2032.01.06", movedCard: true, type: "substitution" }),
-    card({ text: "ang", groupName: "1. csoport", groupColumn: 1, groupCount: 2, dayOfWeek: 2, date: "2032.01.06" }),
+    card({
+      text: "tör",
+      week: "A",
+      dayOfWeek: 2,
+      date: "2032.01.06",
+      movedCard: true,
+      type: "substitution",
+    }),
+    card({
+      text: "ang",
+      groupName: "1. csoport",
+      groupColumn: 1,
+      groupCount: 2,
+      dayOfWeek: 2,
+      date: "2032.01.06",
+    }),
   ],
 };
 
@@ -255,7 +301,10 @@ describe("resolveClass / resolveTeacher", () => {
 describe("getTimetableWeek", () => {
   test("osztály-nézet: a hét a Jedlikinfo kártyáiból", async () => {
     const { calls } = jedlik();
-    const week = await getTimetableWeek({ class: "12A", weekStart: "2032-01-07" });
+    const week = await getTimetableWeek({
+      class: "12A",
+      weekStart: "2032-01-07",
+    });
     expect(week.ok).toBe(true);
     expect(week.kind).toBe("class");
     expect(week.weekStart).toBe("2032-01-05");
@@ -277,7 +326,11 @@ describe("getTimetableWeek", () => {
     });
 
     //! A B hetes óra az A héten kimarad.
-    expect(week.lessons.map((l) => l.subjectShort)).toEqual(["mat", "tör", "ang"]);
+    expect(week.lessons.map((l) => l.subjectShort)).toEqual([
+      "mat",
+      "tör",
+      "ang",
+    ]);
     const [mat, tor, ang] = week.lessons;
     expect(mat).toMatchObject({
       key: "1-480-0-mat",
@@ -291,7 +344,12 @@ describe("getTimetableWeek", () => {
       dateKey: "2032-01-05",
     });
     expect(tor).toMatchObject({ moved: true, kind: "substitution" });
-    expect(ang).toMatchObject({ wholeClass: false, group: "1. csoport", groupColumn: 1, groupCount: 2 });
+    expect(ang).toMatchObject({
+      wholeClass: false,
+      group: "1. csoport",
+      groupColumn: 1,
+      groupCount: 2,
+    });
   });
 
   test("tanár-nézet: a csoportkártyák egy órává olvadnak", async () => {
@@ -301,15 +359,41 @@ describe("getTimetableWeek", () => {
             ...WEEK,
             cards: [
               //* Két csoport, ugyanaz a tanár, ugyanaz az óra: egész osztály.
-              card({ leftBottom: "12A", leftBottomTitle: "12.A", rightBottom: "102", groupColumn: 0, groupCount: 2, groupName: "1" }),
-              card({ leftBottom: "12A", leftBottomTitle: "12.A", rightBottom: "102", groupColumn: 1, groupCount: 2, groupName: "2" }),
+              card({
+                leftBottom: "12A",
+                leftBottomTitle: "12.A",
+                rightBottom: "102",
+                groupColumn: 0,
+                groupCount: 2,
+                groupName: "1",
+              }),
+              card({
+                leftBottom: "12A",
+                leftBottomTitle: "12.A",
+                rightBottom: "102",
+                groupColumn: 1,
+                groupCount: 2,
+                groupName: "2",
+              }),
               //* Csak az egyik csoport: bontott óra.
-              card({ text: "inf", leftBottom: "09B", leftBottomTitle: "", rightBottom: "214", groupColumn: 1, groupCount: 2, groupName: "lányok" }),
+              card({
+                text: "inf",
+                leftBottom: "09B",
+                leftBottomTitle: "",
+                rightBottom: "214",
+                groupColumn: 1,
+                groupCount: 2,
+                groupName: "lányok",
+              }),
             ],
           })
         : undefined,
     );
-    const week = await getTimetableWeek({ kind: "teacher", teacher: "LM", weekStart: "2032-01-05" });
+    const week = await getTimetableWeek({
+      kind: "teacher",
+      teacher: "LM",
+      weekStart: "2032-01-05",
+    });
     expect(week.ok).toBe(true);
     expect(week.lessons).toHaveLength(2);
     const [mat, inf] = week.lessons;
@@ -323,7 +407,12 @@ describe("getTimetableWeek", () => {
       group: "",
       groupCount: 1,
     });
-    expect(inf).toMatchObject({ classShort: "09B", className: "09B", wholeClass: false, group: "lányok" });
+    expect(inf).toMatchObject({
+      classShort: "09B",
+      className: "09B",
+      wholeClass: false,
+      group: "lányok",
+    });
   });
 
   test("ismeretlen alany: hibás hét, lekérés nélkül", async () => {
@@ -350,9 +439,14 @@ describe("getTimetableWeek", () => {
     [400, "request", true],
   ])("HTTP %i → %s (újrapróbálható: %p)", async (status, kind, retryable) => {
     jedlik((url) =>
-      url.endsWith("timetable/cards") ? new Response("", { status, statusText: "X" }) : undefined,
+      url.endsWith("timetable/cards")
+        ? new Response("", { status, statusText: "X" })
+        : undefined,
     );
-    const week = await getTimetableWeek({ class: "12A", weekStart: "2032-01-05" });
+    const week = await getTimetableWeek({
+      class: "12A",
+      weekStart: "2032-01-05",
+    });
     expect(week.ok).toBe(false);
     expect(week.error?.kind).toBe(kind as never);
     expect(week.error?.retryable).toBe(retryable);
@@ -360,15 +454,25 @@ describe("getTimetableWeek", () => {
   });
 
   test("üres hét: payload hiba a hét megnevezésével", async () => {
-    jedlik((url) => (url.endsWith("timetable/cards") ? json({ ...WEEK, days: [] }) : undefined));
-    const week = await getTimetableWeek({ class: "12A", weekStart: "2032-01-05" });
+    jedlik((url) =>
+      url.endsWith("timetable/cards") ? json({ ...WEEK, days: [] }) : undefined,
+    );
+    const week = await getTimetableWeek({
+      class: "12A",
+      weekStart: "2032-01-05",
+    });
     expect(week.error?.kind).toBe("payload");
     expect(week.error?.detail).toBe("hét: 2032-01-05");
   });
 
   test("rossz JSON: payload hiba", async () => {
-    jedlik((url) => (url.endsWith("timetable/cards") ? new Response("<html>") : undefined));
-    const week = await getTimetableWeek({ class: "12A", weekStart: "2032-01-05" });
+    jedlik((url) =>
+      url.endsWith("timetable/cards") ? new Response("<html>") : undefined,
+    );
+    const week = await getTimetableWeek({
+      class: "12A",
+      weekStart: "2032-01-05",
+    });
     expect(week.error?.kind).toBe("payload");
   });
 
@@ -376,12 +480,19 @@ describe("getTimetableWeek", () => {
     jedlik((url) => {
       if (url.includes("calendarplan?year=2032&month=2")) {
         return json([
-          { date: "2032-02-02", week: "A", teachingDay: true, ringSystemId: 1, events: "Farsang" },
+          {
+            date: "2032-02-02",
+            week: "A",
+            teachingDay: true,
+            ringSystemId: 1,
+            events: "Farsang",
+          },
           { date: "2032-02-03", week: "A", teachingDay: true, ringSystemId: 1 },
           { date: "2032-02-04", week: "A", teachingDay: true, ringSystemId: 7 },
         ]);
       }
-      if (url.endsWith("timetable/ringsystem")) return json([{ id: 7, name: "Rövidített" }]);
+      if (url.endsWith("timetable/ringsystem"))
+        return json([{ id: 7, name: "Rövidített" }]);
       if (url.endsWith("timetable/ringsystem/2032-02-04")) {
         return json([{ óra: 1, becsengetés: "8:00", kicsengetés: "8:30" }]);
       }
@@ -398,9 +509,16 @@ describe("getTimetableWeek", () => {
       }
       return undefined;
     });
-    const week = await getTimetableWeek({ class: "12A", weekStart: "2032-02-02" });
+    const week = await getTimetableWeek({
+      class: "12A",
+      weekStart: "2032-02-02",
+    });
     const [mon, tue, wed] = week.days;
-    expect(mon).toMatchObject({ teaching: true, notes: ["Farsang"], bells: null });
+    expect(mon).toMatchObject({
+      teaching: true,
+      notes: ["Farsang"],
+      bells: null,
+    });
     expect(tue.bells).toBeNull();
     expect(wed.bells).toEqual({
       id: 7,

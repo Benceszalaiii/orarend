@@ -1,13 +1,34 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type FakeBrowser, installBrowser, json, stubFetch, uninstallBrowser } from "@/test/browser";
-import { currentSubscription, disablePush, enablePush, loadPrefs, pushSupport, refreshPush, updatePush } from "./push";
+import {
+  type FakeBrowser,
+  installBrowser,
+  json,
+  stubFetch,
+  uninstallBrowser,
+} from "@/test/browser";
+import {
+  currentSubscription,
+  disablePush,
+  enablePush,
+  loadPrefs,
+  pushSupport,
+  refreshPush,
+  updatePush,
+} from "./push";
 import { DEFAULT_PREFS } from "./push-shared";
 
-const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile Safari/604.1";
+const IPHONE =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile Safari/604.1";
 //* Egy valódi alakú (65 bájtos) VAPID nyilvános kulcs, base64url-ben.
-const VAPID = "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U";
+const VAPID =
+  "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U";
 
-type FakeSub = { endpoint: string; unsubscribed: boolean; toJSON(): unknown; unsubscribe(): Promise<boolean> };
+type FakeSub = {
+  endpoint: string;
+  unsubscribed: boolean;
+  toJSON(): unknown;
+  unsubscribe(): Promise<boolean>;
+};
 function fakeSubscription(endpoint = "https://push.example/abc"): FakeSub {
   return {
     endpoint,
@@ -35,7 +56,10 @@ function withPush(browser: FakeBrowser) {
       getSubscription: async () => existing,
     },
   };
-  browser.navigator.serviceWorker = { ready: Promise.resolve(registration), register: async () => registration };
+  browser.navigator.serviceWorker = {
+    ready: Promise.resolve(registration),
+    register: async () => registration,
+  };
   browser.window.Notification = {};
   browser.window.PushManager = {};
   g.Notification = {
@@ -69,8 +93,19 @@ describe("loadPrefs", () => {
   });
 
   test("a szemét mezőket kiszűri", () => {
-    b.localStorage.setItem("orarend:push:v1", JSON.stringify({ classes: ["12A", 3], teachers: "LM", everyLesson: "true" }));
-    expect(loadPrefs()).toEqual({ classes: ["12A"], teachers: [], everyLesson: false });
+    b.localStorage.setItem(
+      "orarend:push:v1",
+      JSON.stringify({
+        classes: ["12A", 3],
+        teachers: "LM",
+        everyLesson: "true",
+      }),
+    );
+    expect(loadPrefs()).toEqual({
+      classes: ["12A"],
+      teachers: [],
+      everyLesson: false,
+    });
     b.localStorage.setItem("orarend:push:v1", "{");
     expect(loadPrefs()).toEqual(DEFAULT_PREFS);
   });
@@ -99,7 +134,9 @@ describe("pushSupport", () => {
   });
 
   test("az asztali módú iPad is iOS", () => {
-    b = installBrowser({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" });
+    b = installBrowser({
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+    });
     withPush(b);
     b.navigator.maxTouchPoints = 5;
     expect(pushSupport()).toBe("needs-install");
@@ -133,16 +170,26 @@ describe("enablePush", () => {
 
   test("a korlát fölötti alanyokat levágja", async () => {
     permission = "granted";
-    await enablePush({ classes: ["1", "2", "3", "4", "5", "6", "7"], teachers: ["A", "B", "C"], everyLesson: false });
+    await enablePush({
+      classes: ["1", "2", "3", "4", "5", "6", "7"],
+      teachers: ["A", "B", "C"],
+      everyLesson: false,
+    });
     const body = JSON.parse(stub.calls[0].init?.body as string);
     expect(body.classes).toHaveLength(5);
     expect(body.teachers).toHaveLength(2);
   });
 
   test("üres választás, hiányzó kulcs, elutasított engedély", async () => {
-    expect(await enablePush(DEFAULT_PREFS)).toEqual({ ok: false, reason: "unsupported" });
+    expect(await enablePush(DEFAULT_PREFS)).toEqual({
+      ok: false,
+      reason: "unsupported",
+    });
     delete process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    expect(await enablePush(prefs)).toEqual({ ok: false, reason: "misconfigured" });
+    expect(await enablePush(prefs)).toEqual({
+      ok: false,
+      reason: "misconfigured",
+    });
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY = VAPID;
     permission = "denied";
     expect(await enablePush(prefs)).toEqual({ ok: false, reason: "denied" });
@@ -173,16 +220,28 @@ describe("feliratkozás után", () => {
   });
 
   test("updatePush elküldi és elmenti", async () => {
-    expect(await updatePush({ classes: [], teachers: ["LM"], everyLesson: false })).toEqual({ ok: true });
-    expect(JSON.parse(stub.calls[0].init?.body as string).endpoint).toBe("https://push.example/existing");
+    expect(
+      await updatePush({ classes: [], teachers: ["LM"], everyLesson: false }),
+    ).toEqual({ ok: true });
+    expect(JSON.parse(stub.calls[0].init?.body as string).endpoint).toBe(
+      "https://push.example/existing",
+    );
     expect(loadPrefs().teachers).toEqual(["LM"]);
-    expect(await updatePush(DEFAULT_PREFS)).toEqual({ ok: false, reason: "unsupported" });
+    expect(await updatePush(DEFAULT_PREFS)).toEqual({
+      ok: false,
+      reason: "unsupported",
+    });
     existing = null;
-    expect(await updatePush({ classes: ["12A"], teachers: [], everyLesson: false })).toEqual({ ok: false, reason: "server" });
+    expect(
+      await updatePush({ classes: ["12A"], teachers: [], everyLesson: false }),
+    ).toEqual({ ok: false, reason: "server" });
   });
 
   test("disablePush: törli a szerverről, leiratkozik, elfelejt", async () => {
-    b.localStorage.setItem("orarend:push:v1", JSON.stringify({ classes: ["12A"] }));
+    b.localStorage.setItem(
+      "orarend:push:v1",
+      JSON.stringify({ classes: ["12A"] }),
+    );
     const sub = existing as FakeSub;
     await disablePush();
     expect(stub.calls[0].init?.method).toBe("DELETE");
@@ -193,7 +252,10 @@ describe("feliratkozás után", () => {
   test("refreshPush csak mentett választással küld", async () => {
     await refreshPush();
     expect(stub.calls).toHaveLength(0);
-    b.localStorage.setItem("orarend:push:v1", JSON.stringify({ classes: ["12A"] }));
+    b.localStorage.setItem(
+      "orarend:push:v1",
+      JSON.stringify({ classes: ["12A"] }),
+    );
     await refreshPush();
     expect(stub.calls).toHaveLength(1);
   });

@@ -28,7 +28,14 @@ describe("sanitizeFeedRequest", () => {
   });
 
   test("tanár-kérés, duális nélkül", () => {
-    expect(sanitizeFeedRequest({ kind: "teacher", short: "LM", prefs: null, dual: null })).toEqual({
+    expect(
+      sanitizeFeedRequest({
+        kind: "teacher",
+        short: "LM",
+        prefs: null,
+        dual: null,
+      }),
+    ).toEqual({
       kind: "teacher",
       short: "LM",
       prefs: [],
@@ -37,7 +44,9 @@ describe("sanitizeFeedRequest", () => {
   });
 
   test("ismeretlen fajta osztálynak számít", () => {
-    expect(sanitizeFeedRequest({ kind: "room", short: "12A" })?.kind).toBe("class");
+    expect(sanitizeFeedRequest({ kind: "room", short: "12A" })?.kind).toBe(
+      "class",
+    );
   });
 
   test("érvénytelen alany vagy bemenet: null", () => {
@@ -77,9 +86,15 @@ describe("címek", () => {
 
   test("az út és a három link", () => {
     expect(feedPath(token)).toBe(`/api/naptar/${token}.ics`);
-    expect(webcalUrl("https://orarend.hu", token)).toBe(`webcal://orarend.hu/api/naptar/${token}.ics`);
-    expect(webcalUrl("http://localhost:3000", token)).toBe(`webcal://localhost:3000/api/naptar/${token}.ics`);
-    expect(httpsFeedUrl("https://orarend.hu", token)).toBe(`https://orarend.hu/api/naptar/${token}.ics`);
+    expect(webcalUrl("https://orarend.hu", token)).toBe(
+      `webcal://orarend.hu/api/naptar/${token}.ics`,
+    );
+    expect(webcalUrl("http://localhost:3000", token)).toBe(
+      `webcal://localhost:3000/api/naptar/${token}.ics`,
+    );
+    expect(httpsFeedUrl("https://orarend.hu", token)).toBe(
+      `https://orarend.hu/api/naptar/${token}.ics`,
+    );
     expect(googleCalendarUrl("https://orarend.hu", token)).toBe(
       `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(`https://orarend.hu/api/naptar/${token}.ics`)}`,
     );

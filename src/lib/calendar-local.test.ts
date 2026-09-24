@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type FakeBrowser, installBrowser, json, stubFetch, uninstallBrowser } from "@/test/browser";
+import {
+  type FakeBrowser,
+  installBrowser,
+  json,
+  stubFetch,
+  uninstallBrowser,
+} from "@/test/browser";
 import {
   currentFeedState,
   forgetStoredFeed,
@@ -34,7 +40,14 @@ afterEach(() => {
 });
 
 describe("tárolt feedek", () => {
-  const feed: StoredFeed = { ...LINKS, kind: "class", short: "12A", bound: false, fingerprint: "|-", savedAt: 1 };
+  const feed: StoredFeed = {
+    ...LINKS,
+    kind: "class",
+    short: "12A",
+    bound: false,
+    fingerprint: "|-",
+    savedAt: 1,
+  };
 
   test("mentés, olvasás, elfelejtés", () => {
     expect(loadStoredFeed("12A")).toBeNull();
@@ -51,7 +64,10 @@ describe("tárolt feedek", () => {
   });
 
   test("sérült tár vagy jegy nélküli bejegyzés: null", () => {
-    b.localStorage.setItem("orarend:calendar:v1", JSON.stringify({ "12A": { kind: "class" } }));
+    b.localStorage.setItem(
+      "orarend:calendar:v1",
+      JSON.stringify({ "12A": { kind: "class" } }),
+    );
     expect(loadStoredFeed("12A")).toBeNull();
     b.localStorage.setItem("orarend:calendar:v1", "{");
     expect(loadStoredFeed("12A")).toBeNull();
@@ -83,7 +99,11 @@ describe("currentFeedState", () => {
 describe("requestFeed", () => {
   test("siker: elküldi az állapotot és elmenti a linket", async () => {
     saveLocalPreferences("12A", [{ clusterKey: "a", chosen: "a" }]);
-    const result = await requestFeed({ kind: "class", short: "12A", token: "old" });
+    const result = await requestFeed({
+      kind: "class",
+      short: "12A",
+      token: "old",
+    });
     expect(result.status).toBe("ok");
     const [call] = stub.calls;
     expect(call.url).toBe("/api/naptar");
@@ -95,7 +115,13 @@ describe("requestFeed", () => {
       token: "old",
     });
     const saved = loadStoredFeed("12A");
-    expect(saved).toMatchObject({ ...LINKS, kind: "class", short: "12A", bound: true, fingerprint: "a=a|-" });
+    expect(saved).toMatchObject({
+      ...LINKS,
+      kind: "class",
+      short: "12A",
+      bound: true,
+      fingerprint: "a=a|-",
+    });
   });
 
   test.each([
@@ -104,7 +130,9 @@ describe("requestFeed", () => {
     [500, "error"],
   ])("HTTP %i → %s", async (status, expected) => {
     reply = () => new Response("", { status });
-    expect((await requestFeed({ kind: "teacher", short: "LM" })).status).toBe(expected as never);
+    expect((await requestFeed({ kind: "teacher", short: "LM" })).status).toBe(
+      expected as never,
+    );
     expect(loadStoredFeed("tanar:LM")).toBeNull();
   });
 
@@ -112,13 +140,24 @@ describe("requestFeed", () => {
     reply = () => {
       throw new Error("offline");
     };
-    expect((await requestFeed({ kind: "class", short: "12A" })).status).toBe("error");
-    expect((await requestFeed({ kind: "class", short: "" })).status).toBe("error");
+    expect((await requestFeed({ kind: "class", short: "12A" })).status).toBe(
+      "error",
+    );
+    expect((await requestFeed({ kind: "class", short: "" })).status).toBe(
+      "error",
+    );
   });
 });
 
 describe("revokeFeed", () => {
-  const feed: StoredFeed = { ...LINKS, kind: "teacher", short: "LM", bound: true, fingerprint: "", savedAt: 1 };
+  const feed: StoredFeed = {
+    ...LINKS,
+    kind: "teacher",
+    short: "LM",
+    bound: true,
+    fingerprint: "",
+    savedAt: 1,
+  };
 
   test("siker: törli a szerverről és a készülékről", async () => {
     saveStoredFeed("tanar:LM", feed);
@@ -143,8 +182,23 @@ describe("revokeFeed", () => {
 
 describe("refreshStoredFeeds", () => {
   test("csak a megváltozott alanyt küldi újra, a meglévő jeggyel", async () => {
-    saveStoredFeed("12A", { ...LINKS, kind: "class", short: "12A", bound: false, fingerprint: "|-", savedAt: 1 });
-    saveStoredFeed("10B", { ...LINKS, token: "Tok10B", kind: "class", short: "10B", bound: false, fingerprint: "|-", savedAt: 1 });
+    saveStoredFeed("12A", {
+      ...LINKS,
+      kind: "class",
+      short: "12A",
+      bound: false,
+      fingerprint: "|-",
+      savedAt: 1,
+    });
+    saveStoredFeed("10B", {
+      ...LINKS,
+      token: "Tok10B",
+      kind: "class",
+      short: "10B",
+      bound: false,
+      fingerprint: "|-",
+      savedAt: 1,
+    });
     saveLocalPreferences("10B", [{ clusterKey: "x", chosen: "x" }]);
     await refreshStoredFeeds();
     expect(stub.calls).toHaveLength(1);

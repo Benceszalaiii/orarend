@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type FakeBrowser, installBrowser, uninstallBrowser } from "@/test/browser";
+import {
+  type FakeBrowser,
+  installBrowser,
+  uninstallBrowser,
+} from "@/test/browser";
 import { loadPalette, loadTheme } from "./appearance";
 import { loadDualSchedule } from "./dual-schedule";
 import { loadIdentity } from "./identity";
@@ -14,13 +18,19 @@ import {
   saveSyncMeta,
 } from "./prefs-local";
 import { EMPTY_PREFS, type SyncedPrefs } from "./prefs-shared";
-import { loadCachedClass, loadCachedTeacher, saveCachedClass } from "./timetable";
+import {
+  loadCachedClass,
+  loadCachedTeacher,
+  saveCachedClass,
+} from "./timetable";
 import { loadLocalPreferences, saveLocalPreferences } from "./timetable-merge";
 
 describe("szerveren", () => {
   test("üres csomag, és az alkalmazás néma", () => {
     expect(collectLocalPrefs()).toEqual(EMPTY_PREFS);
-    expect(() => applyLocalPrefs({ ...EMPTY_PREFS, class: "12A" })).not.toThrow();
+    expect(() =>
+      applyLocalPrefs({ ...EMPTY_PREFS, class: "12A" }),
+    ).not.toThrow();
   });
 });
 
@@ -63,7 +73,9 @@ describe("böngészőben", () => {
     expect(loadIdentity()).toBe("teacher");
     expect(loadTheme()).toBe("light");
     expect(loadPalette()).toBe("nyar");
-    expect(loadLocalPreferences("10B")).toEqual([{ clusterKey: "k", chosen: "c" }]);
+    expect(loadLocalPreferences("10B")).toEqual([
+      { clusterKey: "k", chosen: "c" },
+    ]);
     expect(loadDualSchedule("10B")).toEqual({ A: [1], B: [] });
     expect(loadHiddenMenu()).toEqual(["duty", "rooms"]);
     expect(b.document.documentElement.dataset.palette).toBe("nyar");
@@ -92,7 +104,10 @@ describe("böngészőben", () => {
     expect(loadSyncMeta()).toEqual({ revision: 3, userId: "u1" });
     clearSyncMeta();
     expect(loadSyncMeta()).toBeNull();
-    b.localStorage.setItem("orarend:sync-meta:v1", JSON.stringify({ revision: "3", userId: "u1" }));
+    b.localStorage.setItem(
+      "orarend:sync-meta:v1",
+      JSON.stringify({ revision: "3", userId: "u1" }),
+    );
     expect(loadSyncMeta()).toBeNull();
     b.localStorage.setItem("orarend:sync-meta:v1", "{");
     expect(loadSyncMeta()).toBeNull();
@@ -111,7 +126,10 @@ describe("mergePrefs", () => {
     ...EMPTY_PREFS,
     class: "12A",
     theme: "dark",
-    merge: { "12A": [{ clusterKey: "l", chosen: "l" }], "10B": [{ clusterKey: "x", chosen: "x" }] },
+    merge: {
+      "12A": [{ clusterKey: "l", chosen: "l" }],
+      "10B": [{ clusterKey: "x", chosen: "x" }],
+    },
   };
   const remote: SyncedPrefs = {
     ...EMPTY_PREFS,
@@ -127,7 +145,10 @@ describe("mergePrefs", () => {
       class: "12A",
       theme: "dark",
       palette: "prizma",
-      merge: { "12A": [{ clusterKey: "l", chosen: "l" }], "10B": [{ clusterKey: "x", chosen: "x" }] },
+      merge: {
+        "12A": [{ clusterKey: "l", chosen: "l" }],
+        "10B": [{ clusterKey: "x", chosen: "x" }],
+      },
       hiddenMenu: ["duty"],
     });
   });

@@ -20,7 +20,14 @@ function serve(handler: Parameters<typeof stubFetch>[0]) {
   return stub;
 }
 
-function raw(id: number, day: string, brk: string, area: string | null, teacher: string, week = "A") {
+function raw(
+  id: number,
+  day: string,
+  brk: string,
+  area: string | null,
+  teacher: string,
+  week = "A",
+) {
   return { id, day, break: brk, area, responsibleTeacher: teacher, week };
 }
 
@@ -75,21 +82,38 @@ describe("getHallDutyByArea", () => {
       ]),
     );
     const groups = await getHallDutyByArea();
-    expect(groups.map((g) => g.area)).toEqual(["2.emelet", "B épület", "ismeretlen", HALL_DUTY_NO_AREA_LABEL]);
+    expect(groups.map((g) => g.area)).toEqual([
+      "2.emelet",
+      "B épület",
+      "ismeretlen",
+      HALL_DUTY_NO_AREA_LABEL,
+    ]);
     expect(groups[0].slots.map((s) => s.teacher)).toEqual(["LM", "AA"]);
   });
 });
 
 describe("breakSpanOf", () => {
   test("a szó szerinti idősáv", () => {
-    expect(breakSpanOf("7.45-8.00", [])).toEqual({ startMin: 465, endMin: 480 });
-    expect(breakSpanOf(" 7:45 - 8:00 ", [])).toEqual({ startMin: 465, endMin: 480 });
+    expect(breakSpanOf("7.45-8.00", [])).toEqual({
+      startMin: 465,
+      endMin: 480,
+    });
+    expect(breakSpanOf(" 7:45 - 8:00 ", [])).toEqual({
+      startMin: 465,
+      endMin: 480,
+    });
     expect(breakSpanOf("8.00-7.45", [])).toBeNull();
   });
 
   test("a számozott szünet a két óra közti rés", () => {
-    expect(breakSpanOf("1.szünet", PERIODS)).toEqual({ startMin: 525, endMin: 535 });
-    expect(breakSpanOf("3. Szünet", PERIODS)).toEqual({ startMin: 635, endMin: 650 });
+    expect(breakSpanOf("1.szünet", PERIODS)).toEqual({
+      startMin: 525,
+      endMin: 535,
+    });
+    expect(breakSpanOf("3. Szünet", PERIODS)).toEqual({
+      startMin: 635,
+      endMin: 650,
+    });
   });
 
   test("hiányzó óra vagy nem időhöz köthető név: null", () => {
@@ -109,16 +133,63 @@ describe("hallDutyDayOf", () => {
 });
 
 const SLOTS: HallDutySlot[] = [
-  { id: 1, day: "HÉTFŐ", breakName: "2.szünet", area: "B épület", teacher: "KB", week: "A" },
-  { id: 2, day: "HÉTFŐ", breakName: "2.szünet", area: "2.emelet", teacher: "LM", week: "A" },
-  { id: 3, day: "HÉTFŐ", breakName: "7.45-8.00", area: "1.emelet", teacher: "AA", week: "A" },
-  { id: 4, day: "HÉTFŐ", breakName: "vezetői ügyelet", area: null, teacher: "IG", week: "A" },
-  { id: 5, day: "HÉTFŐ", breakName: "1.szünet", area: "1.emelet", teacher: "BB", week: "B" },
-  { id: 6, day: "KEDD", breakName: "1.szünet", area: "1.emelet", teacher: "CC", week: "A" },
+  {
+    id: 1,
+    day: "HÉTFŐ",
+    breakName: "2.szünet",
+    area: "B épület",
+    teacher: "KB",
+    week: "A",
+  },
+  {
+    id: 2,
+    day: "HÉTFŐ",
+    breakName: "2.szünet",
+    area: "2.emelet",
+    teacher: "LM",
+    week: "A",
+  },
+  {
+    id: 3,
+    day: "HÉTFŐ",
+    breakName: "7.45-8.00",
+    area: "1.emelet",
+    teacher: "AA",
+    week: "A",
+  },
+  {
+    id: 4,
+    day: "HÉTFŐ",
+    breakName: "vezetői ügyelet",
+    area: null,
+    teacher: "IG",
+    week: "A",
+  },
+  {
+    id: 5,
+    day: "HÉTFŐ",
+    breakName: "1.szünet",
+    area: "1.emelet",
+    teacher: "BB",
+    week: "B",
+  },
+  {
+    id: 6,
+    day: "KEDD",
+    breakName: "1.szünet",
+    area: "1.emelet",
+    teacher: "CC",
+    week: "A",
+  },
 ];
 
 describe("buildHallDutyDay", () => {
-  const day = buildHallDutyDay(SLOTS, { dateKey: "2026-09-14", day: "HÉTFŐ", week: "A", periods: PERIODS });
+  const day = buildHallDutyDay(SLOTS, {
+    dateKey: "2026-09-14",
+    day: "HÉTFŐ",
+    week: "A",
+    periods: PERIODS,
+  });
 
   test("csak a nap és a hét sorai, időrendben, a vezető külön", () => {
     expect(day.leader).toBe("IG");
@@ -135,13 +206,21 @@ describe("buildHallDutyDay", () => {
   });
 
   test("csengetés nélkül időhatár nélkül", () => {
-    const bare = buildHallDutyDay(SLOTS, { dateKey: "x", day: "HÉTFŐ", week: "A", periods: [] });
+    const bare = buildHallDutyDay(SLOTS, {
+      dateKey: "x",
+      day: "HÉTFŐ",
+      week: "A",
+      periods: [],
+    });
     expect(bare.breaks[1]).toMatchObject({ startMin: null, endMin: null });
   });
 
   describe("hallDutyNow", () => {
     test("reggel előtt felvezetés, ügyelet alatt aktuális + következő", () => {
-      expect(hallDutyNow(day, 400)).toMatchObject({ phase: "before", span: { fromMin: 405, toMin: 465 } });
+      expect(hallDutyNow(day, 400)).toMatchObject({
+        phase: "before",
+        span: { fromMin: 405, toMin: 465 },
+      });
       expect(hallDutyNow(day, 470)).toMatchObject({
         phase: "duty",
         current: { name: "7.45-8.00" },
@@ -150,13 +229,24 @@ describe("buildHallDutyDay", () => {
     });
 
     test("két ügyelet között, és a végén", () => {
-      expect(hallDutyNow(day, 500)).toMatchObject({ phase: "between", span: { fromMin: 480, toMin: 580 } });
+      expect(hallDutyNow(day, 500)).toMatchObject({
+        phase: "between",
+        span: { fromMin: 480, toMin: 580 },
+      });
       expect(hallDutyNow(day, 590)).toEqual({ phase: "done" });
     });
 
     test("időzítés nélküli nap: none", () => {
-      const bare = buildHallDutyDay(SLOTS, { dateKey: "x", day: "HÉTFŐ", week: "A", periods: [] });
-      const onlyNamed = { ...bare, breaks: bare.breaks.filter((b) => b.startMin === null) };
+      const bare = buildHallDutyDay(SLOTS, {
+        dateKey: "x",
+        day: "HÉTFŐ",
+        week: "A",
+        periods: [],
+      });
+      const onlyNamed = {
+        ...bare,
+        breaks: bare.breaks.filter((b) => b.startMin === null),
+      };
       expect(hallDutyNow(onlyNamed, 500)).toEqual({ phase: "none" });
     });
   });

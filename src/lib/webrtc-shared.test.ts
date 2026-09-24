@@ -32,12 +32,16 @@ describe("viewerDelay", () => {
 describe("stunServers", () => {
   test("alapból a két nyilvános STUN", () => {
     expect(stunServers(undefined)).toEqual([
-      { urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] },
+      {
+        urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"],
+      },
     ]);
   });
 
   test("csak stun: címek, a turn: és a szemét kimarad", () => {
-    expect(stunServers(" stun:a:1 , turn:b:2, http://x,  ")).toEqual([{ urls: ["stun:a:1"] }]);
+    expect(stunServers(" stun:a:1 , turn:b:2, http://x,  ")).toEqual([
+      { urls: ["stun:a:1"] },
+    ]);
   });
 
   test("üres beállítás: nincs STUN (csak helyi hálózat)", () => {
@@ -73,7 +77,9 @@ describe("sanitizeTitle", () => {
 
 describe("sanitizeChatText", () => {
   test("a sortörés megmarad, legfeljebb egy üres sor", () => {
-    expect(sanitizeChatText("  első\n\n\n\nmásodik  \t  sor ")).toBe("első\n\nmásodik sor");
+    expect(sanitizeChatText("  első\n\n\n\nmásodik  \t  sor ")).toBe(
+      "első\n\nmásodik sor",
+    );
   });
 
   test("vezérlőkarakterek ki", () => {
@@ -105,7 +111,9 @@ describe("joinProof / sameProof / isProof", () => {
     expect(a).toBe(await joinProof("s1", "titok"));
     expect(a).not.toBe(await joinProof("s2", "titok"));
     //* sha256("s1:titok")
-    const expected = new Bun.CryptoHasher("sha256").update("s1:titok").digest("hex");
+    const expected = new Bun.CryptoHasher("sha256")
+      .update("s1:titok")
+      .digest("hex");
     expect(a).toBe(expected);
   });
 

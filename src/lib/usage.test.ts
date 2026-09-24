@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type FakeBrowser, installBrowser, stubFetch, uninstallBrowser } from "@/test/browser";
+import {
+  type FakeBrowser,
+  installBrowser,
+  stubFetch,
+  uninstallBrowser,
+} from "@/test/browser";
 import { reportClassUse } from "./usage";
 import { usageDayKey } from "./usage-day";
 
@@ -34,7 +39,9 @@ describe("reportClassUse", () => {
     );
     reportClassUse("12A");
     expect(stub.calls).toHaveLength(1);
-    expect(JSON.parse(b.localStorage.getItem("orarend:usage:v1") as string)).toEqual({
+    expect(
+      JSON.parse(b.localStorage.getItem("orarend:usage:v1") as string),
+    ).toEqual({
       date: usageDayKey(),
       classes: ["12A"],
     });

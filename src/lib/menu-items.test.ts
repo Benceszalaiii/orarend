@@ -7,8 +7,8 @@ import {
   MENU_GROUP_TITLE,
   MENU_HIDDEN_STORAGE_KEY,
   MENU_ITEMS,
-  saveHiddenMenu,
   sanitizeHiddenMenu,
+  saveHiddenMenu,
 } from "./menu-items";
 
 describe("a lista szerződései", () => {

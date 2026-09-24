@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { redisDump, redisTtl, resetRedis } from "@/test/redis";
 import { shiftDayKey, usageDayKey } from "./usage-day";
-import { rankUsage, readUsage, recordClassUse, usageStoreReady } from "./usage-store";
+import {
+  rankUsage,
+  readUsage,
+  recordClassUse,
+  usageStoreReady,
+} from "./usage-store";
 
 beforeEach(resetRedis);
 
@@ -51,7 +56,11 @@ describe("Redisszel", () => {
     await recordClassUse("12A");
     const days = await readUsage(3);
     const today = usageDayKey();
-    expect(days.map((d) => d.date)).toEqual([today, shiftDayKey(today, -1), shiftDayKey(today, -2)]);
+    expect(days.map((d) => d.date)).toEqual([
+      today,
+      shiftDayKey(today, -1),
+      shiftDayKey(today, -2),
+    ]);
     expect(days[0].classes).toEqual({ "12A": 1 });
     expect(days[1].classes).toEqual({});
     expect(rankUsage(days)).toEqual([{ class: "12A", count: 1 }]);

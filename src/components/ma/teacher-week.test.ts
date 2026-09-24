@@ -1,16 +1,28 @@
 import { describe, expect, test } from "bun:test";
-import { lesson, week } from "@/test/fixtures";
 import type { TimetableView } from "@/lib/timetable";
+import { lesson, week } from "@/test/fixtures";
 import { buildDayModel } from "./day";
 import { buildTeacherWeek, clashesOf } from "./teacher-week";
 import { buildWeekModel } from "./week";
 
 function view(over: Partial<TimetableView> = {}): TimetableView {
-  return { ...week({ kind: "teacher" }), events: [], prefs: [], persistence: "local", ...over };
+  return {
+    ...week({ kind: "teacher" }),
+    events: [],
+    prefs: [],
+    persistence: "local",
+    ...over,
+  };
 }
 
 function tl(over: Parameters<typeof lesson>[0]) {
-  return lesson({ teacher: "", teacherShort: "", classShort: "12A", className: "12.A", ...over });
+  return lesson({
+    teacher: "",
+    teacherShort: "",
+    classShort: "12A",
+    className: "12.A",
+    ...over,
+  });
 }
 
 describe("buildTeacherWeek", () => {
@@ -18,7 +30,14 @@ describe("buildTeacherWeek", () => {
     const v = view({
       lessons: [
         tl({ dayOfWeek: 1, startMin: 480, endMin: 525 }),
-        tl({ dayOfWeek: 1, startMin: 650, endMin: 695, classShort: "09B", className: "", subjectShort: "inf" }),
+        tl({
+          dayOfWeek: 1,
+          startMin: 650,
+          endMin: 695,
+          classShort: "09B",
+          className: "",
+          subjectShort: "inf",
+        }),
         tl({ dayOfWeek: 2, startMin: 480, endMin: 525 }),
         tl({ dayOfWeek: 2, startMin: 535, endMin: 580 }),
       ],
@@ -28,13 +47,17 @@ describe("buildTeacherWeek", () => {
       { short: "12A", name: "12.A", minutes: 135, lessons: 3, days: 2 },
       { short: "09B", name: "09B", minutes: 45, lessons: 1, days: 1 },
     ]);
-    expect(result.free).toEqual([{ dateKey: "2026-09-14", dayName: "Hétfő", startMin: 525, endMin: 650 }]);
+    expect(result.free).toEqual([
+      { dateKey: "2026-09-14", dayName: "Hétfő", startMin: 525, endMin: 650 },
+    ]);
     expect(result.freeMinutes).toBe(125);
   });
 
   test("osztály nélküli óra nem számít osztálynak", () => {
     const v = view({ lessons: [tl({ classShort: "", className: "" })] });
-    expect(buildTeacherWeek(v, buildWeekModel(v, [], null)).classes).toEqual([]);
+    expect(buildTeacherWeek(v, buildWeekModel(v, [], null)).classes).toEqual(
+      [],
+    );
   });
 });
 
@@ -43,7 +66,12 @@ describe("clashesOf", () => {
     const v = view({
       lessons: [
         tl({ classShort: "12A", room: "214" }),
-        tl({ classShort: "13C", room: "303", subjectShort: "inf", groupColumn: 1 }),
+        tl({
+          classShort: "13C",
+          room: "303",
+          subjectShort: "inf",
+          groupColumn: 1,
+        }),
         tl({ startMin: 650, endMin: 695, classShort: "09B" }),
       ],
     });

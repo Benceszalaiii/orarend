@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type FakeBrowser, installBrowser, uninstallBrowser } from "@/test/browser";
-import { DEFAULT_FLOOD, FLOOD_STORAGE_KEY, loadFlood, saveFlood } from "./flood-pref";
+import {
+  type FakeBrowser,
+  installBrowser,
+  uninstallBrowser,
+} from "@/test/browser";
+import {
+  DEFAULT_FLOOD,
+  FLOOD_STORAGE_KEY,
+  loadFlood,
+  saveFlood,
+} from "./flood-pref";
 
 let b: FakeBrowser;
 beforeEach(() => {

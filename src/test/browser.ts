@@ -52,13 +52,19 @@ export type FakeBrowser = {
     cookie: string;
     cookies: string[];
     documentElement: {
-      classList: { toggle(name: string, on?: boolean): boolean; contains(name: string): boolean };
+      classList: {
+        toggle(name: string, on?: boolean): boolean;
+        contains(name: string): boolean;
+      };
       dataset: Record<string, string>;
       style: Record<string, string>;
     };
     visibilityState: string;
   } & EventTarget;
-  navigator: { userAgent: string; standalone?: boolean } & Record<string, unknown>;
+  navigator: { userAgent: string; standalone?: boolean } & Record<
+    string,
+    unknown
+  >;
   //* `media` → `matches`. Ami nincs benne, az `false`.
   media: Record<string, boolean>;
   events: string[];
@@ -70,7 +76,13 @@ type Options = {
   media?: Record<string, boolean>;
 };
 
-const KEYS = ["window", "localStorage", "sessionStorage", "document", "navigator"] as const;
+const KEYS = [
+  "window",
+  "localStorage",
+  "sessionStorage",
+  "document",
+  "navigator",
+] as const;
 let saved: Map<string, PropertyDescriptor | undefined> | null = null;
 
 export function installBrowser(options: Options = {}): FakeBrowser {

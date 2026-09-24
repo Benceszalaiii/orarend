@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type FakeBrowser, installBrowser, uninstallBrowser } from "@/test/browser";
+import {
+  type FakeBrowser,
+  installBrowser,
+  uninstallBrowser,
+} from "@/test/browser";
 import {
   CLASSIC_DUAL_SCHEDULE,
   DUAL_SCHEDULE_STORAGE_KEY,

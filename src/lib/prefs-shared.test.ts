@@ -124,7 +124,8 @@ describe("sanitizePrefs", () => {
   test("legfeljebb 24 alany a merge és a dual alatt", () => {
     const classes = Array.from(
       { length: 30 },
-      (_, i) => `${String(10 + Math.floor(i / 26)).padStart(2, "0")}${String.fromCharCode(65 + (i % 26))}`,
+      (_, i) =>
+        `${String(10 + Math.floor(i / 26)).padStart(2, "0")}${String.fromCharCode(65 + (i % 26))}`,
     );
     const merge = Object.fromEntries(
       classes.map((c) => [c, [{ clusterKey: "k", chosen: "c" }]]),

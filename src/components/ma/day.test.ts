@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { lesson, week } from "@/test/fixtures";
 import type { TimetableView } from "@/lib/timetable";
 import { lessonIdentity } from "@/lib/timetable-merge";
+import { lesson, week } from "@/test/fixtures";
 import {
   agendaItem,
   buildDayModel,
@@ -27,15 +27,32 @@ describe("buildDayModel", () => {
     const v = view({
       lessons: [
         lesson({ startMin: 480, endMin: 525, subjectShort: "mat" }),
-        lesson({ startMin: 650, endMin: 695, subjectShort: "tör", teacherShort: "KB", room: "" }),
-        lesson({ startMin: 535, endMin: 580, subjectShort: "fiz", teacherShort: "XY", moved: true }),
+        lesson({
+          startMin: 650,
+          endMin: 695,
+          subjectShort: "tör",
+          teacherShort: "KB",
+          room: "",
+        }),
+        lesson({
+          startMin: 535,
+          endMin: 580,
+          subjectShort: "fiz",
+          teacherShort: "XY",
+          moved: true,
+        }),
         lesson({ dayOfWeek: 2, subjectShort: "ang" }),
       ],
     });
     const day = buildDayModel(v, [], MON, null);
     expect(day).not.toBeNull();
     if (!day) return;
-    expect(day.segments.map((s) => s.kind)).toEqual(["lesson", "lesson", "gap", "lesson"]);
+    expect(day.segments.map((s) => s.kind)).toEqual([
+      "lesson",
+      "lesson",
+      "gap",
+      "lesson",
+    ]);
     const gap = day.segments[2];
     expect([gap.startMin, gap.endMin]).toEqual([580, 650]);
     expect(650 - 580).toBeGreaterThanOrEqual(GAP_MIN_MIN);
@@ -52,7 +69,12 @@ describe("buildDayModel", () => {
     const v = view({
       lessons: [
         lesson({ startMin: 480, endMin: 525, subjectShort: "mat" }),
-        lesson({ startMin: 535, endMin: 580, subjectShort: "fiz", teacherShort: "XY" }),
+        lesson({
+          startMin: 535,
+          endMin: 580,
+          subjectShort: "fiz",
+          teacherShort: "XY",
+        }),
       ],
     });
     const day = buildDayModel(v, [], MON, null);
@@ -62,12 +84,28 @@ describe("buildDayModel", () => {
   test("párhuzamos csoportórák külön sávban", () => {
     const v = view({
       lessons: [
-        lesson({ subjectShort: "ang", group: "1", groupColumn: 0, groupCount: 2, wholeClass: false, teacherShort: "AA" }),
-        lesson({ subjectShort: "ang", group: "2", groupColumn: 1, groupCount: 2, wholeClass: false, teacherShort: "BB" }),
+        lesson({
+          subjectShort: "ang",
+          group: "1",
+          groupColumn: 0,
+          groupCount: 2,
+          wholeClass: false,
+          teacherShort: "AA",
+        }),
+        lesson({
+          subjectShort: "ang",
+          group: "2",
+          groupColumn: 1,
+          groupCount: 2,
+          wholeClass: false,
+          teacherShort: "BB",
+        }),
       ],
     });
     const day = buildDayModel(v, [], MON, null);
-    const lanes = day?.segments.map((s) => (s.kind === "lesson" ? [s.lane, s.lanes] : null));
+    const lanes = day?.segments.map((s) =>
+      s.kind === "lesson" ? [s.lane, s.lanes] : null,
+    );
     expect(lanes).toEqual([
       [0, 2],
       [1, 2],
@@ -86,7 +124,12 @@ describe("buildDayModel", () => {
 
   test("duális beosztás és a nap csengetése", () => {
     const v = view();
-    v.days[0] = { ...v.days[0], bells: { id: 3, name: "Rövid", periods: [] }, notes: ["x"], teaching: true };
+    v.days[0] = {
+      ...v.days[0],
+      bells: { id: 3, name: "Rövid", periods: [] },
+      notes: ["x"],
+      teaching: true,
+    };
     const day = buildDayModel(v, [], MON, { A: [1], B: [] });
     expect(day?.dual).toBe("dual");
     expect(day?.bells).toEqual({ id: 3, name: "Rövid" });
@@ -139,12 +182,25 @@ describe("agendaItem", () => {
   });
 
   test("tanár-nézet: az osztály a „ki”", () => {
-    const item = agendaItem(run({ teacher: "", teacherShort: "", classShort: "12A", className: "12.A" }), MON, "Hétfő");
+    const item = agendaItem(
+      run({
+        teacher: "",
+        teacherShort: "",
+        classShort: "12A",
+        className: "12.A",
+      }),
+      MON,
+      "Hétfő",
+    );
     expect(item.who).toEqual({ kind: "class", label: "12.A" });
   });
 
   test("senki: null", () => {
-    const item = agendaItem(run({ teacher: "", teacherShort: "" }), MON, "Hétfő");
+    const item = agendaItem(
+      run({ teacher: "", teacherShort: "" }),
+      MON,
+      "Hétfő",
+    );
     expect(item.who).toBeNull();
   });
 });
@@ -154,7 +210,12 @@ describe("laterItemsOf", () => {
     const v = view({
       lessons: [
         lesson({ dayOfWeek: 1, subjectShort: "mat" }),
-        lesson({ dayOfWeek: 3, subjectShort: "tör", startMin: 600, endMin: 645 }),
+        lesson({
+          dayOfWeek: 3,
+          subjectShort: "tör",
+          startMin: 600,
+          endMin: 645,
+        }),
         lesson({ dayOfWeek: 2, subjectShort: "fiz" }),
       ],
     });
@@ -169,7 +230,12 @@ describe("daySummary", () => {
   const v = view({
     lessons: [
       lesson({ startMin: 480, endMin: 525, subjectShort: "mat" }),
-      lesson({ startMin: 650, endMin: 695, subjectShort: "tör", teacherShort: "KB" }),
+      lesson({
+        startMin: 650,
+        endMin: 695,
+        subjectShort: "tör",
+        teacherShort: "KB",
+      }),
     ],
   });
 

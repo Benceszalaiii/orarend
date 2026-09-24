@@ -24,7 +24,9 @@ describe("sw-register", () => {
     expect(supportsWorker()).toBe(true);
     expect(await registerWorker()).toBe(registration as never);
     //* Tesztben nem production a NODE_ENV: a fejlesztői változat megy.
-    expect(calls).toEqual([["/sw.js?dev=1", { scope: "/", updateViaCache: "none" }]]);
+    expect(calls).toEqual([
+      ["/sw.js?dev=1", { scope: "/", updateViaCache: "none" }],
+    ]);
   });
 
   test("elbukott regisztráció: null", async () => {

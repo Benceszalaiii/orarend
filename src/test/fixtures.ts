@@ -1,4 +1,8 @@
-import type { TimetableDay, TimetableLesson, TimetableWeek } from "@/lib/timetable";
+import type {
+  TimetableDay,
+  TimetableLesson,
+  TimetableWeek,
+} from "@/lib/timetable";
 
 //* Egy óra minden mezővel kitöltve — a teszt csak azt írja felül, ami számít.
 export function lesson(over: Partial<TimetableLesson> = {}): TimetableLesson {
@@ -24,7 +28,8 @@ export function lesson(over: Partial<TimetableLesson> = {}): TimetableLesson {
     kind: "class",
   };
   const out = { ...base, ...over };
-  if (!over.key) out.key = `${out.dayOfWeek}-${out.startMin}-${out.groupColumn}-${out.subjectShort}`;
+  if (!over.key)
+    out.key = `${out.dayOfWeek}-${out.startMin}-${out.groupColumn}-${out.subjectShort}`;
   return out;
 }
 
@@ -50,7 +55,12 @@ export function weekDays(monday: string, letter = "A"): TimetableDay[] {
   return names.map((name, i) => {
     const d = new Date(`${monday}T12:00:00Z`);
     d.setUTCDate(d.getUTCDate() + i);
-    return day({ name, dateKey: d.toISOString().slice(0, 10), dayOfWeek: i + 1, week: letter });
+    return day({
+      name,
+      dateKey: d.toISOString().slice(0, 10),
+      dayOfWeek: i + 1,
+      week: letter,
+    });
   });
 }
 

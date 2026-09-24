@@ -16,9 +16,18 @@ const DAY = "2026-09-14";
 
 describe("budapestNow", () => {
   test("budapesti nap és perc, nem UTC", () => {
-    expect(budapestNow(new Date("2026-09-14T05:50:00Z"))).toEqual({ dayKey: DAY, minutes: 470 });
-    expect(budapestNow(new Date("2026-09-13T22:10:00Z"))).toEqual({ dayKey: DAY, minutes: 10 });
-    expect(budapestNow(new Date("2026-01-14T06:50:00Z"))).toEqual({ dayKey: "2026-01-14", minutes: 470 });
+    expect(budapestNow(new Date("2026-09-14T05:50:00Z"))).toEqual({
+      dayKey: DAY,
+      minutes: 470,
+    });
+    expect(budapestNow(new Date("2026-09-13T22:10:00Z"))).toEqual({
+      dayKey: DAY,
+      minutes: 10,
+    });
+    expect(budapestNow(new Date("2026-01-14T06:50:00Z"))).toEqual({
+      dayKey: "2026-01-14",
+      minutes: 470,
+    });
   });
 });
 
@@ -47,13 +56,34 @@ describe("reminderStarts", () => {
 
 describe("dueReminders", () => {
   const lessons = [
-    lesson({ dateKey: DAY, startMin: 480, endMin: 525, subject: "Matematika", subjectShort: "mat", room: "102" }),
-    lesson({ dateKey: DAY, startMin: 480, endMin: 525, subject: "Matematika", subjectShort: "mat", room: "103", groupColumn: 1 }),
+    lesson({
+      dateKey: DAY,
+      startMin: 480,
+      endMin: 525,
+      subject: "Matematika",
+      subjectShort: "mat",
+      room: "102",
+    }),
+    lesson({
+      dateKey: DAY,
+      startMin: 480,
+      endMin: 525,
+      subject: "Matematika",
+      subjectShort: "mat",
+      room: "103",
+      groupColumn: 1,
+    }),
   ];
 
   test("az ablakban (10 perccel előtte, 6 percig) esedékes", () => {
     for (const minutes of [470, 475]) {
-      expect(dueReminders({ lessons, now: { dayKey: DAY, minutes }, everyLesson: false })).toEqual([
+      expect(
+        dueReminders({
+          lessons,
+          now: { dayKey: DAY, minutes },
+          everyLesson: false,
+        }),
+      ).toEqual([
         {
           dayKey: DAY,
           startMin: 480,
@@ -68,7 +98,13 @@ describe("dueReminders", () => {
 
   test("az ablakon kívül nem", () => {
     for (const minutes of [469, 476, 480]) {
-      expect(dueReminders({ lessons, now: { dayKey: DAY, minutes }, everyLesson: false })).toEqual([]);
+      expect(
+        dueReminders({
+          lessons,
+          now: { dayKey: DAY, minutes },
+          everyLesson: false,
+        }),
+      ).toEqual([]);
     }
   });
 });
@@ -104,15 +140,22 @@ describe("reminderText", () => {
   });
 
   test("tárgy nélkül: „Óra”", () => {
-    expect(reminderText({ ...base, subjects: [], subjectsShort: [] }, "class", "12A").title).toBe("Óra 10 perc múlva");
+    expect(
+      reminderText({ ...base, subjects: [], subjectsShort: [] }, "class", "12A")
+        .title,
+    ).toBe("Óra 10 perc múlva");
   });
 
   test("tanárnak az osztály a cím", () => {
-    expect(reminderText({ ...base, classes: ["12A", "12B"] }, "teacher", "LM")).toEqual({
+    expect(
+      reminderText({ ...base, classes: ["12A", "12B"] }, "teacher", "LM"),
+    ).toEqual({
       title: "12A / 12B 10 perc múlva",
       body: "Matematika · 08:00 — 102",
     });
-    expect(reminderText({ ...base, subjects: [], rooms: [] }, "teacher", "LM")).toEqual({
+    expect(
+      reminderText({ ...base, subjects: [], rooms: [] }, "teacher", "LM"),
+    ).toEqual({
       title: "Óra 10 perc múlva",
       body: "08:00",
     });
@@ -123,10 +166,28 @@ describe("snapshotWeek / diffWeeks", () => {
   const mat = lesson({ dateKey: DAY, startMin: 480, endMin: 525 });
   const before = snapshotWeek([
     mat,
-    lesson({ dateKey: DAY, startMin: 535, endMin: 580, subjectShort: "fiz", teacherShort: "XY", room: "201" }),
-    lesson({ dateKey: DAY, startMin: 650, endMin: 695, subjectShort: "tör", teacherShort: "KB" }),
+    lesson({
+      dateKey: DAY,
+      startMin: 535,
+      endMin: 580,
+      subjectShort: "fiz",
+      teacherShort: "XY",
+      room: "201",
+    }),
+    lesson({
+      dateKey: DAY,
+      startMin: 650,
+      endMin: 695,
+      subjectShort: "tör",
+      teacherShort: "KB",
+    }),
     lesson({ dateKey: DAY, startMin: 760, endMin: 805, kind: "event" }),
-    lesson({ dateKey: "2026-09-10", startMin: 480, endMin: 525, subjectShort: "régi" }),
+    lesson({
+      dateKey: "2026-09-10",
+      startMin: 480,
+      endMin: 525,
+      subjectShort: "régi",
+    }),
   ]);
 
   test("a lenyomat csak az órákat tartja", () => {
@@ -141,10 +202,28 @@ describe("snapshotWeek / diffWeeks", () => {
   test("terem-, tanár-, tárgy- és időváltozás, elmaradás, új óra, áthelyezés", () => {
     const after = snapshotWeek([
       { ...mat, room: "303" },
-      lesson({ dateKey: DAY, startMin: 535, endMin: 580, subjectShort: "kém", teacherShort: "XY", room: "201" }),
+      lesson({
+        dateKey: DAY,
+        startMin: 535,
+        endMin: 580,
+        subjectShort: "kém",
+        teacherShort: "XY",
+        room: "201",
+      }),
       //* A tör 650-ről 705-re költözött.
-      lesson({ dateKey: DAY, startMin: 705, endMin: 750, subjectShort: "tör", teacherShort: "KB" }),
-      lesson({ dateKey: "2026-09-15", startMin: 480, endMin: 525, subjectShort: "ang" }),
+      lesson({
+        dateKey: DAY,
+        startMin: 705,
+        endMin: 750,
+        subjectShort: "tör",
+        teacherShort: "KB",
+      }),
+      lesson({
+        dateKey: "2026-09-15",
+        startMin: 480,
+        endMin: 525,
+        subjectShort: "ang",
+      }),
     ]);
     const changes = diffWeeks({ before, after, fromDayKey: DAY });
     expect(changes.map((c) => [c.kind, c.startMin])).toEqual([
@@ -169,7 +248,14 @@ describe("snapshotWeek / diffWeeks", () => {
   test("elmaradás, tanár- és végváltozás, áthelyezés-jelölés", () => {
     const after = snapshotWeek([
       { ...mat, teacherShort: "" },
-      lesson({ dateKey: DAY, startMin: 535, endMin: 590, subjectShort: "fiz", teacherShort: "XY", room: "201" }),
+      lesson({
+        dateKey: DAY,
+        startMin: 535,
+        endMin: 590,
+        subjectShort: "fiz",
+        teacherShort: "XY",
+        room: "201",
+      }),
     ]);
     const changes = diffWeeks({ before, after, fromDayKey: DAY });
     expect(changes.map((c) => c.text)).toEqual([
@@ -179,19 +265,30 @@ describe("snapshotWeek / diffWeeks", () => {
     ]);
     const moved = snapshotWeek([{ ...mat, moved: true }]);
     expect(
-      diffWeeks({ before: snapshotWeek([mat]), after: moved, fromDayKey: DAY }).map((c) => c.text),
+      diffWeeks({
+        before: snapshotWeek([mat]),
+        after: moved,
+        fromDayKey: DAY,
+      }).map((c) => c.text),
     ).toEqual(["hétfő 08:00 — mat áthelyezve"]);
   });
 
   test("tanár-nézetben az osztály is a címke része", () => {
     const b = snapshotWeek([lesson({ dateKey: DAY, classShort: "12A" })]);
     const a = snapshotWeek([lesson({ dateKey: DAY, classShort: "13C" })]);
-    expect(diffWeeks({ before: b, after: a, fromDayKey: DAY })[0].text).toBe("hétfő 08:00 — 12A mat helyett 13C mat");
+    expect(diffWeeks({ before: b, after: a, fromDayKey: DAY })[0].text).toBe(
+      "hétfő 08:00 — 12A mat helyett 13C mat",
+    );
   });
 });
 
 describe("changeText", () => {
-  const change = (i: number) => ({ kind: "added" as const, dayKey: DAY, startMin: i, text: `sor ${i}` });
+  const change = (i: number) => ({
+    kind: "added" as const,
+    dayKey: DAY,
+    startMin: i,
+    text: `sor ${i}`,
+  });
 
   test("egy változás", () => {
     expect(changeText([change(1)], "class", "12A")).toEqual({
@@ -210,9 +307,15 @@ describe("changeText", () => {
 
 describe("changeFingerprint", () => {
   test("determinisztikus, a szövegtől független, a tartalomra érzékeny", () => {
-    const a = [{ kind: "added" as const, dayKey: DAY, startMin: 480, text: "x" }];
-    const b = [{ kind: "added" as const, dayKey: DAY, startMin: 480, text: "y" }];
-    const c = [{ kind: "removed" as const, dayKey: DAY, startMin: 480, text: "x" }];
+    const a = [
+      { kind: "added" as const, dayKey: DAY, startMin: 480, text: "x" },
+    ];
+    const b = [
+      { kind: "added" as const, dayKey: DAY, startMin: 480, text: "y" },
+    ];
+    const c = [
+      { kind: "removed" as const, dayKey: DAY, startMin: 480, text: "x" },
+    ];
     expect(changeFingerprint(a)).toBe(changeFingerprint(b));
     expect(changeFingerprint(a)).not.toBe(changeFingerprint(c));
     expect(changeFingerprint([])).toMatch(/^[0-9a-z]+$/);

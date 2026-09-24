@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { lesson, PERIODS } from "@/test/fixtures";
 import { installBrowser, uninstallBrowser } from "@/test/browser";
+import { lesson, PERIODS } from "@/test/fixtures";
 import {
   chosenIdentities,
   clearAllLocalPreferences,
@@ -109,8 +109,22 @@ describe("döntések listája", () => {
 });
 
 describe("resolveDay", () => {
-  const ang1 = lesson({ subjectShort: "ang", group: "1", groupColumn: 0, groupCount: 2, wholeClass: false, teacherShort: "AA" });
-  const ang2 = lesson({ subjectShort: "ang", group: "2", groupColumn: 1, groupCount: 2, wholeClass: false, teacherShort: "BB" });
+  const ang1 = lesson({
+    subjectShort: "ang",
+    group: "1",
+    groupColumn: 0,
+    groupCount: 2,
+    wholeClass: false,
+    teacherShort: "AA",
+  });
+  const ang2 = lesson({
+    subjectShort: "ang",
+    group: "2",
+    groupColumn: 1,
+    groupCount: 2,
+    wholeClass: false,
+    teacherShort: "BB",
+  });
   const id1 = lessonIdentity(ang1);
   const id2 = lessonIdentity(ang2);
 
@@ -160,7 +174,11 @@ describe("resolveDay", () => {
     const day = resolveDay([only], hideIdentity([], lessonIdentity(only)));
     expect(day.runs).toEqual([]);
     expect(day.ghosts).toHaveLength(1);
-    expect(day.ghosts[0]).toMatchObject({ startMin: 480, endMin: 525, dayOfWeek: 1 });
+    expect(day.ghosts[0]).toMatchObject({
+      startMin: 480,
+      endMin: 525,
+      dayOfWeek: 1,
+    });
   });
 
   //* Ha a klaszter győztes ágát utólag elrejtik, a választás kiürül — ilyenkor
@@ -171,17 +189,37 @@ describe("resolveDay", () => {
     const day = resolveDay([ang1, ang2], prefs);
     expect(day.runs).toEqual([]);
     expect(day.ghosts).toHaveLength(1);
-    expect(day.ghosts[0].hidden.map((o) => o.identity).sort()).toEqual([id1, id2].sort());
+    expect(day.ghosts[0].hidden.map((o) => o.identity).sort()).toEqual(
+      [id1, id2].sort(),
+    );
   });
 
   test("nem átfedő csoportórák egy kombinációban férnek el", () => {
-    const early = lesson({ subjectShort: "inf", group: "1", startMin: 480, endMin: 525 });
-    const long = lesson({ subjectShort: "tesi", group: "2", startMin: 480, endMin: 580 });
-    const late = lesson({ subjectShort: "inf", group: "1", startMin: 535, endMin: 580, teacherShort: "XY" });
+    const early = lesson({
+      subjectShort: "inf",
+      group: "1",
+      startMin: 480,
+      endMin: 525,
+    });
+    const long = lesson({
+      subjectShort: "tesi",
+      group: "2",
+      startMin: 480,
+      endMin: 580,
+    });
+    const late = lesson({
+      subjectShort: "inf",
+      group: "1",
+      startMin: 535,
+      endMin: 580,
+      teacherShort: "XY",
+    });
     const day = resolveDay([early, long, late], []);
     expect(day.conflicts).toHaveLength(1);
     //* {early, late} együtt felvehető, {long} önmagában.
-    expect(day.conflicts[0].choices.map((c) => c.options.length)).toEqual([2, 1]);
+    expect(day.conflicts[0].choices.map((c) => c.options.length)).toEqual([
+      2, 1,
+    ]);
   });
 
   test("egymást követő azonos ütközések egy blokká láncolódnak", () => {
@@ -208,7 +246,9 @@ describe("preferenceRows", () => {
     );
     expect(rows[0].active).toBe(true);
     expect(rows[0].chosen).toEqual([identityParts(id)]);
-    expect(rows[0].hidden).toEqual([{ subject: "tör", group: "", teacher: "KB" }]);
+    expect(rows[0].hidden).toEqual([
+      { subject: "tör", group: "", teacher: "KB" },
+    ]);
     expect(rows[1].active).toBe(false);
   });
 });
@@ -226,7 +266,9 @@ describe("helyi tárolás", () => {
     const b = installBrowser();
     saveLocalPreferences("12A", [{ clusterKey: "a", chosen: "a" }]);
     saveLocalPreferences("tanar:LM", [{ clusterKey: "b", chosen: "" }]);
-    expect(loadLocalPreferences("12A")).toEqual([{ clusterKey: "a", chosen: "a" }]);
+    expect(loadLocalPreferences("12A")).toEqual([
+      { clusterKey: "a", chosen: "a" },
+    ]);
     expect(Object.keys(loadAllLocalPreferences())).toEqual(["12A", "tanar:LM"]);
     saveLocalPreferences("12A", []);
     expect(Object.keys(loadAllLocalPreferences())).toEqual(["tanar:LM"]);
@@ -239,9 +281,14 @@ describe("helyi tárolás", () => {
     const b = installBrowser();
     b.localStorage.setItem(
       MERGE_PREFS_STORAGE_KEY,
-      JSON.stringify({ "12A": [{ clusterKey: "a", chosen: "a" }, { clusterKey: 1 }, null], "10B": "x" }),
+      JSON.stringify({
+        "12A": [{ clusterKey: "a", chosen: "a" }, { clusterKey: 1 }, null],
+        "10B": "x",
+      }),
     );
-    expect(loadLocalPreferences("12A")).toEqual([{ clusterKey: "a", chosen: "a" }]);
+    expect(loadLocalPreferences("12A")).toEqual([
+      { clusterKey: "a", chosen: "a" },
+    ]);
     expect(loadLocalPreferences("10B")).toEqual([]);
     b.localStorage.setItem(MERGE_PREFS_STORAGE_KEY, "nem json");
     expect(loadAllLocalPreferences()).toEqual({});

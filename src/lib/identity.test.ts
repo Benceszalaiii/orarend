@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type FakeBrowser, installBrowser, uninstallBrowser } from "@/test/browser";
+import {
+  type FakeBrowser,
+  installBrowser,
+  uninstallBrowser,
+} from "@/test/browser";
 import {
   IDENTITY_STORAGE_KEY,
   isIdentity,

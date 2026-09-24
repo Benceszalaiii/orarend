@@ -19,7 +19,14 @@ import {
 beforeEach(resetRedis);
 
 function sub(endpoint: string, classes: string[], teachers: string[] = []) {
-  return { endpoint, p256dh: "k", auth: "a", classes, teachers, everyLesson: false };
+  return {
+    endpoint,
+    p256dh: "k",
+    auth: "a",
+    classes,
+    teachers,
+    everyLesson: false,
+  };
 }
 
 describe("feliratkozások", () => {
@@ -32,16 +39,19 @@ describe("feliratkozások", () => {
     await saveSubscription(sub("https://push/2", ["12A"]));
     expect((await subscribedSubjects("class")).sort()).toEqual(["10B", "12A"]);
     expect(await subscribedSubjects("teacher")).toEqual(["LM"]);
-    expect((await subscribersOf("class", "12A")).map((s) => s.endpoint).sort()).toEqual([
-      "https://push/1",
-      "https://push/2",
+    expect(
+      (await subscribersOf("class", "12A")).map((s) => s.endpoint).sort(),
+    ).toEqual(["https://push/1", "https://push/2"]);
+    expect((await readSubscription("https://push/1"))?.teachers).toEqual([
+      "LM",
     ]);
-    expect((await readSubscription("https://push/1"))?.teachers).toEqual(["LM"]);
   });
 
   test("az endpoint nem kerül a kulcsba (hash)", async () => {
     await saveSubscription(sub("https://push/secret", ["12A"]));
-    expect(Object.keys(redisDump()).some((k) => k.includes("secret"))).toBe(false);
+    expect(Object.keys(redisDump()).some((k) => k.includes("secret"))).toBe(
+      false,
+    );
   });
 
   test("módosításkor a leadott alanyból kikerül", async () => {
@@ -54,17 +64,30 @@ describe("feliratkozások", () => {
 
   test("a létrehozás ideje megmarad", async () => {
     await saveSubscription(sub("https://push/1", ["12A"]));
-    const first = (await readSubscription("https://push/1")) as { createdAt: number };
+    const first = (await readSubscription("https://push/1")) as unknown as {
+      createdAt: number;
+    };
     await Bun.sleep(2);
     await saveSubscription(sub("https://push/1", ["10B"]));
-    expect(((await readSubscription("https://push/1")) as { createdAt: number }).createdAt).toBe(first.createdAt);
+    expect(
+      (
+        (await readSubscription("https://push/1")) as unknown as {
+          createdAt: number;
+        }
+      ).createdAt,
+    ).toBe(first.createdAt);
   });
 
   test("endpoint-csere: a régi eltűnik", async () => {
     await saveSubscription(sub("https://push/old", ["12A"]));
-    await saveSubscription(sub("https://push/new", ["12A"]), "https://push/old");
+    await saveSubscription(
+      sub("https://push/new", ["12A"]),
+      "https://push/old",
+    );
     expect(await readSubscription("https://push/old")).toBeNull();
-    expect((await subscribersOf("class", "12A")).map((s) => s.endpoint)).toEqual(["https://push/new"]);
+    expect(
+      (await subscribersOf("class", "12A")).map((s) => s.endpoint),
+    ).toEqual(["https://push/new"]);
   });
 
   test("törlés", async () => {
@@ -79,10 +102,14 @@ describe("feliratkozások", () => {
     await saveSubscription(sub("https://push/1", ["12A"]));
     await saveSubscription(sub("https://push/2", ["12A"]));
     const key = Object.keys(redisDump()).find(
-      (k) => k.startsWith("push:sub:") && (redisDump()[k] as string).includes("push/1"),
+      (k) =>
+        k.startsWith("push:sub:") &&
+        (redisDump()[k] as string).includes("push/1"),
     );
     redisDel(key as string);
-    expect((await subscribersOf("class", "12A")).map((s) => s.endpoint)).toEqual(["https://push/2"]);
+    expect(
+      (await subscribersOf("class", "12A")).map((s) => s.endpoint),
+    ).toEqual(["https://push/2"]);
     expect((redisDump()["push:class:12A"] as Set<string>).size).toBe(1);
   });
 });
@@ -110,7 +137,9 @@ describe("gyorsítótárak", () => {
     expect(await readWeekCache("class", "12A", "2026-09-21")).toBeNull();
 
     await writeSnapshot("teacher", "LM", "2026-09-14", { a: "b" });
-    expect(await readSnapshot("teacher", "LM", "2026-09-14")).toEqual({ a: "b" });
+    expect(await readSnapshot("teacher", "LM", "2026-09-14")).toEqual({
+      a: "b",
+    });
     expect(await readSnapshot("class", "LM", "2026-09-14")).toBeNull();
   });
 });

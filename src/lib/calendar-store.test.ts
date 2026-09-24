@@ -13,7 +13,13 @@ import {
 
 beforeEach(resetRedis);
 
-const request = { kind: "class" as const, short: "12A", prefs: [], dual: null, userId: "u1" };
+const request = {
+  kind: "class" as const,
+  short: "12A",
+  prefs: [],
+  dual: null,
+  userId: "u1",
+};
 
 describe("calendar-store", () => {
   test("kész", () => {
@@ -34,7 +40,11 @@ describe("calendar-store", () => {
     clock.mockReturnValue(5000);
     await writeFeed("tok", { ...request, short: "12B" });
     const row = await readFeed("tok");
-    expect(row).toMatchObject({ short: "12B", createdAt: 1000, touchedAt: 5000 });
+    expect(row).toMatchObject({
+      short: "12B",
+      createdAt: 1000,
+      touchedAt: 5000,
+    });
     clock.mockRestore();
   });
 
@@ -48,7 +58,9 @@ describe("calendar-store", () => {
     expect((await readFeed("tok"))?.touchedAt).toBe(1_000_000);
     clock.mockReturnValue(1_000_000 + 25 * 3600 * 1000);
     await touchFeed("tok", row);
-    expect((await readFeed("tok"))?.touchedAt).toBe(1_000_000 + 25 * 3600 * 1000);
+    expect((await readFeed("tok"))?.touchedAt).toBe(
+      1_000_000 + 25 * 3600 * 1000,
+    );
     clock.mockRestore();
   });
 
