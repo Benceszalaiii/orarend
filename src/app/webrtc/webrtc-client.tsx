@@ -259,6 +259,16 @@ function Room({
         viewer={viewer}
         me={me}
         onLeave={() => setMode({ kind: "browse" })}
+        //! AZ ÚJRAPRÓBÁLKOZÁS EGY ÚJ KÍSÉRLET, nem a régi folytatása: friss
+        //! `JoinAttempt` tárgy, tehát a horog mindent elölről kezd (új
+        //! kapcsolat, új jelöltgyűjtés). Lásd `JoinAttempt`.
+        onRetry={() =>
+          setMode({
+            kind: "watch",
+            stream: mode.stream,
+            attempt: { password: mode.attempt.password },
+          })
+        }
       />
     );
   }
@@ -479,28 +489,56 @@ function useStreamList(active: boolean): StreamListState {
   //! látja. Az `active` ilyenkor hamis, és a lekérdezés áll. Enélkül egy egész
   //! órán át nézett megosztás négymásodpercenként kérdezett volna rá egy
   //! listára, ami nincs is a képernyőn.
+  //!
+  //! ─── ÉS CSAK AKKOR, HA A LAP LÁTSZIK ─────────────────────────────────────
+  //! Egy háttérbe tett fülön a lista senkinek nem szól, a böngésző mégis
+  //! négymásodpercenként kérdezné (a háttérfülek órái csak öt perc után
+  //! ritkulnak). Ezért rejtett lapon a kör NEM ütemez újat; a visszatérés
+  //! azonnal kérdez, ha a lista már régebbi egy ütemnél — különben csak a
+  //! hátralévő időt várja ki. A lista így sosem régebbi, mint eddig, amikor
+  //! valaki ránéz.
   useEffect(() => {
     if (!active) return;
     const controller = new AbortController();
     let failures = 0;
+    let fetchedAt = 0;
+    let resume: ReturnType<typeof setTimeout> | undefined;
+    const hidden = () => document.visibilityState === "hidden";
+    let first = true;
     const mail = new Pump(async () => {
+      //* A lap elrejtése előtt ütemezett kör sem kérdez már. Az ELSŐ kör
+      //* igen: egy háttérben megnyitott link (`?adas=`) is feloldódjon.
+      if (!first && hidden()) return null;
+      first = false;
       const list = await fetchStreams(controller.signal);
       setLoading(false);
       if (!list) {
         //* A lista hibája nem tünteti el a korábbi választ — csak ritkítunk,
         //* amíg a szerver vissza nem jön (lásd `afterFailure`).
         failures += 1;
-        return afterFailure(failures, DISCOVERY_POLL_MS);
+        return hidden() ? null : afterFailure(failures, DISCOVERY_POLL_MS);
       }
       failures = 0;
+      fetchedAt = Date.now();
       setStreams(list.streams);
       setDistributed(list.distributed);
-      return DISCOVERY_POLL_MS;
+      return hidden() ? null : DISCOVERY_POLL_MS;
     });
     pump.current = mail;
     mail.restart();
 
+    const onVisibility = () => {
+      clearTimeout(resume);
+      if (hidden()) return;
+      const due = fetchedAt + DISCOVERY_POLL_MS - Date.now();
+      if (due <= 0) mail.restart();
+      else resume = setTimeout(() => mail.restart(), due);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      clearTimeout(resume);
       mail.stop();
       pump.current = null;
       controller.abort();
@@ -813,6 +851,7 @@ function HostView({
       roster={host.roster}
       chat={host.chat}
       onSay={host.say}
+      files={host}
       chatDisabled={!live}
       mePeer={me.peer}
       note={
@@ -828,10 +867,12 @@ function WatchView({
   viewer,
   me,
   onLeave,
+  onRetry,
 }: {
   viewer: ReturnType<typeof useScreenViewer>;
   me: Me;
   onLeave: () => void;
+  onRetry: () => void;
 }) {
   const { phase } = viewer;
 
@@ -845,7 +886,9 @@ function WatchView({
             ? "kapcsolódás…"
             : phase === "lost"
               ? "megszakadt, újrapróbálom…"
-              : "vége"
+              : phase === "givenup"
+                ? "nem sikerült a kapcsolat"
+                : "vége"
       }
       tone={
         phase === "live" ? "live" : phase === "connecting" ? "wait" : "lost"
@@ -865,6 +908,8 @@ function WatchView({
               <p className="text-sm text-white/80">
                 Vége — {viewer.ended ?? "a megosztó abbahagyta"}.
               </p>
+            ) : phase === "givenup" ? (
+              <Unreachable onRetry={onRetry} />
             ) : viewer.screen ? null : phase === "lost" ? (
               <Unreachable />
             ) : (
@@ -876,6 +921,7 @@ function WatchView({
       roster={viewer.roster}
       chat={viewer.chat}
       onSay={viewer.say}
+      files={viewer}
       chatDisabled={phase !== "live"}
       mePeer={me.peer}
       note={null}
@@ -985,6 +1031,7 @@ function RoomShell({
   roster,
   chat,
   onSay,
+  files,
   chatDisabled,
   mePeer,
   note,
@@ -997,6 +1044,7 @@ function RoomShell({
   roster: React.ComponentProps<typeof RosterList>["roster"];
   chat: React.ComponentProps<typeof ChatPanel>["chat"];
   onSay: (text: string) => void;
+  files: React.ComponentProps<typeof ChatPanel>["files"];
   chatDisabled: boolean;
   mePeer: string;
   note: string | null;
@@ -1230,6 +1278,7 @@ function RoomShell({
               <ChatPanel
                 chat={chat}
                 onSay={onSay}
+                files={files}
                 disabled={chatDisabled}
                 mePeer={mePeer}
                 className="min-h-0 flex-1"
@@ -1255,7 +1304,7 @@ function RoomShell({
 //! leggyakoribb ok az iskolai wifi kliensizolációja: ilyenkor a két gép egy
 //! hálózaton van, de nem látják egymást. Ezen a lap nem tud segíteni, viszont
 //! ki tudja mondani, hogy a diák ne a saját készülékét hibáztassa.
-function Unreachable() {
+function Unreachable({ onRetry }: { onRetry?: () => void }) {
   return (
     <div className="max-w-sm text-sm text-white/80">
       <p className="flex items-center justify-center gap-2 font-semibold text-white">
@@ -1274,9 +1323,31 @@ function Unreachable() {
             : "A kapcsolat csak a helyi hálózaton belül épülhet fel."}
         </li>
       </ul>
-      <p className="mt-3 text-xs text-white/50">
-        A háttérben tovább próbálkozom.
-      </p>
+      {onRetry ? (
+        <>
+          {/*//! A LEÁLLÁS UTÁN A DÖNTÉS A DIÁKÉ. Nem próbálkozunk tovább
+              //! magunktól — egy reménytelen kapcsolat percekig tartó
+              //! kérdezgetése se neki, se a szervernek nem használ —, de a
+              //! gomb ott van, ha közben változott valami (átváltott a suli
+              //! wifijére, elindult a megosztás). */}
+          <Button
+            onClick={onRetry}
+            size="sm"
+            className="mt-4 gap-1.5 rounded-full px-4"
+          >
+            <RefreshCw className="size-3.5" aria-hidden />
+            Újrapróbálom
+          </Button>
+          <p className="mt-2 text-xs text-white/50">
+            Ha ugyanarra a wifire csatlakozol, mint a megosztó, jó eséllyel
+            összeáll.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 text-xs text-white/50">
+          A háttérben tovább próbálkozom.
+        </p>
+      )}
     </div>
   );
 }
@@ -1312,9 +1383,10 @@ function Footnotes() {
       A kép és a csevegés közvetlenül a résztvevők gépei között megy,
       titkosítva; a szerverünk csak a kapcsolat felépítéséhez ad jelzést, és
       semmit nem tárol belőle. Hang nem megy át, felvétel nem készül. A
-      csevegést a megosztó gépe továbbítja, tehát ő mindent lát. A név melletti
-      pipa azt jelenti, hogy a nevet a belépett fiók igazolja; a többi név
-      önmegadott becenév.
+      csevegést és a csatolt fájlokat a megosztó gépe továbbítja, tehát ő
+      mindent lát; a fájlok a megosztás végével törlődnek. A név melletti pipa
+      azt jelenti, hogy a nevet a belépett fiók igazolja; a többi név önmegadott
+      becenév.
     </p>
   );
 }

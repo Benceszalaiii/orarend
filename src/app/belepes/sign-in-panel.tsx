@@ -1,6 +1,13 @@
 "use client";
 
-import { ArrowLeft, Check, Fingerprint, Loader2, LogIn } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  Fingerprint,
+  Loader2,
+  LogIn,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
@@ -15,6 +22,7 @@ import {
   signInWithSchool,
   useSession,
 } from "@/lib/auth-client";
+import { cn } from "@/lib/utils";
 
 //! ─── A BELÉPŐ ŰRLAP ─────────────────────────────────────────────────────────
 //! EZ AZ EGYETLEN HELY AZ EGÉSZ ALKALMAZÁSBAN, AHOL ISKOLAI JELSZÓT BEKÉRÜNK.
@@ -30,11 +38,12 @@ import {
 //! semmilyen hibaüzenetbe.
 //!
 //! ─── A GOOGLE-BELÉPÉS PRIMER, AZ AD-BELÉPÉS KIVEZETÉS ALATT ────────────────
-//! Az iskolai AD-belépés megszűnőben van (lásd `/valtozasok`) — a Google-gomb
-//! ezért áll FELÜL, az AD-űrlap pedig LEJJEBB, kisebb címmel. Az AD-belépés
-//! FUNKCIONÁLISAN VÁLTOZATLAN marad, amíg a kivezetés véget nem ér: aki még
-//! nem tud vagy nem akar Google-fiókkal belépni, azt a lap nem hagyja
-//! ki ellátatlanul.
+//! Az iskolai AD-belépés megszűnőben van (lásd `/valtozasok`), és a lap ezt a
+//! SÚLYOZÁSSAL mondja el, nem tiltással: a Google-gomb áll felül, az AD-űrlap
+//! pedig ÖSSZECSUKVA, egy nyitómondat mögött. Így a lap alapértelmezésben
+//! egyetlen belépési módot kínál — de az AD-belépés FUNKCIONÁLISAN
+//! VÁLTOZATLAN marad, amíg a kivezetés véget nem ér: aki még nem tud vagy nem
+//! akar Google-fiókkal belépni, egy koppintással megkapja a régi űrlapot.
 
 export function SignInPanel() {
   const { data: session, isPending } = useSession();
@@ -44,7 +53,18 @@ export function SignInPanel() {
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  //* Két külön hibacsatorna, mert a két belépési mód KÜLÖN HELYEN jelenik meg:
+  //* a Google/ujjlenyomat hibája felül, mindig látható dobozban; az AD-űrlapé
+  //* az űrlap mellett, ami össze van csukva. Egyetlen közös állapottal egy
+  //* Google-hiba a becsukott szakaszba esne, és a diák NEM LÁTNÁ, miért nem
+  //* történt semmi.
   const [error, setError] = useState<string | null>(null);
+  const [schoolError, setSchoolError] = useState<string | null>(null);
+  //! AZ AD-ŰRLAP ALAPÉRTELMEZÉSBEN ÖSSZECSUKVA. Ez a kivezetés harmadik
+  //* szakasza: aki keresi, egy koppintással megkapja; aki nem, annak a lap
+  //* egyetlen belépési módot mutat. Az űrlap a DOM-ban marad (csak rejtve),
+  //* hogy a kitöltött mezők ne vesszenek el nyitogatás közben.
+  const [schoolOpen, setSchoolOpen] = useState(false);
   const [passkeySupported, setPasskeySupported] = useState(false);
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
@@ -191,7 +211,7 @@ export function SignInPanel() {
     event.preventDefault();
     if (busy) return;
     setBusy(true);
-    setError(null);
+    setSchoolError(null);
 
     const result = await signInWithSchool({ loginName, password });
 
@@ -204,7 +224,7 @@ export function SignInPanel() {
     setBusy(false);
 
     if (!result.ok) {
-      setError(result.message);
+      setSchoolError(result.message);
       return;
     }
 
@@ -217,6 +237,7 @@ export function SignInPanel() {
   return (
     <div className="flex flex-col gap-6">
       {oauthError ? <OAuthErrorBanner message={oauthError} /> : null}
+      {error ? <OAuthErrorBanner message={error} /> : null}
 
       {/*//! ─── A GOOGLE-BELÉPÉS ─────────────────────────────────────────────
           //! ELSŐDLEGES GOMB, MERT EZ A CÉL ÁLLAPOT. A gomb Google saját
@@ -245,141 +266,175 @@ export function SignInPanel() {
         </p>
       </div>
 
-      <div className="flex items-center gap-3" aria-hidden>
-        <span className="h-px flex-1 bg-border" />
-        <span className="text-xs text-muted-foreground">vagy</span>
-        <span className="h-px flex-1 bg-border" />
-      </div>
+      {/*//! ─── GYORS BELÉPÉS — NEM AZ AD-HOZ TARTOZIK ──────────────────────
+          //! A HELYE SZÁNDÉKOSAN ITT VAN, a Google-gomb alatt és az összecsukott
+          //! AD-szakaszon KÍVÜL. Az ujjlenyomatos belépés magához a FIÓKHOZ
+          //! tartozik, nem ahhoz, ahogy azt a fiókot először létrehozták: aki
+          //! Google-lel lépett be és beállította, annak is ez a leggyorsabb út.
+          //! Ha a kivezetés alatt álló AD-szakaszba zárnánk, együtt tűnne el
+          //! vele — és pont azoktól, akiknek a legkevesebb dolguk lenne. */}
+      {passkeySupported ? (
+        <button
+          type="button"
+          disabled={passkeyBusy || busy}
+          onClick={() => {
+            setPasskeyBusy(true);
+            setError(null);
+            void authClient.signIn
+              .passkey()
+              .then((result) => {
+                if (result?.error) {
+                  //* A megszakítás nem hiba — csak nem történt semmi.
+                  if (!isCancelled(result.error)) {
+                    setError(
+                      "Ezen az eszközön még nincs beállítva gyors belépés.",
+                    );
+                  }
+                  return;
+                }
+                router.push(next);
+                router.refresh();
+              })
+              .finally(() => setPasskeyBusy(false));
+          }}
+          className="inline-flex items-center gap-1.5 self-start text-sm text-muted-strong underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50 motion-reduce:transition-none"
+        >
+          {passkeyBusy ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <Fingerprint className="size-4" aria-hidden />
+          )}
+          Belépés ujjlenyomattal
+        </button>
+      ) : null}
 
-      {/*//! ─── AZ AD-BELÉPÉS — CSAK MEGLÉVŐ FIÓKNAK, DEMOTÁLVA ──────────────
-          //! A MIGRÁCIÓ MÁSODIK SZAKASZA: az űrlap maga, a jelszókezelés
-          //! szabályai (lásd a fájl tetején) változatlanok, DE a mögötte futó
-          //! `/sign-in/jedlik` végpont már ELUTASÍTJA az új fiókot — lásd
-          //! `auth-jedlik.ts`. Aki még sosem lépett be itt, egy magyarázó
-          //! hibaüzenetet kap az űrlap kitöltése után, NEM sikeres belépést.
-          //! A cím alatti rövid jelzés ezt előre mutatja. */}
-      <div className="flex flex-col gap-3">
-        <div>
-          <h2 className="text-sm font-medium text-muted-strong">
-            Iskolai fiókkal
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Megszűnőben — csak meglévő fiókkal.
-          </p>
-        </div>
-
-        <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="loginName"
-              className="text-sm font-medium text-foreground"
-            >
-              Iskolai felhasználónév
-            </label>
-            <input
-              id="loginName"
-              name="username"
-              type="text"
-              required
-              autoComplete="username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              disabled={busy}
-              value={loginName}
-              onChange={(e) => setLoginName(e.target.value)}
-              className="h-10 rounded-md border border-input bg-transparent px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 dark:bg-input/30"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="password"
-              className="text-sm font-medium text-foreground"
-            >
-              Iskolai jelszó
-            </label>
-            {/*//! `type="password"` + `autoComplete="current-password"`: erről
-                //! ismeri fel a jelszókezelő az űrlapot. Ez nem kényelmi apróság —
-                //! egy jelszókezelőbe mentett bejegyzés a DOMAINHEZ kötődik, és egy
-                //! hamis lapon a kezelő egyszerűen nem kínálja fel a jelszót. Sok
-                //! diáknál ez az egyetlen jel, ami időben feltűnik. */}
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              disabled={busy}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="h-10 rounded-md border border-input bg-transparent px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 dark:bg-input/30"
-            />
-          </div>
-
-          {error ? (
-            //! A HIBAÜZENET A SZERVERÉ, ÉS SZÁNDÉKOSAN NEM RÉSZLETEZ. Nem árulja
-            //! el, létezik-e a felhasználónév — különben ez az űrlap egy kényelmes
-            //! névfelderítő eszköz lenne bárkinek.
-            <p
-              role="alert"
-              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-foreground"
-            >
-              {error}
-            </p>
-          ) : null}
-
-          <Button
-            type="submit"
-            variant="secondary"
-            disabled={busy}
-            className="self-start"
-          >
-            {busy ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-            ) : (
-              <LogIn className="size-4" aria-hidden />
+      {/*//! ─── AZ AD-BELÉPÉS — ÖSSZECSUKVA, EGY MONDAT MÖGÉ REJTVE ──────────
+          //! A KIVEZETÉS HARMADIK SZAKASZA. Elsőre a Google-gomb volt felül
+          //! (primer/szekunder), másodikra a mögötte futó végpont utasította el
+          //! az ÚJ fiókokat — most maga az űrlap kerül egy nyitógomb mögé.
+          //!
+          //! AMI NEM VÁLTOZIK: az űrlap működése, a jelszókezelés szabályai
+          //! (lásd a fájl tetején), és hogy aki már belépett vele, továbbra is
+          //! be tud lépni. Egy koppintás, nem egy elvett lehetőség — a rejtés
+          //! az ALAPÉRTELMEZÉST tolja a Google felé, nem a választást veszi el.
+          //!
+          //! A GOMB MONDATA A DÖNTÉST MONDJA KI, NEM A TECHNIKÁT („AD-belépés",
+          //! „LDAP") — a diák nem azt tudja magáról, hogy melyik címtárban van
+          //! a fiókja, hanem azt, hogy van-e Google-fiókja vagy nincs.
+          //!
+          //! A SZAKASZ A DOM-BAN MARAD, CSAK REJTVE (`hidden`), hogy a félig
+          //! kitöltött mezők túléljék a becsukást — és hogy a böngésző
+          //! oldalon-belüli keresése („iskolai jelszó") is megtalálja. */}
+      <div className="flex flex-col gap-4 border-t border-border pt-5">
+        <button
+          type="button"
+          aria-expanded={schoolOpen}
+          aria-controls="iskolai-belepes"
+          onClick={() => setSchoolOpen((open) => !open)}
+          className="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground transition-colors hover:text-foreground motion-reduce:transition-none"
+        >
+          <ChevronDown
+            className={cn(
+              "size-4 transition-transform motion-reduce:transition-none",
+              schoolOpen && "rotate-180",
             )}
-            {busy ? "Belépés…" : "Belépés"}
-          </Button>
-        </form>
+            aria-hidden
+          />
+          Nincs Google-fiókod? Belépés iskolai jelszóval
+        </button>
 
-        {passkeySupported ? (
-          <div className="flex flex-col gap-1 border-t border-border pt-5">
-            <button
-              type="button"
-              disabled={passkeyBusy || busy}
-              onClick={() => {
-                setPasskeyBusy(true);
-                setError(null);
-                void authClient.signIn
-                  .passkey()
-                  .then((result) => {
-                    if (result?.error) {
-                      //* A megszakítás nem hiba — csak nem történt semmi.
-                      if (!isCancelled(result.error)) {
-                        setError(
-                          "Ezen az eszközön még nincs beállítva gyors belépés.",
-                        );
-                      }
-                      return;
-                    }
-                    router.push(next);
-                    router.refresh();
-                  })
-                  .finally(() => setPasskeyBusy(false));
-              }}
-              className="inline-flex items-center gap-1.5 self-start text-sm text-muted-strong underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50 motion-reduce:transition-none"
+        <div
+          id="iskolai-belepes"
+          className={cn("flex-col gap-4", schoolOpen ? "flex" : "hidden")}
+        >
+          <p className="text-xs text-muted-foreground">
+            Az iskolai jelszavas belépés megszűnőben van — csak azzal a fiókkal
+            működik, amelyik korábban már belépett itt. Ha most lépnél be
+            először, a Google-gombot használd.{" "}
+            <Link
+              href="/valtozasok"
+              className="underline underline-offset-2 hover:text-foreground"
             >
-              {passkeyBusy ? (
+              Mi változik?
+            </Link>
+          </p>
+
+          <form onSubmit={onSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="loginName"
+                className="text-sm font-medium text-foreground"
+              >
+                Iskolai felhasználónév
+              </label>
+              <input
+                id="loginName"
+                name="username"
+                type="text"
+                required
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                disabled={busy}
+                value={loginName}
+                onChange={(e) => setLoginName(e.target.value)}
+                className="h-10 rounded-md border border-input bg-transparent px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 dark:bg-input/30"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="password"
+                className="text-sm font-medium text-foreground"
+              >
+                Iskolai jelszó
+              </label>
+              {/*//! `type="password"` + `autoComplete="current-password"`: erről
+                  //! ismeri fel a jelszókezelő az űrlapot. Ez nem kényelmi apróság —
+                  //! egy jelszókezelőbe mentett bejegyzés a DOMAINHEZ kötődik, és egy
+                  //! hamis lapon a kezelő egyszerűen nem kínálja fel a jelszót. Sok
+                  //! diáknál ez az egyetlen jel, ami időben feltűnik. */}
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                disabled={busy}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-10 rounded-md border border-input bg-transparent px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 dark:bg-input/30"
+              />
+            </div>
+
+            {schoolError ? (
+              //! A HIBAÜZENET A SZERVERÉ, ÉS SZÁNDÉKOSAN NEM RÉSZLETEZ. Nem árulja
+              //! el, létezik-e a felhasználónév — különben ez az űrlap egy kényelmes
+              //! névfelderítő eszköz lenne bárkinek.
+              <p
+                role="alert"
+                className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-foreground"
+              >
+                {schoolError}
+              </p>
+            ) : null}
+
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={busy}
+              className="self-start"
+            >
+              {busy ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />
               ) : (
-                <Fingerprint className="size-4" aria-hidden />
+                <LogIn className="size-4" aria-hidden />
               )}
-              Belépés ujjlenyomattal
-            </button>
-          </div>
-        ) : null}
+              {busy ? "Belépés…" : "Belépés"}
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );

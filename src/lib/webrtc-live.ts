@@ -40,11 +40,36 @@ type Listener = (streams: StreamSummary[]) => void;
 const listeners = new Set<Listener>();
 let current: StreamSummary[] | null = null;
 let fetchedAt = 0;
+//* Az utolsó KÍSÉRLET ideje, sikertől függetlenül — ebből ütemezünk.
+let triedAt = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let inFlight = false;
 
+//! REJTETT LAPON NEM KÉRDEZÜNK. Egy háttérben nyitva felejtett órarend
+//! (egy telepített alkalmazás akár egész nap) különben húszmásodpercenként
+//! kérdezne egy jelzésre, amit senki nem lát. A visszatérés azonnal kérdez,
+//! ha a válasz már régebbi egy ütemnél, különben kivárja a maradékot — a
+//! jelzés így sosem régebbi, mint eddig, amikor valaki ránéz.
+function hidden(): boolean {
+  return (
+    typeof document !== "undefined" && document.visibilityState === "hidden"
+  );
+}
+
+function schedule(): void {
+  clearTimeout(timer);
+  timer = undefined;
+  if (listeners.size === 0 || hidden()) return;
+  const due = triedAt + POLL_MS - Date.now();
+  if (due <= 0) void pull();
+  else timer = setTimeout(pull, due);
+}
+
 async function pull(): Promise<void> {
   if (inFlight) return;
+  //* Egy elrejtés előtt ütemezett kör sem kérdez már. Ha még semmit nem
+  //* tudunk (`current === null`), az első választ akkor is elkérjük.
+  if (current !== null && hidden()) return;
   inFlight = true;
   const list = await fetchStreams();
   inFlight = false;
@@ -55,21 +80,29 @@ async function pull(): Promise<void> {
     fetchedAt = Date.now();
     for (const listener of listeners) listener(current);
   }
-  if (listeners.size > 0) timer = setTimeout(pull, POLL_MS);
+  //* A hibás kör is kör: a következő egy teljes ütem múlva jön, nem azonnal.
+  triedAt = Date.now();
+  schedule();
+}
+
+function onVisibility(): void {
+  schedule();
 }
 
 function subscribe(listener: Listener): () => void {
   listeners.add(listener);
   if (current !== null) listener(current);
   if (listeners.size === 1) {
+    document.addEventListener("visibilitychange", onVisibility);
     //* Az első feliratkozó indítja az órát. Ha a legutóbbi válasz még friss,
     //* nem kérdezünk azonnal újra, csak a következő körben.
-    if (Date.now() - fetchedAt < FRESH_MS) timer = setTimeout(pull, POLL_MS);
+    if (Date.now() - fetchedAt < FRESH_MS) schedule();
     else void pull();
   }
   return () => {
     listeners.delete(listener);
     if (listeners.size === 0) {
+      document.removeEventListener("visibilitychange", onVisibility);
       clearTimeout(timer);
       timer = undefined;
     }

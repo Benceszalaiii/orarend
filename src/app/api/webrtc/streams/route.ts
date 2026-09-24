@@ -10,7 +10,6 @@ import {
   dropStream,
   getStream,
   listStreams,
-  mailboxSize,
   putStream,
   webrtcStoreDistributed,
 } from "@/lib/webrtc-store";
@@ -135,7 +134,9 @@ export async function POST(req: NextRequest) {
   //! azonnal; az 503 azt, „most nem megy", és a kliens erre RITKÍT (lásd a
   //! szivattyúk hibaszámlálóit). Egy Redis-kiesés így nem fordul át kérés-
   //! özönné.
-  if (!(await putStream(stream))) {
+  //* Az írás a láda hosszát is visszaadja (egy úton — lásd `putStream`).
+  const mail = await putStream(stream);
+  if (mail === null) {
     return json({ error: "store-unavailable" }, 503);
   }
 
@@ -147,7 +148,7 @@ export async function POST(req: NextRequest) {
   //*
   //! A SZÁM NEM TITOK, ÉS NEM IS ÁRUL EL SEMMIT: a saját postaládájáé, aminek
   //! a címét csak ő ismeri. A tartalmát ez a válasz nem hozza.
-  return json({ stream, mail: await mailboxSize(who.identity.peer) });
+  return json({ stream, mail });
 }
 
 export async function DELETE(req: NextRequest) {

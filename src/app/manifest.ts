@@ -11,6 +11,11 @@ import type { MetadataRoute } from "next";
 //*
 //* `theme_color` a `--card` sötét értéke, ugyanaz, ami a `layout.tsx`-ben áll:
 //* az álló eszköztár így az alkalmazás folytatása lesz, nem egy fölé rakott sáv.
+//*
+//! `orientation` SZÁNDÉKOSAN nincs megadva. Az `"any"` Androidon (WebAPK)
+//! `SCREEN_ORIENTATION_FULL_SENSOR` lesz, ami a forgatászárat is FELÜLÍRJA: a
+//! telepített alkalmazás lezárt forgatás mellett is elfordult. Mező nélkül a
+//! rendszerbeállítás dönt — forog, ha a felhasználó engedi, és áll, ha nem.
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -22,7 +27,6 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/ma",
     scope: "/",
     display: "standalone",
-    orientation: "any",
     background_color: "#17181c",
     theme_color: "#17181c",
     categories: ["education", "productivity"],
