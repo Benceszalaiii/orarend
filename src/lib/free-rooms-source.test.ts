@@ -156,3 +156,84 @@ describe("loadWeekOccupancy", () => {
     expect(await loadWeekOccupancy("2033-03-21")).toBeNull();
   });
 });
+
+describe("loadRoomsWeek", () => {
+  const card = {
+    text: "szakkör",
+    textTitle: "09. évfolyam matematika szakkör",
+    leftBottom: "BNM",
+    leftBottomTitle: "Banáné Nagy Mónika",
+    rightBottom: "",
+    week: "AB",
+    dayOfWeek: 1,
+    startMinuteFromMidnight: 430,
+    endMinuteFromMidnight: 475,
+  };
+
+  function roomServer(date: string, failing: string[] = []) {
+    const dotted = date.replaceAll("-", ".");
+    return serve((url, init) => {
+      if (url.endsWith("timetable/cards")) {
+        const room = JSON.parse(init?.body as string).classroom;
+        if (failing.includes(room)) return new Response("", { status: 500 });
+        return json({
+          days: [{ name: "Hétfő", date: dotted, week: "A", dayOfWeek: 1 }],
+          periods: [],
+          cards: room === "207" ? [{ ...card, date: dotted }] : [],
+        });
+      }
+      return new Response("", { status: 404 });
+    });
+  }
+
+  //! A lényeg: NEM a 71 termet, csak a kérteket — és a teremlistát sem.
+  test("csak a kért termeket kéri le", async () => {
+    const { loadRoomsWeek } = await fresh();
+    const monday = servableWeeks()[1];
+    const { calls } = roomServer(monday);
+    const week = await loadRoomsWeek(["207", "104", "207", ""], monday);
+    const cardCalls = calls.filter((c) => c.url.endsWith("timetable/cards"));
+    expect(cardCalls).toHaveLength(2);
+    expect(calls.some((c) => c.url.endsWith("timetable/classrooms"))).toBe(
+      false,
+    );
+    expect(week?.rooms.map((r) => [r.short, r.bookings.length])).toEqual([
+      ["207", 1],
+      ["104", 0],
+    ]);
+    expect(week?.rooms[0].bookings[0].teacherShort).toBe("BNM");
+  });
+
+  test("teremenként gyorsítótáraz", async () => {
+    const { loadRoomsWeek } = await fresh();
+    const monday = servableWeeks()[1];
+    const { calls } = roomServer(monday);
+    const cardCalls = () =>
+      calls.filter((c) => c.url.endsWith("timetable/cards")).length;
+    await loadRoomsWeek(["207"], monday);
+    expect(cardCalls()).toBe(1);
+    await loadRoomsWeek(["207"], monday);
+    expect(cardCalls()).toBe(1);
+  });
+
+  test("a kiesett terem ismeretlen", async () => {
+    const { loadRoomsWeek } = await fresh();
+    const monday = servableWeeks()[1];
+    roomServer(monday, ["104"]);
+    const week = await loadRoomsWeek(["207", "104"], monday);
+    expect(week?.unknown).toEqual(["104"]);
+    expect(week?.rooms.map((r) => r.short)).toEqual(["207"]);
+  });
+
+  test("az ablakon kívüli hétre nem kérdez", async () => {
+    const { loadRoomsWeek } = await fresh();
+    const { calls } = roomServer("2033-03-07");
+    expect(await loadRoomsWeek(["207"], "2033-03-07")).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  test("terem nélkül nincs mit kérdezni", async () => {
+    const { loadRoomsWeek } = await fresh();
+    expect(await loadRoomsWeek([], servableWeeks()[1])).toBeNull();
+  });
+});

@@ -50,6 +50,22 @@ function leads(actor: Actor, club: ClubRef): boolean {
   return teacher !== null && club.organizers.includes(teacher);
 }
 
+//! A BEVEZETÉS KAPCSOLÓJA. Amíg a szakkörlista nincs feltöltve, a félig üres
+//! lap többet árt, mint amennyit használ — a diák egyszer megnézi, és nem jön
+//! vissza. Ezért a `NEXT_PUBLIC_CLUBS_PUBLIC=1` előtt csak a tanárok és az
+//! adminok látják (ők töltik fel). Build-időben beégő változó, mert a kliens
+//! is ebből dönti el, mutatja-e a menüben a „Szakkörök" helyet.
+export function clubsLaunched(): boolean {
+  return process.env.NEXT_PUBLIC_CLUBS_PUBLIC === "1";
+}
+
+export function canBrowseClubs(
+  actor: Actor | null,
+  launched: boolean,
+): boolean {
+  return launched || actor?.isAdmin === true || actor?.isTeacher === true;
+}
+
 export function canCreateClub(actor: Actor | null): boolean {
   if (!actor) return false;
   return actor.isAdmin || teacherOf(actor) !== null;
@@ -148,4 +164,24 @@ export function entryVerdict(
     return { ok: false, reason: "full" };
   }
   return { ok: true };
+}
+
+//! A PISZKOZAT A SZERVEZŐÉ. Minden más állapot (nyitott, lezárt, lezajlott,
+//! elmaradó) nyilvános — az „elmarad" is hír, nem kell eltüntetni.
+export function canSeeCompetition(
+  actor: Actor | null,
+  competition: CompetitionRef,
+): boolean {
+  return (
+    competition.status !== "DRAFT" || canManageCompetition(actor, competition)
+  );
+}
+
+//* Visszalépni a nevezési határidőig lehet — utána a szervező már számol vele.
+export function canWithdraw(competition: CompetitionRef, now: Date): boolean {
+  return (
+    competition.status === "OPEN" &&
+    now.getTime() <
+      (competition.registrationDeadline ?? competition.startsAt).getTime()
+  );
 }

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Redis } from "@upstash/redis";
 import type { WeekSnapshot } from "./push-plan";
 import type { PushPrefs } from "./push-shared";
-import { subjectsOf } from "./push-shared";
+import { clubsOf, contestsOf, subjectsOf } from "./push-shared";
 import {
   subjectStoreKey,
   type TimetableLesson,
@@ -122,6 +122,27 @@ export async function saveSubscription(
       await redis.sadd(SUBJECT_INDEX[kind], short);
     }
   }
+
+  //* A szakkörök ugyanígy, saját kulcstérben (lásd `CLUB_KEY`).
+  const clubsBefore = new Set(previous ? clubsOf(previous) : []);
+  const clubsAfter = new Set(clubsOf(record));
+  for (const slug of clubsBefore) {
+    if (!clubsAfter.has(slug)) await redis.srem(CLUB_KEY(slug), id);
+  }
+  for (const slug of clubsAfter) {
+    await redis.sadd(CLUB_KEY(slug), id);
+    await redis.sadd(CLUB_INDEX, slug);
+  }
+
+  const contestsBefore = new Set(previous ? contestsOf(previous) : []);
+  const contestsAfter = new Set(contestsOf(record));
+  for (const slug of contestsBefore) {
+    if (!contestsAfter.has(slug)) await redis.srem(CONTEST_KEY(slug), id);
+  }
+  for (const slug of contestsAfter) {
+    await redis.sadd(CONTEST_KEY(slug), id);
+    await redis.sadd(CONTEST_INDEX, slug);
+  }
 }
 
 export async function removeSubscription(endpoint: string): Promise<void> {
@@ -132,6 +153,12 @@ export async function removeSubscription(endpoint: string): Promise<void> {
     for (const short of previous ? subjectsOf(previous, kind) : []) {
       await redis.srem(SUBJECT_KEY(kind, short), id);
     }
+  }
+  for (const slug of previous ? clubsOf(previous) : []) {
+    await redis.srem(CLUB_KEY(slug), id);
+  }
+  for (const slug of previous ? contestsOf(previous) : []) {
+    await redis.srem(CONTEST_KEY(slug), id);
   }
   await redis.del(SUB_KEY(id));
 }
@@ -151,16 +178,25 @@ export async function subscribedSubjects(
   return (await redis.smembers(SUBJECT_INDEX[kind])) ?? [];
 }
 
-export async function subscribersOf(
+export function subscribersOf(
   kind: TimetableSubjectKind,
   short: string,
 ): Promise<PushSubscription[]> {
+  return membersOf(SUBJECT_KEY(kind, short), SUBJECT_INDEX[kind], short);
+}
+
+//* Egy feliratkozó-halmaz élő sorai — az órarend-alanyoké és a szakköröké is.
+async function membersOf(
+  setKey: string,
+  indexKey: string,
+  member: string,
+): Promise<PushSubscription[]> {
   if (!redis) return [];
-  const ids = (await redis.smembers(SUBJECT_KEY(kind, short))) ?? [];
+  const ids = (await redis.smembers(setKey)) ?? [];
   if (ids.length === 0) {
     //* Üresre fogyott halmaz: az index is felejtse el az alanyt, hogy a
     //* háttérfeladat ne kérje le fölöslegesen a suli szerverétől.
-    await redis.srem(SUBJECT_INDEX[kind], short);
+    await redis.srem(indexKey, member);
     return [];
   }
   const rows = await Promise.all(
@@ -172,7 +208,7 @@ export async function subscribersOf(
     //* A sor a saját élettartama végén magától eltűnik; a halmazból viszont
     //* nem — ezt itt takarítjuk, menet közben.
     if (!row) {
-      await redis.srem(SUBJECT_KEY(kind, short), ids[i]);
+      await redis.srem(setKey, ids[i]);
       continue;
     }
     alive.push(row);
@@ -306,4 +342,83 @@ export async function writeSnapshot(
       ex: SNAPSHOT_SECONDS,
     },
   );
+}
+
+//* ---------------------------------------------------------------------------
+//* SZAKKÖRÖK
+//* ---------------------------------------------------------------------------
+//! KÜLÖN KULCSTÉR, NEM HARMADIK „ALANY". Az osztály és a tanár órarend-alany:
+//! heti kártyák, összevonás, lenyomat. A szakkör nem az — a heti alkalmait a
+//! `club-schedule.ts` számolja ki. Ha a `SUBJECT_KINDS`-ba kerülne, minden
+//! órarend-specifikus ág (`getTimetableWeek`, `diffWeeks`) megkapná, és
+//! mindegyikben kivételt kellene tenni. Itt csak a feliratkozók halmaza, a
+//! lefoglalt kulcsok és a „kiesett alkalmak" lenyomata él.
+const CLUB_KEY = (slug: string) => `push:club:${slug}`;
+const CLUB_INDEX = "push:clubs";
+
+export async function subscribedClubs(): Promise<string[]> {
+  if (!redis) return [];
+  return (await redis.smembers(CLUB_INDEX)) ?? [];
+}
+
+export function clubSubscribersOf(slug: string): Promise<PushSubscription[]> {
+  return membersOf(CLUB_KEY(slug), CLUB_INDEX, slug);
+}
+
+export function leaseClubReminder(sessionId: string): Promise<boolean> {
+  return lease(`push:club-sent:${sessionId}`, 60 * 60 * 12);
+}
+
+export function leaseClubChange(
+  slug: string,
+  fingerprint: string,
+): Promise<boolean> {
+  return lease(`push:club-change:${slug}:${fingerprint}`, 60 * 60 * 24 * 7);
+}
+
+//* A héten eddig látott „nincs" alkalmak azonosítói (lásd `newlyGone`).
+export async function readClubGone(
+  slug: string,
+  weekStart: string,
+): Promise<string[] | null> {
+  if (!redis) return null;
+  return await redis.get<string[]>(`push:club-gone:${slug}:${weekStart}`);
+}
+
+export async function writeClubGone(
+  slug: string,
+  weekStart: string,
+  ids: string[],
+): Promise<void> {
+  if (!redis) return;
+  await redis.set(`push:club-gone:${slug}:${weekStart}`, ids, {
+    ex: SNAPSHOT_SECONDS,
+  });
+}
+
+//* ---------------------------------------------------------------------------
+//* VERSENYEK
+//* ---------------------------------------------------------------------------
+//* Ugyanaz a felépítés, mint a szakköröknél, saját kulcstérben.
+const CONTEST_KEY = (slug: string) => `push:contest:${slug}`;
+const CONTEST_INDEX = "push:contests";
+
+export async function subscribedContests(): Promise<string[]> {
+  if (!redis) return [];
+  return (await redis.smembers(CONTEST_INDEX)) ?? [];
+}
+
+export function contestSubscribersOf(
+  slug: string,
+): Promise<PushSubscription[]> {
+  return membersOf(CONTEST_KEY(slug), CONTEST_INDEX, slug);
+}
+
+//* Egy verseny egy fajta emlékeztetője egyszer — a kulcs a nappal együtt.
+export function leaseContestReminder(
+  slug: string,
+  kind: string,
+  dayKey: string,
+): Promise<boolean> {
+  return lease(`push:contest-sent:${slug}:${kind}:${dayKey}`, 60 * 60 * 24 * 2);
 }

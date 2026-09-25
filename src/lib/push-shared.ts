@@ -40,6 +40,11 @@ export const MAX_CLASSES = 5;
 //! lekérés percenként.
 export const MAX_TEACHERS = 2;
 
+//! A KÖVETETT SZAKKÖRÖK FELSŐ HATÁRA. Egy szakkör hetente egy-két jelzés, nem
+//! napi öt — a korlát itt nem a zajt, hanem a tároló kulcsterét fogja meg.
+export const MAX_CLUBS = 10;
+export const MAX_CONTESTS = 10;
+
 //* Egy feliratkozás beállításai. Ennyit tud rólunk a szerver — és ennél többet
 //* nem is akarunk, hogy tudjon (lásd `/adatvedelem`).
 export type PushPrefs = {
@@ -54,6 +59,14 @@ export type PushPrefs = {
   //! elveszne.
   /** Mely tanárok órarendjéről jöjjön jelzés. Legfeljebb `MAX_TEACHERS`. */
   teachers: string[];
+  //! A KÖVETETT SZAKKÖRÖK (a címük, `slug`). NÉVTELEN, mint a többi: a
+  //! feliratkozás egy készülékhez tartozik, nem egy fiókhoz — a követéshez nem
+  //! kell belépni. A régebben tárolt feliratkozásokban a mező hiányzik; az
+  //! olvasás ezért mindig a `clubsOf`-on át megy.
+  /** Mely szakkörök alkalmairól jöjjön jelzés. Legfeljebb `MAX_CLUBS`. */
+  clubs?: string[];
+  //* A követett versenyek (`slug`) — határidő- és kezdés-emlékeztető.
+  contests?: string[];
   //! KÉT SŰRŰSÉG, EGY KAPCSOLÓ. Alapból csak a nap ELSŐ órája előtt szólunk, és
   //! minden olyan óra előtt, ami szünet vagy lyukasóra UTÁN kezdődik — vagyis
   //! amikor a diák nincs is az iskolában, vagy nem ott van, ahol lennie kell.
@@ -66,6 +79,7 @@ export type PushPrefs = {
 export const DEFAULT_PREFS: PushPrefs = {
   classes: [],
   teachers: [],
+  clubs: [],
   everyLesson: false,
 };
 
@@ -75,7 +89,12 @@ export const DEFAULT_PREFS: PushPrefs = {
 //! tanárin a másik). Ezért nem szabad sehol azt kérdezni, hogy „üres-e a
 //! `classes`": attól a másik lista még tarthatja életben a sort.
 export function prefsEmpty(prefs: PushPrefs): boolean {
-  return prefs.classes.length === 0 && prefs.teachers.length === 0;
+  return (
+    prefs.classes.length === 0 &&
+    prefs.teachers.length === 0 &&
+    clubsOf(prefs).length === 0 &&
+    contestsOf(prefs).length === 0
+  );
 }
 
 //* A két lista ugyanazon a néven, alanyfajta szerint — így a lap, a végpont és
@@ -113,3 +132,15 @@ export type PushPayload = {
   //! emlékeztető sem marad ott a mai mellett.
   tag: string;
 };
+
+/** A követett szakkörök — a mező nélküli (régi) feliratkozásnál üres lista. */
+export function clubsOf(prefs: Partial<Pick<PushPrefs, "clubs">>): string[] {
+  return Array.isArray(prefs.clubs) ? prefs.clubs : [];
+}
+
+/** A követett versenyek — a mező nélküli (régi) feliratkozásnál üres lista. */
+export function contestsOf(
+  prefs: Partial<Pick<PushPrefs, "contests">>,
+): string[] {
+  return Array.isArray(prefs.contests) ? prefs.contests : [];
+}

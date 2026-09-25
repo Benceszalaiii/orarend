@@ -1,3 +1,5 @@
+import { runClub } from "@/lib/club-push";
+import { runContest } from "@/lib/contest-push";
 import {
   budapestNow,
   changeFingerprint,
@@ -17,6 +19,8 @@ import {
   readSnapshot,
   readWeekCache,
   SUBJECT_KINDS,
+  subscribedClubs,
+  subscribedContests,
   subscribedSubjects,
   subscribersOf,
   writeSnapshot,
@@ -251,9 +255,31 @@ export async function GET(request: Request) {
     }
   }
 
+  //* A követett szakkörök — ugyanúgy sorban, ugyanazzal a hibatűréssel.
+  const clubs = await subscribedClubs();
+  for (const slug of clubs) {
+    try {
+      await runClub(slug, tally);
+    } catch {
+      //* Lásd fent: egy szakkör hibája ne vigye el a többiét.
+    }
+  }
+
+  //* A követett versenyek határidő-emlékeztetői — naponta egyszer, délután.
+  const contests = await subscribedContests();
+  for (const slug of contests) {
+    try {
+      await runContest(slug, tally);
+    } catch {
+      //* Lásd fent.
+    }
+  }
+
   return Response.json({
     classes: counts.class,
     teachers: counts.teacher,
+    clubs: clubs.length,
+    contests: contests.length,
     ...tally,
   });
 }

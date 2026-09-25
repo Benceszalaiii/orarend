@@ -6,6 +6,7 @@ import {
   type StoredWeek,
   writeWindow,
 } from "./calendar-store";
+import type { IcsEvent } from "./ics";
 import { buildIcs } from "./ics";
 import { budapestNow } from "./push-plan";
 import {
@@ -207,6 +208,8 @@ export function renderFeed(input: {
   row: CalendarFeedRow;
   window: FeedWindow;
   stamp?: number;
+  //* A rácson is látható szakkör-alkalmak (lásd `club-calendar.ts`).
+  extraEvents?: readonly IcsEvent[];
 }): string {
   const { row, window } = input;
   const events = feedEvents({
@@ -222,7 +225,7 @@ export function renderFeed(input: {
     //* Egy mondat, amit a naptár a feliratkozás adatlapján mutat. A frissesség
     //* itt van kimondva, mert a naptár saját ütemezéséről mi nem dönthetünk.
     description: `A ${row.short} órarendje a saját csoportválasztásaiddal. Az adat óránként frissül a forrásból.`,
-    events,
+    events: [...events, ...(input.extraEvents ?? [])],
     stamp: input.stamp ?? Date.now(),
     refreshMinutes: FEED_REFRESH_MINUTES,
   });

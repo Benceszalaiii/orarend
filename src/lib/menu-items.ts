@@ -1,3 +1,4 @@
+import { clubsLaunched } from "./club-access";
 import { notifyPrefsChanged } from "./prefs-events";
 
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -37,10 +38,13 @@ export type MenuItemId =
   | "home"
   | "duty"
   | "rooms"
+  | "clubs"
+  | "contests"
   | "screens"
   | "merge"
   | "dual"
   | "glance"
+  | "suggest"
   | "notify"
   | "calendar"
   | "legend";
@@ -79,6 +83,18 @@ export const MENU_ITEMS: readonly MenuItemMeta[] = [
     hint: "Minden óra, a beállításaid nélkül",
     group: "settings",
   },
+  //* A javaslatok csak a bevezetés után kerülnek a testreszabóba — addig a
+  //* rácson sincs ilyen sor (lásd `clubsVisibleHere`).
+  ...(clubsLaunched()
+    ? [
+        {
+          id: "suggest" as const,
+          label: "Beleférő szakkörök",
+          hint: "Nyitott szakkörök a szabad sávjaidban",
+          group: "settings" as const,
+        },
+      ]
+    : []),
   {
     id: "notify",
     label: "Értesítés",
@@ -121,6 +137,25 @@ export const MENU_ITEMS: readonly MenuItemMeta[] = [
     hint: "Melyik terem üres most",
     group: "site",
   },
+  //! A SZAKKÖRÖK CSAK A BEVEZETÉS UTÁN KERÜLNEK A LAPRA (lásd `clubsLaunched`).
+  //! Előtte egy üres helyre mutató sor csak zsákutca volna — a jele azért már
+  //! most a `MenuItemId`-ban áll, hogy a tárolt választás ne vesszen el.
+  ...(clubsLaunched()
+    ? [
+        {
+          id: "clubs" as const,
+          label: "Szakkörök",
+          hint: "Mikor, hol, kinek",
+          group: "site" as const,
+        },
+        {
+          id: "contests" as const,
+          label: "Versenyek",
+          hint: "Meddig lehet nevezni",
+          group: "site" as const,
+        },
+      ]
+    : []),
   {
     id: "screens",
     label: "Kivetítés",

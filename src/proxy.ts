@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { isAiBotUserAgent } from "@/lib/ai-bots";
+import { JEDLIK_SITE } from "@/lib/jedlik-api";
 import { isViewRoute, LAST_VIEW_COOKIE } from "@/lib/last-view";
 
 //! ─── AZ AI-ROBOTOK KAPUJA ──────────────────────────────────────────────────
@@ -32,6 +33,29 @@ function blockAiBot(): NextResponse {
   );
 }
 
+//! ─── A JEDLIKINFO ÁTJÁRÓJA ─────────────────────────────────────────────────
+//! A `/api/jedlik/*` átirányító (`next.config.ts`) a böngésző fejléceit viszi
+//! tovább — a Jedlikinfo viszont a `timetable/cards` POST-ot csak akkor adja
+//! ki, ha az `Origin` ÉS a `Referer` is egy általa ismert oldalé (a
+//! `jedlik.info` az, a `localhost`, a `www.` és az előnézeti címek NEM —
+//! ellenőrizve 2026-09-25). Ezért ugyanazt mondjuk neki, amit a szerveroldali
+//! hívás is mond (`jedlik-api.ts`): a saját felületéről jövünk. Így a helyi
+//! fejlesztés és minden előnézet ugyanúgy működik, mint az éles oldal.
+//*
+//! A SÜTIT NEM VISSZÜK ÁT. Az átirányító különben a látogató MINDEN sütijét
+//! — a belépési munkamenetet is — egy idegen szervernek adná. A Jedlikinfo
+//! nyilvános végpontjainak nincs rá szükségük.
+//*
+//! A proxy a `next.config.ts` átirányítói ELŐTT fut, és a `request.headers`
+//! felülírása a továbbküldött kérésre vonatkozik, nem a válaszra.
+function jedlikUpstream(request: NextRequest): NextResponse {
+  const headers = new Headers(request.headers);
+  headers.set("origin", JEDLIK_SITE);
+  headers.set("referer", `${JEDLIK_SITE}/`);
+  headers.delete("cookie");
+  return NextResponse.next({ request: { headers } });
+}
+
 //! ─── A GYÖKÉR KAPUJA ───────────────────────────────────────────────────────
 //! Egyetlen kérdést tesz fel, a lap kirajzolása ELŐTT: járt-e már ez a
 //! böngésző valamelyik nézetben?
@@ -53,6 +77,9 @@ function blockAiBot(): NextResponse {
 //! elérhetetlenné válna.
 export function proxy(request: NextRequest) {
   if (isAiBotUserAgent(request.headers.get("user-agent"))) return blockAiBot();
+  if (request.nextUrl.pathname.startsWith("/api/jedlik/")) {
+    return jedlikUpstream(request);
+  }
 
   //! A TÖBBI ÚTVONALON NINCS MÁS DOLGUNK. A süti-kapu csak a gyökérre szól; a
   //! matcher azért tágabb nála, mert a robotszűrőnek az EGÉSZ lapot kell

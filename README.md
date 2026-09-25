@@ -65,6 +65,7 @@ Nyisd meg: [http://localhost:3000](http://localhost:3000). A `/` átirányít az
 | `bun start` | Az éles build kiszolgálása |
 | `bun run lint` | `biome check` |
 | `bun run format` | `biome format --write` |
+| `bun run db:seed:clubs` | A kezdő szakkörlista betöltése (`--check`: csak ellenőriz) |
 
 ## Honnan jönnek az adatok
 
@@ -302,6 +303,74 @@ változásokról továbbra is a push-értesítés szól időben.
 
 Redis nélkül a funkció `503`-at ad, és a felületen sem ígér semmit — ugyanaz a
 szabály, mint az értesítéseknél.
+
+## Szakkörök
+
+A szakkörök **nagy része már benne van a Jedlikinfóban** — a terem és a tanár
+órarendjében, **osztály nélküli** kártyaként (sokszor csak „Tehetséggondozó
+szakkör" címmel). Egy osztály nélküli kártya viszont egyik osztály
+órarendjében sem jelenik meg, ezért a diákok nem látják. Az app a szakkör
+kilétét (név, leírás, kinek szól, ki vezeti) a saját adatbázisában tartja, az
+időpontját pedig hetente összeveti a Jedlikinfóval, és kimondja, mennyire
+tudja: *az órarendben*, *a tanár szerint*, *nincs az órarendben*, *nincs
+tanítás*, *nem ellenőrizhető* (`lib/club-schedule.ts`).
+
+- **Az órarendi rácson** a szakkör választható: alapból csak a **követett**
+  szakkörök jelennek meg (belépés nélkül is), tanárnál a saját szakkörei. Az
+  osztálynak szóló szakkör sem kerül rá magától — azt a javaslatok mutatják.
+- **A teremkereső** a foglalt termet a szakkör nevével mutatja.
+- **Követés** (fiók nélkül, a böngészőben; belépve szinkronizálva),
+  **jelentkezés** (fiókkal — a tagság nyilvános), **értesítés** (névtelen
+  push: 10 perccel előtte, és ha kiesik az órarendből), **naptár**
+  (`webcal://`).
+- Szakkört **tanár** hoz létre; **diák javasolhat**, és a felkért tanár hagyja
+  jóvá (`lib/club-access.ts`).
+
+### Felfedezés
+
+- **„Neked is jó időpontban"** — a szakkörlista a böngészőben menti heteiből
+  (A és B hét is, ha megvan) megmondja, melyik szakkör fér bele a diák
+  órarendjébe, az elrejtett csoportok nélkül; a kártya az ütköző órát is
+  megnevezi (`lib/club-fit.ts`).
+- **Beleférő szakkörök a rácson** — kapcsolható (alapból ki): az osztálynak
+  vagy évfolyamának szóló és a mindenkinek nyitott szakkörök halvány,
+  szaggatott kártyaként a diák szabad sávjaiban
+  (`javaslat=1`, `lib/club-suggest-pref.ts`).
+- **„Mire lenne igény?"** — belépett diák témát ír fel vagy jelez; csak a
+  jelzések száma nyilvános. A tanár egy gombbal szakkört indít belőle, és az
+  ötlet onnantól a szakkörre mutat (`lib/club-ideas.ts`).
+- **Folyosói tábla** (`/tabla`) — az iskola kijelzőire: a nap hátralévő
+  szakkörei teremmel, a nevezési határidők és a közelgő versenyek; magától
+  frissül (`lib/hallway-board.ts`).
+
+### Versenyek
+
+- **A határidő áll elöl**: a `/versenyek` lap tetején a nyitott nevezések a
+  legsürgősebbel kezdve, a `/ma` oldalsávjában pedig az, amire az osztály
+  nevezhet.
+- **Egyéni nevezés** (fiókkal, nyilvános), osztályra/évfolyamra szűrve,
+  létszámkorláttal; a határidőig vissza lehet lépni. Csapatok később.
+- **Emlékeztető** (névtelen push): három nappal és egy nappal a határidő előtt,
+  meg a verseny előtti napon, délután négykor (`lib/contest-push.ts`).
+- Versenyt **tanár** hirdet meg, **piszkozatként**; a nevezést ő nyitja meg. Az
+  **eredményt** (helyezés, díj, pont) fokozatosan rögzítheti, és akkor lesz
+  nyilvános, amikor „Lezajlott"-ra állítja.
+- A felkészítő szakkör és a verseny kölcsönösen hivatkozik egymásra.
+
+| Végpont | Mire kell |
+| --- | --- |
+| `GET /api/szakkorok/orarend?osztaly=09A&het=…&klubok=…&javaslat=1` | Egy alany hetének szakkör-alkalmai (tanárnál `tanar=BNM`); `javaslat=1`: a nyitott szakkörök is, `suggested` jelöléssel |
+| `GET /api/szakkorok/<slug>/naptar.ics` | Egy szakkör alkalmai a következő 8 hétre |
+| `GET /api/versenyek/hataridok?osztaly=09A&versenyek=…` | A nyitott nevezési határidők, amire az osztály nevezhet (a `/ma` panelje) |
+| `GET /api/versenyek/<slug>/naptar.ics` | Egy verseny, a fordulói és a nevezési határideje |
+
+A Jedlikinfót ugyanaz a teremenkénti, óránkénti gyorsítótár védi, mint a
+teremkeresőt — de az órarend csak **a szükséges termeket** kéri le
+(`loadRoomsWeek`), nem mind a 71-et.
+
+| Env-változó | Mire kell |
+| --- | --- |
+| `NEXT_PUBLIC_CLUBS_PUBLIC` | `1` = a szakkörök mindenkinek látszanak. Előtte csak tanár és üzemeltető látja (feltöltéshez). Build-időben beég: átállítás után új build kell |
 
 ## Felépítés
 

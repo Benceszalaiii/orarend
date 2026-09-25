@@ -215,7 +215,7 @@ async function fetchRoomWeek(
   return null;
 }
 
-async function loadRoomList(): Promise<
+export async function loadRoomList(): Promise<
   { short: string; name: string }[] | null
 > {
   if (roomsCache && Date.now() - roomsCache.at < ROOMS_TTL_MS) {
@@ -370,5 +370,101 @@ function prune(): void {
   const servable = new Set(servableWeeks());
   for (const key of weekCache.keys()) {
     if (!servable.has(key)) weekCache.delete(key);
+  }
+}
+
+//* ---------------------------------------------------------------------------
+//* CSAK NÉHÁNY TEREM — A SZAKKÖRÖK ÓRARENDI IGAZOLÁSÁHOZ
+//* ---------------------------------------------------------------------------
+//! MIÉRT NEM ELÉG A TELJES SEPRÉS. A szakkör-alkalmakat az órarend MINDEN
+//! megnyitásakor igazolni kell (`/api/szakkorok/orarend`), a teremkeresőt
+//! viszont ritkán nyitják meg. Ha egy osztály órarendje a 71 termes seprést
+//! indítaná el egy hideg szerverpéldányon, az órarend lenne a Jedlikinfo
+//! legnagyobb terhelője — pedig egy osztály szakkörei jellemzően 1–3 teremben
+//! vannak. Ezért:
+//!
+//!   1. ha a teljes seprés friss, azt adjuk vissza (nincs új kérés);
+//!   2. különben CSAK a kért termeket kérjük le, teremenként óránként egyszer.
+//!
+//! Ugyanaz az ablak és ugyanaz a hibakezelés, mint a teljes seprésnél: az
+//! ablakon kívüli hétre `null`, a kiesett terem `unknown`, a lejárt példány
+//! jobb a semminél.
+
+//* Egy hívás legfeljebb ennyi termet kérhet — a termek az adatbázisból jönnek,
+//* nem a kérésből, de a korlát ne a hívók fegyelmén múljon.
+const PARTIAL_MAX_ROOMS = 12;
+
+const roomWeekCache = new Map<
+  string,
+  { at: number; data: RawRoomCardsResponse }
+>();
+
+export async function loadRoomsWeek(
+  rooms: readonly string[],
+  weekStart: string,
+): Promise<WeekOccupancy | null> {
+  const monday = mondayOf(weekStart);
+  const full = weekCache.get(monday);
+  if (full && Date.now() - full.fetchedAt < OCCUPANCY_TTL_MS) return full;
+  if (!isServableDate(monday)) return null;
+
+  const wanted = [...new Set(rooms.filter((r) => r.length > 0))].slice(
+    0,
+    PARTIAL_MAX_ROOMS,
+  );
+  if (wanted.length === 0) return null;
+
+  const responses = await pooled(wanted, SWEEP_CONCURRENCY, async (room) => {
+    const key = `${room}|${monday}`;
+    const hit = roomWeekCache.get(key);
+    if (hit && Date.now() - hit.at < OCCUPANCY_TTL_MS) {
+      return { room, data: hit.data };
+    }
+    const data = await fetchRoomWeek(room, monday);
+    if (data) roomWeekCache.set(key, { at: Date.now(), data });
+    //* Sikertelen lekérés: a lejárt példány jobb a semminél.
+    return { room, data: data ?? hit?.data ?? null };
+  });
+  pruneRoomWeeks();
+
+  let days: FreeRoomsDay[] = [];
+  let periods: TimetablePeriod[] = [];
+  for (const { data } of responses) {
+    if (!data) continue;
+    if (days.length === 0) days = parseRoomDays(data.days ?? []);
+    if (periods.length === 0) periods = parseRoomPeriods(data.periods ?? []);
+  }
+  const withPlan = days.length > 0 ? await withTeachingDays(days) : days;
+
+  const occupied: RoomWeek[] = [];
+  const unknown: string[] = [];
+  for (const { room, data } of responses) {
+    if (!data) {
+      unknown.push(room);
+      continue;
+    }
+    occupied.push({
+      short: room,
+      name: room,
+      bookings: bookingsOfRoom(data.cards ?? [], withPlan),
+    });
+  }
+
+  return {
+    weekStart: monday,
+    fetchedAt: Date.now(),
+    days: withPlan,
+    periods,
+    rooms: occupied,
+    unknown,
+  };
+}
+
+function pruneRoomWeeks(): void {
+  const servable = new Set(servableWeeks());
+  for (const key of roomWeekCache.keys()) {
+    if (!servable.has(key.slice(key.lastIndexOf("|") + 1))) {
+      roomWeekCache.delete(key);
+    }
   }
 }

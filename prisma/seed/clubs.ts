@@ -52,13 +52,22 @@ function at(
   return { weekday, ...time, room, teachers, source };
 }
 
-type SeedClub = Omit<ClubInput, "description" | "audienceNote"> & {
+type SeedClub = Omit<ClubInput, "description" | "audienceNote" | "tracks"> & {
   audienceNote?: string;
+  tracks?: ClubInput["tracks"];
 };
 
 function club(c: SeedClub): ClubInput {
-  return { description: null, audienceNote: null, ...c };
+  return { description: null, audienceNote: null, tracks: [], ...c };
 }
+
+//! A SZAKMAI IRÁNY — csak ahol a szakkör neve egyértelműen kimondja. A
+//! „09. évf. informatika", a Lego vagy a Drón mindenkié; a „szoftverfejlesztés"
+//! az A (és C), a „hálózati technológiák" a B (és C), a gépészet a D és E
+//! osztályoké. Lásd `tracksOfClass`.
+const SOFTWARE = { tracks: ["SOFTWARE" as const] };
+const NETWORK = { tracks: ["NETWORK" as const] };
+const MECHANICAL = { tracks: ["MECHANICAL" as const] };
 
 const everyone = { grades: [], classes: [] };
 const grade = (g: number) => ({ grades: [g], classes: [] });
@@ -260,6 +269,7 @@ export const SEED_CLUBS: readonly ClubInput[] = [
     name: "11. évf. szoftverfejlesztés szakkör",
     kind: "CLUB",
     ...grade(11),
+    ...SOFTWARE,
     organizers: ["SL"],
     slots: [],
   }),
@@ -267,6 +277,7 @@ export const SEED_CLUBS: readonly ClubInput[] = [
     name: "12. évf. szoftverfejlesztés szakkör",
     kind: "CLUB",
     ...grade(12),
+    ...SOFTWARE,
     organizers: ["BG"],
     slots: [at(K, P0, "202", ["BG"])],
   }),
@@ -274,6 +285,7 @@ export const SEED_CLUBS: readonly ClubInput[] = [
     name: "13. évf. szoftverfejlesztés szakkör",
     kind: "CLUB",
     ...grade(13),
+    ...SOFTWARE,
     organizers: ["BP"],
     slots: [],
   }),
@@ -281,6 +293,7 @@ export const SEED_CLUBS: readonly ClubInput[] = [
     name: "11. évf. hálózati technológiák szakkör",
     kind: "CLUB",
     ...grade(11),
+    ...NETWORK,
     organizers: ["CSI"],
     slots: [at(H, P8, "117", ["CSI"])],
   }),
@@ -288,6 +301,7 @@ export const SEED_CLUBS: readonly ClubInput[] = [
     name: "12. évf. hálózati technológiák szakkör",
     kind: "CLUB",
     ...grade(12),
+    ...NETWORK,
     organizers: ["HN"],
     slots: [at(CS, P8, "203", ["HN"])],
   }),
@@ -295,6 +309,7 @@ export const SEED_CLUBS: readonly ClubInput[] = [
     name: "13. évf. hálózati technológiák szakkör",
     kind: "CLUB",
     ...grade(13),
+    ...NETWORK,
     organizers: ["VA"],
     slots: [at(K, P8, "B5", ["VA"])],
   }),
@@ -302,6 +317,7 @@ export const SEED_CLUBS: readonly ClubInput[] = [
     name: "Rendszergazda szakkör",
     kind: "CLUB",
     ...everyone,
+    ...NETWORK,
     organizers: ["HF"],
     slots: [at(H, P8_9, null, ["HF"], "ORGANIZER")],
   }),
@@ -360,6 +376,7 @@ export const SEED_CLUBS: readonly ClubInput[] = [
     name: "Forgácsolás szakkör",
     kind: "CLUB",
     ...everyone,
+    ...MECHANICAL,
     organizers: ["GA"],
     slots: [
       at(K, { startMinute: P8.endMinute, endMinute: 16 * 60 + 40 }, "CNC", [
@@ -371,6 +388,7 @@ export const SEED_CLUBS: readonly ClubInput[] = [
     name: "CAD rajzolás és 3D nyomtatás szakkör",
     kind: "CLUB",
     ...everyone,
+    ...MECHANICAL,
     organizers: ["MM"],
     slots: [at(H, P0, "114", ["MM"]), at(P, P0, "114", ["MM"])],
   }),
@@ -378,6 +396,7 @@ export const SEED_CLUBS: readonly ClubInput[] = [
     name: "Műszaki rajz szakkör",
     kind: "CLUB",
     ...everyone,
+    ...MECHANICAL,
     organizers: ["PN"],
     slots: [at(CS, P0, "207", ["PN"])],
   }),
@@ -385,6 +404,7 @@ export const SEED_CLUBS: readonly ClubInput[] = [
     name: "Hegesztés szakkör",
     kind: "CLUB",
     ...everyone,
+    ...MECHANICAL,
     organizers: ["KZ"],
     slots: [],
   }),

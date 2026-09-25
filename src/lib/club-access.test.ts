@@ -2,12 +2,15 @@ import { describe, expect, test } from "bun:test";
 import {
   type Actor,
   canApproveClub,
+  canBrowseClubs,
   canCreateClub,
   canEditClub,
   canJoinClub,
   canManageCompetition,
   canProposeClub,
   canSeeClub,
+  canSeeCompetition,
+  canWithdraw,
   entryVerdict,
 } from "./club-access";
 
@@ -157,5 +160,52 @@ describe("verseny", () => {
     expect(
       entryVerdict({ ...student, className: "13E" }, open, 99, now),
     ).toEqual({ ok: true });
+  });
+});
+
+describe("a bevezetés előtt", () => {
+  test("csak tanár és admin böngészhet", () => {
+    expect(canBrowseClubs(null, false)).toBe(false);
+    expect(canBrowseClubs(student, false)).toBe(false);
+    expect(canBrowseClubs(teacher, false)).toBe(true);
+    expect(canBrowseClubs(unresolvedTeacher, false)).toBe(true);
+    expect(canBrowseClubs(admin, false)).toBe(true);
+  });
+
+  test("bevezetés után mindenki, belépés nélkül is", () => {
+    expect(canBrowseClubs(null, true)).toBe(true);
+  });
+});
+
+describe("verseny láthatósága és visszalépés", () => {
+  const draft = {
+    status: "DRAFT" as const,
+    teachers: ["BNM"],
+    createdById: "tanar",
+    startsAt: new Date("2026-11-01T08:00:00Z"),
+    registrationDeadline: new Date("2026-10-15T22:00:00Z"),
+    capacity: null,
+    grades: [],
+    classes: [],
+  };
+
+  test("a piszkozatot csak a szervező és az admin látja", () => {
+    expect(canSeeCompetition(null, draft)).toBe(false);
+    expect(canSeeCompetition(student, draft)).toBe(false);
+    expect(canSeeCompetition(otherTeacher, draft)).toBe(false);
+    expect(canSeeCompetition(teacher, draft)).toBe(true);
+    expect(canSeeCompetition(admin, draft)).toBe(true);
+    expect(canSeeCompetition(null, { ...draft, status: "CANCELLED" })).toBe(
+      true,
+    );
+  });
+
+  test("visszalépni a határidőig lehet, nyitott nevezésnél", () => {
+    const open = { ...draft, status: "OPEN" as const };
+    expect(canWithdraw(open, new Date("2026-10-15T21:00:00Z"))).toBe(true);
+    expect(canWithdraw(open, new Date("2026-10-15T22:00:00Z"))).toBe(false);
+    expect(
+      canWithdraw({ ...open, status: "CLOSED" }, new Date("2026-10-01")),
+    ).toBe(false);
   });
 });

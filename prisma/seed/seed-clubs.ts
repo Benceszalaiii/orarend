@@ -106,6 +106,7 @@ async function main() {
         kind: club.kind,
         grades: club.grades,
         classes: club.classes,
+        tracks: club.tracks,
         audienceNote: club.audienceNote,
       };
 

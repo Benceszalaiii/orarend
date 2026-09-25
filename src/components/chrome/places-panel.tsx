@@ -23,7 +23,7 @@ import {
 } from "react";
 import { sheetItem } from "@/components/chrome/chrome-sheet";
 import { launchFlood } from "@/components/chrome/flood";
-import { launchFlight, PLACES, type Place } from "@/components/chrome/places";
+import { launchFlight, type Place } from "@/components/chrome/places";
 import { launchPour } from "@/components/chrome/pour";
 import { cn } from "@/lib/utils";
 
@@ -127,6 +127,7 @@ export function PlacesPanel({
   triggerRef,
   floating,
   current,
+  places,
   panelId,
 }: {
   open: boolean;
@@ -135,6 +136,8 @@ export function PlacesPanel({
   triggerRef: RefObject<HTMLButtonElement | null>;
   floating: boolean;
   current: Place | null;
+  /** A buborék sorai — ki mit láthat, és melyik tengelyen áll (lásd `pill-nav.tsx`). */
+  places: readonly Place[];
   panelId: string;
 }) {
   const reduced = useReducedMotion() ?? false;
@@ -307,7 +310,7 @@ export function PlacesPanel({
 
   //! A KIEMELÉS A MUTATOTT (VAGY FÓKUSZBAN ÁLLÓ) SORT KÖVETI; ha egyik sem, a
   //! JELENLEGI helyre folyik vissza — vagy ha nincs ilyen, elapad a helyén.
-  const currentIndex = PLACES.findIndex((p) => p.id === current?.id);
+  const currentIndex = places.findIndex((p) => p.id === current?.id);
   const target = hover ?? (currentIndex >= 0 ? currentIndex : null);
 
   //! A KIEMELÉS UGYANAZ A FEHÉR FOLYADÉK, MINT A VÁLTÓBAN. Egy halk,
@@ -453,13 +456,18 @@ export function PlacesPanel({
           onPointerLeave={() => hoverTo(null, LEAVE_DELAY)}
           className="flex flex-col gap-0.5"
         >
-          {PLACES.map((place, i) => (
+          {places.map((place, i) => (
             <PlaceRow
               key={place.id}
               index={i}
               place={place}
               current={current?.id === place.id}
-              divided={place.id === "home"}
+              //* A visszaút az órarendhez más fajta sor, mint a helyek: egy
+              //* vonal választja el, ugyanúgy, mint a nyitólapot alul.
+              divided={
+                place.id === "home" ||
+                (i > 0 && places[i - 1].id === "timetable")
+              }
               reduced={reduced}
               liquidTop={liqTop}
               liquidBottom={liqBottom}

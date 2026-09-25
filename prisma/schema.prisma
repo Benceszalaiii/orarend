@@ -155,6 +155,8 @@ model User {
   proposedClubs       Club[]             @relation("clubProposer")
   competitionEntries  CompetitionEntry[]
   createdCompetitions Competition[]      @relation("competitionCreator")
+  clubIdeas           ClubIdea[]         @relation("clubIdeaAuthor")
+  clubIdeaVotes       ClubIdeaVote[]
 
   @@unique([email])
   @@map("user")
@@ -464,6 +466,17 @@ model Announcement {
 //! `User.teacherName`-ből oldjuk fel a jelet (`src/lib/classroom-store.ts`
 //! mintájára), és a jogosultság ezen a jelen múlik (`src/lib/club-access.ts`).
 
+//! A SZAKMAI IRÁNY. A technikumban az osztály betűje a szakma: A szoftver-
+//! fejlesztő, B rendszergazda / hálózatüzemeltető, C fele-fele, D és E gépész
+//! (CAD/CNC). Egy „13. évf. hálózati technológiák" szakkör így nem a 13D-nek
+//! szól, és a forgácsolást sem javasoljuk a 11A-nak. A betű → irány szabály a
+//! `src/lib/clubs.ts`-ben (`tracksOfClass`) él; a felirat is ott.
+enum ClubTrack {
+  SOFTWARE
+  NETWORK
+  MECHANICAL
+}
+
 //* A szakkör jellege — a szűréshez és a felirathoz. A felirat magyarul a
 //* `src/lib/clubs.ts`-ben él.
 enum ClubKind {
@@ -508,7 +521,10 @@ model Club {
   grades       Int[]
   //* Osztálynevek pontosan a Jedlikinfo alakjában (`09A`, `13D`).
   classes      String[]
-  //* Amit a két mező nem tud kifejezni, pl. „13D páros, 13E páratlan héten".
+  //! SZŰKÍTÉS SZAKMÁRA — az évfolyamot és a „mindenkinek" szakkört szűkíti,
+  //! a kifejezetten felsorolt osztályt nem. Üres = bármelyik szakmának.
+  tracks       ClubTrack[] @default([])
+  //* Amit a mezők nem tudnak kifejezni, pl. „13D páros, 13E páratlan héten".
   audienceNote String?
 
   //* Ki javasolta (diák). `null` = tanár vagy admin hozta létre.
@@ -532,6 +548,8 @@ model Club {
   members      ClubMember[]
   //* A versenyfelkészítő szakkör és a verseny, amire készít.
   competitions Competition[]
+  //* Az ötlet(ek), amiből a szakkör lett (lásd `ClubIdea`).
+  ideas        ClubIdea[]
 
   @@index([status])
   @@map("club")
@@ -607,6 +625,58 @@ model ClubMember {
   @@id([clubId, userId])
   @@index([userId])
   @@map("club_member")
+}
+
+//! ═══════════════════════════════════════════════════════════════════════════
+//! MIRE LENNE IGÉNY? — SZAKKÖR-ÖTLETEK
+//! ═══════════════════════════════════════════════════════════════════════════
+//! A szakkörlista azt mutatja, AMI VAN. Az ötletlap azt, AMIRE A DIÁKOK
+//! JÁRNÁNAK: egy diák felír egy témát („Drónépítés"), a többiek jelzik, hogy
+//! őket is érdekli, és a tanár látja, hány diákra számíthat, mielőtt
+//! elindítana valamit. Ha elindítja, az ötlet a szakkörre mutat.
+//!
+//! A JELZÉS NEM NYILVÁNOS, CSAK A SZÁMA. A tagság nyilvános, mert az vállalás;
+//! az „érdekel" csak kíváncsiság, és senkinek nem kell tudnia, ki kattintott.
+//! Az ötlet szerzője sem látszik — a tartalom számít, nem a név.
+
+model ClubIdea {
+  id    String @id @default(cuid())
+  //! A DUPLIKÁCIÓ ELLEN. „Drón szakkör", „drón", „DRÓN!" ugyanaz az ötlet —
+  //! a második felírás az elsőre szavaz (lásd `ideaKey`).
+  key   String @unique
+  title String
+  note  String?
+
+  //* A szerző csak a visszavonáshoz és a korláthoz kell; a lap nem mutatja.
+  authorId String?
+  author   User?   @relation("clubIdeaAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  //* A szakkör, amit egy tanár indított belőle. `null` = még nincs.
+  clubId String?
+  club   Club?   @relation(fields: [clubId], references: [id], onDelete: SetNull)
+
+  //! A MODERÁLÁS: tanár vagy admin elrejtheti (nem töröl — a szavazatok és a
+  //! kulcs megmaradnak, így ugyanaz a szöveg nem tud újra felkerülni).
+  hidden Boolean @default(false)
+
+  createdAt DateTime       @default(now())
+  votes     ClubIdeaVote[]
+
+  @@index([hidden])
+  @@index([authorId])
+  @@map("club_idea")
+}
+
+model ClubIdeaVote {
+  ideaId    String
+  idea      ClubIdea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([ideaId, userId])
+  @@index([userId])
+  @@map("club_idea_vote")
 }
 
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -705,12 +775,25 @@ model CompetitionPhase {
   @@map("competition_phase")
 }
 
+//! A NEVEZÉS NYILVÁNOS, mint a szakkör tagsága: a verseny lapján látszik, ki
+//! indul. Az EREDMÉNY is itt él, mert egyéni versenyen a nevezés maga az, amihez
+//! az eredmény tartozik — egy külön táblának nem lenne más alanya.
 model CompetitionEntry {
   competitionId String
   competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
   userId        String
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt     DateTime    @default(now())
+
+  //! ─── EREDMÉNY ────────────────────────────────────────────────────────────
+  //! A felelős tanár rögzíti. CSAK A LEZÁRT (`FINISHED`) VERSENYNÉL LÁTSZIK:
+  //! a félig kitöltött eredménylista egy félig igaz rangsor volna.
+  //* Helyezés (1 = első). `null` = nincs helyezése (vagy még nincs rögzítve).
+  rank   Int?
+  //* Szöveges díj: „Arany", „Különdíj", „Országos döntős".
+  award  String?
+  //* Pontszám, ha a versenyen van ilyen.
+  points Float?
 
   @@id([competitionId, userId])
   @@index([userId])

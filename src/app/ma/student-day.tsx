@@ -8,6 +8,7 @@ import {
   SheetRow,
   SheetSection,
 } from "@/components/chrome/chrome-sheet";
+import { ContestDeadlines } from "@/components/ma/contest-deadlines";
 import { daySummary } from "@/components/ma/day";
 import { DayList, DayRibbon } from "@/components/ma/day-list";
 import {
@@ -28,20 +29,24 @@ import { RestHero } from "@/components/ma/rest-hero";
 import { SubjectPicker } from "@/components/ma/subject-picker";
 import { useDayView } from "@/components/ma/use-day-view";
 import {
+  ClubsThisWeek,
   MovedThisWeek,
   SubjectLoads,
   WeekPulse,
 } from "@/components/ma/week-panels";
 import { NotificationMenu } from "@/components/pwa/notification-menu";
-import { minLabel } from "@/components/timetable/shared";
+import { minLabel, rangeLabel } from "@/components/timetable/shared";
 import { useMergePreferences } from "@/components/timetable/use-merge-preferences";
 import { MorphingInfinity } from "@/components/ui/morphing-infinity";
+import { accentStyle } from "@/lib/accent";
+import { SESSION_STATUS_SHORT } from "@/lib/club-schedule";
 import {
   type DualSchedule,
   loadDualSchedule,
   saveDualSchedule,
 } from "@/lib/dual-schedule";
 import {
+  type CalendarEvent,
   fetchTimetableClasses,
   loadCachedClass,
   PUBLIC_DEFAULT_CLASS,
@@ -176,6 +181,8 @@ export function StudentDay() {
             classShort={classShort}
             onChange={changeDualSchedule}
           />
+          <ContestDeadlines className={classShort || null} />
+          <ClubsThisWeek events={dv.view?.events ?? []} />
           <MovedThisWeek week={week} onFocus={dv.focusDay} />
           <SubjectLoads week={week} onChoose={choose} />
         </>
@@ -416,6 +423,15 @@ function StudentDayPanel({
           </p>
         )}
 
+        {/*//! A NAP SZAKKÖRE A NAP ALJÁN. Pont ott, ahol a diák azt nézi, mikor
+            //! végez: a 0. órás szakkör a nap elején, a délutáni a vége után —
+            //! mindkettő a saját idejével, a szakkör lapjára mutatva. */}
+        <DayClubs
+          events={(dv.view?.events ?? []).filter(
+            (e) => e.status !== undefined && e.dayOfWeek === day?.dayOfWeek,
+          )}
+        />
+
         {cached && (
           <StaleNote
             fetchedAt={cached.fetchedAt}
@@ -425,5 +441,49 @@ function StudentDayPanel({
         )}
       </section>
     </>
+  );
+}
+
+function DayClubs({ events }: { events: CalendarEvent[] }) {
+  if (events.length === 0) return null;
+  return (
+    <div className="mt-5">
+      <h3 className="mb-2 text-sm font-semibold text-muted-strong">
+        Szakkör ezen a napon
+      </h3>
+      <ul className="flex flex-col gap-1.5">
+        {events.map((e) => (
+          <li key={e.id} style={accentStyle(e.szakkorSlug)}>
+            <Link
+              href={`/szakkorok/${e.szakkorSlug}`}
+              prefetch={false}
+              className="acc-tint flex items-center gap-3 rounded-xl border border-border px-4 py-2.5 transition-colors hover:border-foreground/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <span className="w-24 shrink-0 text-sm tabular-nums text-muted-strong">
+                {rangeLabel(e.startMin, e.endMin)}
+              </span>
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-sm font-medium",
+                  e.cancelled && "line-through decoration-destructive/60",
+                )}
+              >
+                {e.title}
+              </span>
+              {e.status && e.status !== "confirmed" && (
+                <span className="shrink-0 text-xs text-muted-strong">
+                  {SESSION_STATUS_SHORT[e.status]}
+                </span>
+              )}
+              {e.room && (
+                <span className="shrink-0 text-sm font-semibold tabular-nums">
+                  {e.room}
+                </span>
+              )}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { isMenuItemId } from "@/lib/menu-items";
 import { installBrowser, uninstallBrowser } from "@/test/browser";
-import { launchFlight, PLACES, placeOf, readFlight } from "./places";
+import { launchFlight, PLACES, placeOf, placesFor, readFlight } from "./places";
 
 afterEach(uninstallBrowser);
 
@@ -9,10 +9,19 @@ describe("PLACES", () => {
   test("egyedi útvonalak és gyorsbillentyűk, ismert menüjelek", () => {
     expect(new Set(PLACES.map((p) => p.href)).size).toBe(PLACES.length);
     expect(new Set(PLACES.map((p) => p.hotkey)).size).toBe(PLACES.length);
-    for (const p of PLACES) {
-      expect(isMenuItemId(p.id)).toBe(true);
-      expect(p.hotkey).toMatch(/^[a-z]$/);
+    for (const p of PLACES) expect(p.hotkey).toMatch(/^[a-z]$/);
+    for (const p of placesFor(false)) expect(isMenuItemId(p.id)).toBe(true);
+  });
+
+  test("a szakkörök a bevezetés előtt csak annak, aki megnyithatja", () => {
+    const ids = (clubs: boolean) => placesFor(clubs).map((p) => p.id);
+    expect(ids(true)).toContain("clubs");
+    expect(ids(true)).toContain("contests");
+    if (process.env.NEXT_PUBLIC_CLUBS_PUBLIC !== "1") {
+      expect(ids(false)).not.toContain("clubs");
+      expect(ids(false)).not.toContain("contests");
     }
+    expect(placeOf("/szakkorok")?.id).toBe("clubs");
   });
 
   test("placeOf pontos egyezéssel", () => {

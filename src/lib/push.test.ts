@@ -98,12 +98,15 @@ describe("loadPrefs", () => {
       JSON.stringify({
         classes: ["12A", 3],
         teachers: "LM",
+        clubs: ["robotika", null],
         everyLesson: "true",
       }),
     );
     expect(loadPrefs()).toEqual({
       classes: ["12A"],
       teachers: [],
+      clubs: ["robotika"],
+      contests: [],
       everyLesson: false,
     });
     b.localStorage.setItem("orarend:push:v1", "{");
@@ -163,9 +166,12 @@ describe("enablePush", () => {
       keys: { p256dh: "P", auth: "A" },
       classes: ["12A"],
       teachers: [],
+      //* A szakkörök mindig mennek — itt üresen, mert a párbeszéd nem adott.
+      clubs: [],
+      contests: [],
       everyLesson: true,
     });
-    expect(loadPrefs()).toEqual(prefs);
+    expect(loadPrefs()).toEqual({ ...prefs, clubs: [], contests: [] });
   });
 
   test("a korlát fölötti alanyokat levágja", async () => {
@@ -235,6 +241,31 @@ describe("feliratkozás után", () => {
     expect(
       await updatePush({ classes: ["12A"], teachers: [], everyLesson: false }),
     ).toEqual({ ok: false, reason: "server" });
+  });
+
+  //! Az órarend harangja `clubs` nélkül menti az osztályokat — ettől a
+  //! követett szakkörök nem veszhetnek el.
+  test("a szakkörök nélküli mentés megtartja a követett szakköröket", async () => {
+    b.localStorage.setItem(
+      "orarend:push:v1",
+      JSON.stringify({ classes: ["12A"], clubs: ["robotika"] }),
+    );
+    await updatePush({ classes: ["10B"], teachers: [], everyLesson: false });
+    const body = JSON.parse(stub.calls[0].init?.body as string);
+    expect(body.classes).toEqual(["10B"]);
+    expect(body.clubs).toEqual(["robotika"]);
+    expect(loadPrefs().clubs).toEqual(["robotika"]);
+  });
+
+  test("csak szakkörre is fel lehet iratkozni", async () => {
+    expect(
+      await updatePush({
+        classes: [],
+        teachers: [],
+        clubs: ["robotika"],
+        everyLesson: false,
+      }),
+    ).toEqual({ ok: true });
   });
 
   test("disablePush: törli a szerverről, leiratkozik, elfelejt", async () => {

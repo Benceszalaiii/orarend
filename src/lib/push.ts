@@ -1,6 +1,10 @@
 import {
+  clubsOf,
+  contestsOf,
   DEFAULT_PREFS,
   MAX_CLASSES,
+  MAX_CLUBS,
+  MAX_CONTESTS,
   MAX_TEACHERS,
   type PushPrefs,
   prefsEmpty,
@@ -41,6 +45,8 @@ export function loadPrefs(): PushPrefs {
       //* A tanári ág előtt mentett példányokban ez a mező nincs meg — üres
       //* lista, nem hiba.
       teachers: stringList(parsed?.teachers),
+      clubs: stringList(parsed?.clubs),
+      contests: stringList(parsed?.contests),
       everyLesson: parsed?.everyLesson === true,
     };
   } catch {
@@ -278,6 +284,10 @@ async function postSubscription(
         //! a végpont a másikat örökölné ugyan, de a törlés soha nem érne oda —
         //! egy levett osztály örökre bent maradna.
         teachers: prefs.teachers,
+        //* A szakkörök ugyanígy: a lista a szakkör lapján szerkeszthető, de a
+        //* feliratkozással együtt mindig teljesen megy.
+        clubs: clubsOf(prefs),
+        contests: contestsOf(prefs),
         everyLesson: prefs.everyLesson,
         replaces,
       }),
@@ -320,10 +330,20 @@ export async function updatePush(prefs: PushPrefs): Promise<SubscribeResult> {
 //* A felső korlátok a KÜLDÉS előtt is érvényesek, nem csak a szerveren: a
 //* párbeszéd amúgy sem enged többet kiválasztani, de egy régi (vagy másik
 //* készülékről örökölt) mentés hosszabb listát is hozhat.
+//!
+//! A SZAKKÖRÖKET NEM EJTI EL, AKI NEM IS LÁTJA ŐKET. Az órarend harangja az
+//! osztályokat és a tanárokat szerkeszti; ha a mentése `clubs` nélkül jön,
+//! az itt tárolt lista megy tovább — különben egy osztály-kattintás csendben
+//! leiratkoztatna minden szakkörről.
 function capped(prefs: PushPrefs): PushPrefs {
   return {
     classes: prefs.classes.slice(0, MAX_CLASSES),
     teachers: prefs.teachers.slice(0, MAX_TEACHERS),
+    clubs: (prefs.clubs ?? loadPrefs().clubs ?? []).slice(0, MAX_CLUBS),
+    contests: (prefs.contests ?? loadPrefs().contests ?? []).slice(
+      0,
+      MAX_CONTESTS,
+    ),
     everyLesson: prefs.everyLesson,
   };
 }

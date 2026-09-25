@@ -13,6 +13,21 @@
       "port": 3005
     },
     {
+      "name": "orarend-clubs-local",
+      "runtimeExecutable": "/usr/bin/env",
+      "runtimeArgs": [
+        "DB_URL=postgresql://postgres:local@localhost:55432/orarend",
+        "DB_DIRECT_URL=postgresql://postgres:local@localhost:55432/orarend",
+        "NEXT_PUBLIC_CLUBS_PUBLIC=1",
+        "bun",
+        "run",
+        "start",
+        "--port",
+        "3007"
+      ],
+      "port": 3007
+    },
+    {
       "name": "orarend",
       "url": "http://localhost:3000",
       "port": 3000

@@ -30,6 +30,8 @@ import {
   updatePush,
 } from "@/lib/push";
 import {
+  clubsOf,
+  contestsOf,
   LEAD_MINUTES,
   maxSubjects,
   type PushPrefs,
@@ -222,7 +224,14 @@ export function NotificationMenu({
   //! veheti el, mert arról a felhasználó itt semmit nem lát.
   const turnOff = async () => {
     setBusy(true);
-    if (other.length > 0) {
+    //! A KÖVETETT SZAKKÖRÖK IS „MÁSIK LISTA". Ha csak az osztályt/tanárt nézné,
+    //! a harang kikapcsolása a szakkörök értesítéseit is csendben törölné —
+    //! pedig azokat nem itt, hanem a szakkör lapján kapcsolták be.
+    if (
+      other.length > 0 ||
+      clubsOf(loadPrefs()).length > 0 ||
+      contestsOf(loadPrefs()).length > 0
+    ) {
       await updatePush(prefsToSave([]));
     } else {
       await disablePush();

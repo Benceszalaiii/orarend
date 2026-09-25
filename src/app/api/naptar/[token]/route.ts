@@ -11,6 +11,7 @@ import {
   readFeed,
   touchFeed,
 } from "@/lib/calendar-store";
+import { clubEventsForFeed } from "@/lib/club-calendar";
 import { sanitizePrefs } from "@/lib/prefs-shared";
 import prisma from "@/lib/prisma";
 import { subjectStoreKey } from "@/lib/timetable";
@@ -118,7 +119,11 @@ export async function GET(
     });
   }
 
-  const body = renderFeed({ row, window });
+  const body = renderFeed({
+    row,
+    window,
+    extraEvents: await clubEventsForFeed(row.kind, row.short, window.weeks),
+  });
 
   //* A határidő megújítása a válasz után: naponta legfeljebb egyszer ír, de még
   //* annyival sem érdemes várakoztatni a naptárt.

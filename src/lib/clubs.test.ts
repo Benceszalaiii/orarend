@@ -1,13 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import {
+  audienceLabel,
   type ClubInput,
   clubInputSchema,
   clubSlotInputSchema,
   clubSlug,
+  fitsTrack,
   formatSlot,
   gradeOfClass,
   isOpenToAll,
+  openFor,
   targetsClass,
+  tracksOfClass,
 } from "./clubs";
 
 describe("clubSlug", () => {
@@ -66,6 +70,61 @@ describe("targetsClass", () => {
   });
 });
 
+describe("szakmai irány", () => {
+  test.each([
+    ["11A", ["SOFTWARE"]],
+    ["12B", ["NETWORK"]],
+    ["13C", ["SOFTWARE", "NETWORK"]],
+    ["10D", ["MECHANICAL"]],
+    ["13E", ["MECHANICAL"]],
+    ["09NY", null],
+    ["09KNY", null],
+  ])("%s → %p", (className, tracks) => {
+    expect(tracksOfClass(className)).toEqual(tracks as never);
+  });
+
+  //! A panasz: a „13. évf. hálózati technológiák" a 13D rácsán is ott volt.
+  test("az évfolyamra szóló szakkör csak a szakmához illő osztályoknak", () => {
+    const audience = {
+      grades: [13],
+      classes: [],
+      tracks: ["NETWORK" as const],
+    };
+    expect(targetsClass(audience, "13B")).toBe(true);
+    expect(targetsClass(audience, "13C")).toBe(true);
+    expect(targetsClass(audience, "13A")).toBe(false);
+    expect(targetsClass(audience, "13D")).toBe(false);
+  });
+
+  test("a kifejezetten felsorolt osztály szakmától függetlenül", () => {
+    const audience = {
+      grades: [],
+      classes: ["13D"],
+      tracks: ["SOFTWARE" as const],
+    };
+    expect(targetsClass(audience, "13D")).toBe(true);
+  });
+
+  test("a nyitott gépész szakkört csak D és E osztálynak javasoljuk", () => {
+    const audience = {
+      grades: [],
+      classes: [],
+      tracks: ["MECHANICAL" as const],
+    };
+    expect(isOpenToAll(audience)).toBe(true);
+    expect(openFor(audience, "11D")).toBe(true);
+    expect(openFor(audience, "11A")).toBe(false);
+    expect(openFor(audience, "11C")).toBe(false);
+  });
+
+  test("irány nélkül, vagy ismeretlen szakmájú osztálynak minden illik", () => {
+    expect(fitsTrack({ grades: [], classes: [] }, "11A")).toBe(true);
+    expect(
+      fitsTrack({ grades: [], classes: [], tracks: ["NETWORK"] }, "09NY"),
+    ).toBe(true);
+  });
+});
+
 test("formatSlot", () => {
   expect(formatSlot({ weekday: 4, startMinute: 430, endMinute: 475 })).toBe(
     "Csütörtök 7:10–7:55",
@@ -115,6 +174,7 @@ describe("clubInputSchema", () => {
     kind: "CLUB",
     grades: [],
     classes: [],
+    tracks: [],
     audienceNote: null,
     organizers: ["BP", "SBA"],
     slots: [
@@ -155,5 +215,26 @@ describe("clubInputSchema", () => {
     expect(clubInputSchema.safeParse({ ...club, grades: [8] }).success).toBe(
       false,
     );
+  });
+});
+
+describe("audienceLabel", () => {
+  test.each([
+    [{ grades: [], classes: [] }, "Mindenkinek"],
+    [{ grades: [9], classes: [] }, "9. évfolyam"],
+    [{ grades: [12, 11], classes: [] }, "11. és 12. évfolyam"],
+    [{ grades: [9, 10, 11], classes: [] }, "9., 10. és 11. évfolyam"],
+    [{ grades: [], classes: ["13E", "13D"] }, "13D, 13E"],
+    [{ grades: [10], classes: ["09A"] }, "10. évfolyam, 09A"],
+    [
+      { grades: [13], classes: [], tracks: ["NETWORK"] },
+      "13. évfolyam · rendszergazda, hálózat szak",
+    ],
+    [
+      { grades: [], classes: [], tracks: ["MECHANICAL"] },
+      "Gépész (CAD/CNC) szak",
+    ],
+  ] as const)("%p → %s", (audience, label) => {
+    expect(audienceLabel(audience)).toBe(label);
   });
 });

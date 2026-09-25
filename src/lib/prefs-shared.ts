@@ -1,4 +1,5 @@
 import { isPalette, isTheme, type Palette, type Theme } from "./appearance";
+import { sanitizeFollowed } from "./club-follow";
 import { type Identity, isIdentity } from "./identity";
 import {
   CLASS_MAX_LENGTH,
@@ -71,6 +72,13 @@ export type SyncedPrefs = {
   //! pedig „megnézte, és mindent meghagyott" (lásd `menu-items.ts`).
   /** A lapból elrejtett sorok (`orarend:menu-hidden:v1`). */
   hiddenMenu: MenuItemId[] | null;
+  //! A KÖVETETT SZAKKÖRÖK. Ugyanaz a `null`/üres lista megkülönböztetés, mint
+  //! az elrejtett soroknál: a `null` „sosem követett", az üres lista „mindet
+  //! leállította" — az utóbbinak át kell jutnia a másik készülékre is.
+  /** A követett szakkörök címe (`orarend:club-follow:v1`). */
+  clubs: string[] | null;
+  /** A követett versenyek címe (`orarend:contest-follow:v1`). */
+  contests: string[] | null;
 };
 
 /**
@@ -100,6 +108,8 @@ export const EMPTY_PREFS: SyncedPrefs = {
   merge: {},
   dual: {},
   hiddenMenu: null,
+  clubs: null,
+  contests: null,
 };
 
 //! ─── A KORLÁTOK ─────────────────────────────────────────────────────────────
@@ -266,6 +276,18 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
       ? null
       : sanitizeHiddenMenu(input.hiddenMenu);
 
+  //* A slug alakja zárt (`looksLikeClubSlug`), a lista hossza korlátos: a
+  //* szerver itt sem tárolhat szabad szöveget.
+  const clubs =
+    input.clubs === undefined || input.clubs === null
+      ? null
+      : sanitizeFollowed(input.clubs);
+
+  const contests =
+    input.contests === undefined || input.contests === null
+      ? null
+      : sanitizeFollowed(input.contests);
+
   return {
     class: cls,
     teacher,
@@ -276,6 +298,8 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
     merge,
     dual,
     hiddenMenu,
+    clubs,
+    contests,
   };
 }
 
@@ -290,7 +314,9 @@ export function hasAnyPrefs(prefs: SyncedPrefs): boolean {
     prefs.palette !== null ||
     Object.keys(prefs.merge).length > 0 ||
     Object.keys(prefs.dual).length > 0 ||
-    prefs.hiddenMenu !== null
+    prefs.hiddenMenu !== null ||
+    prefs.clubs !== null ||
+    prefs.contests !== null
   );
 }
 

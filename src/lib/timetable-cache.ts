@@ -93,6 +93,20 @@ export function loadCachedWeek(
   return { ...entry, view: withDayDefaults(entry.view) };
 }
 
+//! AZ ALANY ÖSSZES MENTETT HETE. A szakkörlista „belefér-e" kérdése ebből
+//! dolgozik: az A és a B hét más, és ami a készüléken már ott van, azt nem
+//! kérjük le újra a Jedlikinfótól.
+export function loadCachedWeeks(storeKey: string): CachedWeek[] {
+  if (!storeKey) return [];
+  const prefix = `${storeKey}|`;
+  return Object.entries(readStore())
+    .filter(
+      ([key, entry]) =>
+        key.startsWith(prefix) && Array.isArray(entry?.view?.days),
+    )
+    .map(([, entry]) => ({ ...entry, view: withDayDefaults(entry.view) }));
+}
+
 export function saveCachedWeek(
   classShort: string,
   weekStart: string,

@@ -33,6 +33,17 @@ export const CLUB_KIND_LABELS: Record<ClubKind, string> = {
   COMPETENCY: "Kompetenciafejlesztés",
 };
 
+//! A SZAKMAI IRÁNY (lásd `ClubTrack` a sémában).
+export const CLUB_TRACKS = ["SOFTWARE", "NETWORK", "MECHANICAL"] as const;
+
+export type ClubTrack = (typeof CLUB_TRACKS)[number];
+
+export const CLUB_TRACK_LABELS: Record<ClubTrack, string> = {
+  SOFTWARE: "Szoftverfejlesztő",
+  NETWORK: "Rendszergazda, hálózat",
+  MECHANICAL: "Gépész (CAD/CNC)",
+};
+
 export const CLUB_SLOT_SOURCES = ["TIMETABLE", "ORGANIZER"] as const;
 
 export type ClubSlotSource = (typeof CLUB_SLOT_SOURCES)[number];
@@ -87,10 +98,48 @@ export function gradeOfClass(className: string): number | null {
 export type ClubAudience = {
   grades: readonly number[];
   classes: readonly string[];
+  //* A versenyeknek nincs szakmai iránya — nekik hiányzik.
+  tracks?: readonly ClubTrack[];
 };
 
+//! A BETŰ A SZAKMA. A → szoftverfejlesztő, B → rendszergazda/hálózat,
+//! C → mindkettő (fele-fele), D és E → gépész. Minden évfolyamon ugyanígy.
+//! A nyelvi előkészítő (`09NY`, `09KNY`) és minden más alak: nem tudjuk —
+//! `null`, és akkor nem szűrünk ki semmit.
+const TRACKS_BY_LETTER: Record<string, readonly ClubTrack[]> = {
+  A: ["SOFTWARE"],
+  B: ["NETWORK"],
+  C: ["SOFTWARE", "NETWORK"],
+  D: ["MECHANICAL"],
+  E: ["MECHANICAL"],
+};
+
+export function tracksOfClass(className: string): readonly ClubTrack[] | null {
+  const match = /^\d{2}([A-Z])$/.exec(className);
+  return (match && TRACKS_BY_LETTER[match[1]]) || null;
+}
+
+//! A SZAKMA EGYEZIK-E. Irány nélküli szakkör mindenkinek jó; ismeretlen
+//! szakmájú osztálynak (nyelvi előkészítő) minden jó — inkább mutatunk egy
+//! fölöslegeset, mint hogy elrejtsük a valóban neki szólót.
+export function fitsTrack(audience: ClubAudience, className: string): boolean {
+  const tracks = audience.tracks ?? [];
+  if (tracks.length === 0) return true;
+  const own = tracksOfClass(className);
+  return own === null || own.some((t) => tracks.includes(t));
+}
+
+//! „MINDENKINEK" = se évfolyam, se osztály. A szakmai irány ezt nem teszi
+//! célzottá (a rácsra nem kerül ki magától), csak szűkíti, kinek javasoljuk:
+//! lásd `openFor`.
 export function isOpenToAll(audience: ClubAudience): boolean {
   return audience.grades.length === 0 && audience.classes.length === 0;
+}
+
+//* Nyitott szakkör, ami ennek az osztálynak a szakmájához is illik — a
+//* javaslatok és a „nekem szól" szűrő ezt kérdezi.
+export function openFor(audience: ClubAudience, className: string): boolean {
+  return isOpenToAll(audience) && fitsTrack(audience, className);
 }
 
 //! AZ ÓRARENDI RÁCSRA KERÜLÉS SZABÁLYA. Csak akkor igaz, ha a szakkör
@@ -102,9 +151,16 @@ export function targetsClass(
   audience: ClubAudience,
   className: string,
 ): boolean {
+  //* A kifejezetten felsorolt osztály mindig: azt a tanár maga választotta.
   if (audience.classes.includes(className)) return true;
   const grade = gradeOfClass(className);
-  return grade !== null && audience.grades.includes(grade);
+  //! Az évfolyamon belül csak a szakmához illő osztályok — a „13. évf.
+  //! szoftverfejlesztés" nem a 13D-é.
+  return (
+    grade !== null &&
+    audience.grades.includes(grade) &&
+    fitsTrack(audience, className)
+  );
 }
 
 //* ---------------------------------------------------------------------------
@@ -178,6 +234,7 @@ export const clubInputSchema = z
     classes: z
       .array(z.string().refine(looksLikeClass, "Nem osztálynév"))
       .max(30),
+    tracks: z.array(z.enum(CLUB_TRACKS)).max(CLUB_TRACKS.length),
     audienceNote: z.string().trim().max(200).nullable(),
     //! AZ ELSŐ A FŐ VEZETŐ (`lead`). Legalább egy kell: vezető nélküli
     //! szakkört senki nem tud szerkeszteni, és senki nem hagyhatja jóvá.
@@ -200,3 +257,34 @@ export const clubInputSchema = z
   );
 
 export type ClubInput = z.infer<typeof clubInputSchema>;
+
+//! KINEK SZÓL — EGY SORBAN. A lista kártyáján és a szakkör lapján ugyanaz a
+//! mondat áll; az évfolyamok növekvő sorrendben, az osztályok utánuk.
+export function audienceLabel(audience: ClubAudience): string {
+  const tracks = CLUB_TRACKS.filter((t) => audience.tracks?.includes(t)).map(
+    //* Csak a kezdőbetű kicsi — a „CAD/CNC" maradjon nagy.
+    (t) =>
+      CLUB_TRACK_LABELS[t].charAt(0).toLocaleLowerCase("hu") +
+      CLUB_TRACK_LABELS[t].slice(1),
+  );
+  const who = whoLabel(audience);
+  if (tracks.length === 0) return who;
+  const track = `${tracks.join(" vagy ")} szak`;
+  if (isOpenToAll(audience))
+    return track.charAt(0).toLocaleUpperCase("hu") + track.slice(1);
+  return `${who} · ${track}`;
+}
+
+function whoLabel(audience: ClubAudience): string {
+  if (isOpenToAll(audience)) return "Mindenkinek";
+  const grades = [...audience.grades].sort((a, b) => a - b);
+  const parts: string[] = [];
+  if (grades.length === 1) parts.push(`${grades[0]}. évfolyam`);
+  if (grades.length > 1) {
+    parts.push(
+      `${grades.slice(0, -1).join("., ")}. és ${grades[grades.length - 1]}. évfolyam`,
+    );
+  }
+  parts.push(...[...audience.classes].sort((a, b) => a.localeCompare(b, "hu")));
+  return parts.join(", ");
+}

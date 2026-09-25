@@ -1,5 +1,5 @@
 import { animate, frame, motionValue } from "motion/react";
-import type { PlaceId } from "@/components/chrome/places";
+import type { PanelId } from "@/components/chrome/places";
 
 //! ═══════════════════════════════════════════════════════════════════════════
 //! A KIÖNTÉS — A SOR FOLYADÉKA VISZ ÁT A VÁLTÓBA
@@ -24,7 +24,7 @@ import type { PlaceId } from "@/components/chrome/places";
 //! ═══════════════════════════════════════════════════════════════════════════
 
 export type Pour = {
-  id: PlaceId;
+  id: PanelId;
   /** A cél csepp középpontja a képernyőn. */
   cx: number;
   cy: number;
@@ -97,7 +97,7 @@ export function launchPour({
   icon,
   cell,
 }: {
-  id: PlaceId;
+  id: PanelId;
   /** A sor — ha az ikonja nem mérhető, a kör a sor bal szélén indul. */
   row: HTMLElement;
   /** A sor ikonja — a kör ez mögött indul, és a közepén utazik. */
@@ -321,7 +321,7 @@ export function launchPour({
 }
 
 /** Az új váltó ezzel veszi át a saját helyére futó sugarat. */
-export function readPour(id: PlaceId | undefined): Pour | null {
+export function readPour(id: PanelId | undefined): Pour | null {
   if (typeof window === "undefined" || !pour || pour.id !== id) return null;
   return performance.now() - pour.at < POUR_TTL ? pour : null;
 }
