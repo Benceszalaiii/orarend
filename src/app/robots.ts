@@ -3,14 +3,12 @@ import {
   DISALLOWED_AI_ROBOTS_TOKENS,
   LLM_DOC_PATH,
   LLM_OPEN_PATHS,
-  USER_TRIGGERED_AI_AGENTS,
 } from "@/lib/ai-bots";
 
 //! ─── A KIÍRT SZABÁLY ───────────────────────────────────────────────────────
-//! Három csoport (mindenki; az ember indította AI-asszisztens; a többi
-//! AI-robot), és a sorrendjük nem számít: a robot mindig a RÁ NÉZVE
-//! legpontosabb blokkot követi, a `*` csak az marad, akit senki más nem
-//! nevezett meg.
+//! Két csoport (mindenki; az AI-robotok), és a sorrendjük nem számít: a robot
+//! mindig a RÁ NÉZVE legpontosabb blokkot követi, a `*` csak az marad, akit
+//! senki más nem nevezett meg.
 //*
 //! Ez a lap NEM zár ki minden robotot — a keresőt kifejezetten várjuk. Aki
 //! találatot ad, az embert hoz ide; aki tanítóanyagot gyűjt vagy kész választ
@@ -34,21 +32,13 @@ export default function robots(): MetadataRoute.Robots {
         //! indexeljen. A válasz maga is `X-Robots-Tag: noindex`-et visel.
         disallow: ["/api/naptar/"],
       },
-      //! AZ EMBER INDÍTOTTA ASSZISZTENS A JSON-VÉGPONTOKAT IS ELÉRI (lásd
-      //! `LLM_OPEN_PATHS`). Külön blokk, mert a robot a RÁ NÉZVE legpontosabb
-      //! blokkot követi — ha a lenti közösben is benne volna, ez nem érvényesülne.
+      //! AZ AI-ROBOT A GÉPNEK SZÁNT AJTÓN JÖHET BE, MÁSHOL NEM. A `/llms.txt`
+      //! és az általa leírt JSON-végpontok (`LLM_OPEN_PATHS`) nyitva, a lapok
+      //! zárva. A leghosszabb egyezés szabálya szerint az `Allow` felülírja a
+      //! `/` tiltását.
       {
-        userAgent: [...USER_TRIGGERED_AI_AGENTS],
+        userAgent: [...DISALLOWED_AI_ROBOTS_TOKENS],
         allow: [LLM_DOC_PATH, ...LLM_OPEN_PATHS],
-        disallow: ["/"],
-      },
-      //* A `/llms.txt` nekik is olvasható: csak leírás, és a leghosszabb
-      //* egyezés szabálya szerint felülírja a `/` tiltását.
-      {
-        userAgent: DISALLOWED_AI_ROBOTS_TOKENS.filter(
-          (token) => !USER_TRIGGERED_AI_AGENTS.includes(token),
-        ),
-        allow: [LLM_DOC_PATH],
         disallow: ["/"],
       },
     ],
