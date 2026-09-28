@@ -1,0 +1,83 @@
+# Órarend — Jedlik timetable
+
+> Unofficial timetable viewer for the Győri SZC Jedlik Ányos technical school
+> (Győr, Hungary). Every timetable on this site comes live from the school's
+> own Jedlikinfo system. This site does not create timetable data of its own. The JSON endpoints below
+> relay Jedlikinfo through a plain GET request. You do not need any headers,
+> a login or an API key.
+
+Jedlikinfo's own API (`https://jedlikinfo.jedlik.eu/api/api`) answers the
+timetable request (`POST timetable/cards`) with 403 unless the request carries
+Jedlikinfo's own `Origin` and `Referer`. Do not call it directly. Use the
+endpoints below instead: this server calls Jedlikinfo with the right headers
+and returns JSON.
+
+The timetable changes during the week. Fetch it again each time you answer
+instead of reusing an earlier answer. Responses are cached for up to 5 minutes.
+
+## Timetable API
+
+- [Classes and teachers](https://jedlik.info/api/orarend): `GET /api/orarend`
+  with no parameters. Returns `{ classes: [{ short, name }], teachers: [{ short, name }] }`.
+  Use a `short` value in the requests below.
+- [A class's week](https://jedlik.info/api/orarend?osztaly=13C): `GET /api/orarend?osztaly=<class>`.
+  The class code is case- and punctuation-insensitive (`13C`, `13.c` and `13 C` all work).
+- [A teacher's week](https://jedlik.info/api/orarend?tanar=AA): `GET /api/orarend?tanar=<teacher short code or name>`.
+- Other weeks: add `&het=YYYY-MM-DD`, using any date in the week you want. The
+  default is the current week. Example:
+  `https://jedlik.info/api/orarend?osztaly=13C&het=2026-10-05`.
+- [Free rooms right now](https://jedlik.info/api/termek): `GET /api/termek`,
+  optionally `?nap=YYYY-MM-DD&ido=HH:MM` (Budapest time). Returns `free`,
+  `busy` and `unknown` rooms. Only works from one week back to three weeks ahead.
+
+Pass exactly one of `osztaly` or `tanar`, not both.
+
+### Week response
+
+```
+{
+  kind: "class" | "teacher",
+  subject: { short, name },
+  weekStart: "YYYY-MM-DD",            // Monday
+  days: [{ name, dateKey, week, dayOfWeek, teaching, notes, bells }],
+  periods: [{ number, start: "HH:MM", end: "HH:MM" }],
+  lessons: [{
+    dateKey, dayOfWeek, start: "HH:MM", end: "HH:MM",
+    subject, subjectShort,
+    teacher, teacherShort,           // on a class's timetable
+    classShort, className,           // on a teacher's timetable
+    room, group, groupColumn, groupCount, wholeClass,
+    week,                            // "A" / "B" week letter
+    moved,                           // true = Jedlikinfo marks the lesson as moved
+    kind
+  }]
+}
+```
+
+- Every time is Budapest local time. `startMin` and `endMin` are the same times
+  in minutes after midnight.
+- `days[].teaching` is `false` on a day without teaching (holiday, school
+  event), `true` on a teaching day and `null` if unknown. `days[].notes` lists
+  school events for that day. When `days[].bells` is not `null`, that day
+  runs on a different bell schedule (e.g. shortened lessons).
+- Group splits: a class can have several lessons at the same time, one per
+  group (`groupCount` > 1, `group` names the group). Only the student's own
+  group attends. If you don't know which group they are in, list all of them.
+  `wholeClass: true` means the whole class attends.
+- Periods run from 0 to 9, from about 07:10 to 15:55.
+
+### Errors
+
+Errors return `{ error: { kind, title, message, hint?, retryable } }`, with the
+text in Hungarian:
+`400` bad parameters, `404` unknown class or teacher (fetch the list first),
+`502` or `504` Jedlikinfo is unavailable or had no data for that week (e.g. a
+holiday). This site did not cause these; retry later if `retryable` is true.
+
+## Pages for humans
+
+- [Weekly timetable](https://jedlik.info/orarend): the week grid (`?class=13C`)
+- [Today](https://jedlik.info/ma): today's lessons and what is on now
+- [Teachers' timetable](https://jedlik.info/tanari) (`?teacher=AA`)
+- [Free rooms](https://jedlik.info/teremkereso)
+- [Hall duty](https://jedlik.info/ugyelet)
