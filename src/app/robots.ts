@@ -1,8 +1,9 @@
 import type { MetadataRoute } from "next";
 import {
   DISALLOWED_AI_ROBOTS_TOKENS,
+  LLM_CLOSED_PREFIX,
   LLM_DOC_PATH,
-  LLM_OPEN_PATHS,
+  LLM_OPEN_PREFIX,
 } from "@/lib/ai-bots";
 
 //! ─── A KIÍRT SZABÁLY ───────────────────────────────────────────────────────
@@ -33,13 +34,13 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/api/naptar/"],
       },
       //! AZ AI-ROBOT A GÉPNEK SZÁNT AJTÓN JÖHET BE, MÁSHOL NEM. A `/llms.txt`
-      //! és az általa leírt JSON-végpontok (`LLM_OPEN_PATHS`) nyitva, a lapok
-      //! zárva. A leghosszabb egyezés szabálya szerint az `Allow` felülírja a
-      //! `/` tiltását.
+      //! és az `/api` nyitva, a naptár-feed és a lapok zárva. A leghosszabb
+      //! egyezés dönt: az `/api/naptar` tiltása hosszabb az `/api/` engedélyénél,
+      //! az pedig a `/` tiltásánál.
       {
         userAgent: [...DISALLOWED_AI_ROBOTS_TOKENS],
-        allow: [LLM_DOC_PATH, ...LLM_OPEN_PATHS],
-        disallow: ["/"],
+        allow: [LLM_DOC_PATH, LLM_OPEN_PREFIX],
+        disallow: ["/", LLM_CLOSED_PREFIX],
       },
     ],
     sitemap: "https://jedlik.info/sitemap.xml",

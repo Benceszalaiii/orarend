@@ -15,7 +15,7 @@ const BROWSER =
 
 describe("proxy", () => {
   test("AI-robot: 403, bármely úton", async () => {
-    for (const path of ["/", "/orarend", "/api/kozlemenyek"]) {
+    for (const path of ["/", "/orarend", "/api/naptar/abc.ics"]) {
       const res = proxy(
         request(path, {
           ua: "Mozilla/5.0 (compatible; GPTBot/1.1; +https://openai.com/gptbot)",
@@ -28,9 +28,9 @@ describe("proxy", () => {
     }
   });
 
-  //! A GÉPNEK SZÁNT AJTÓ MINDEN AI-ROBOTNAK NYITVA — a tanító-, a kereső- és
-  //! az ember indította robotnak is. Minden más út továbbra is 403.
-  test("bármely AI-robot eléri az órarend-API-t, de a lapokat nem", () => {
+  //! AZ `/api` MINDEN AI-ROBOTNAK NYITVA — a tanító-, a kereső- és az ember
+  //! indította robotnak is. A lapok és a naptár-feed továbbra is 403.
+  test("bármely AI-robot eléri az API-t, de a lapokat nem", () => {
     for (const ua of [
       "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)",
       "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot",
@@ -42,8 +42,10 @@ describe("proxy", () => {
         200,
       );
       expect(proxy(request("/api/termek", { ua })).status).toBe(200);
+      expect(proxy(request("/api/kozlemenyek", { ua })).status).toBe(200);
       expect(proxy(request("/orarend", { ua })).status).toBe(403);
-      expect(proxy(request("/api/kozlemenyek", { ua })).status).toBe(403);
+      expect(proxy(request("/api/naptar/abc.ics", { ua })).status).toBe(403);
+      expect(proxy(request("/api/naptar", { ua })).status).toBe(403);
     }
   });
 

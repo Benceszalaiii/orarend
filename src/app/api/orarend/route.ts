@@ -5,6 +5,7 @@ import {
   getTimetableWeek,
   mondayOf,
   type TimetableErrorKind,
+  type TimetableSubject,
 } from "@/lib/timetable";
 
 //! ─── AZ ÓRAREND, KÖZVETÍTVE ────────────────────────────────────────────────
@@ -64,8 +65,23 @@ function badRequest(message: string) {
   );
 }
 
+//! KÉSZ LINK MINDEN ALANYHOZ. A chatbotok letöltője (Claude, ChatGPT) jellemzően
+//! csak olyan címet nyit meg, amit már leírva látott — egy maga összerakott
+//! `?osztaly=9A`-t nem. Ha a listában ott a teljes cím, azt követni tudja.
+function withUrl(
+  origin: string,
+  param: "osztaly" | "tanar",
+  subjects: TimetableSubject[],
+) {
+  return subjects.map((s) => ({
+    ...s,
+    url: `${origin}/api/orarend?${param}=${encodeURIComponent(s.short)}`,
+  }));
+}
+
 export async function GET(request: Request) {
-  const params = new URL(request.url).searchParams;
+  const url = new URL(request.url);
+  const params = url.searchParams;
   const className = params.get("osztaly")?.trim() || null;
   const teacher = params.get("tanar")?.trim() || null;
   const week = params.get("het")?.trim() || undefined;
@@ -82,7 +98,10 @@ export async function GET(request: Request) {
       return jsonUtf8({ error }, { status: ERROR_STATUS[error.kind] });
     }
     return jsonUtf8(
-      { classes: classes.classes, teachers: teachers.subjects },
+      {
+        classes: withUrl(url.origin, "osztaly", classes.classes),
+        teachers: withUrl(url.origin, "tanar", teachers.subjects),
+      },
       { headers: { "Cache-Control": LIST_CACHE } },
     );
   }

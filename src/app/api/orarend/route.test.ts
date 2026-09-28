@@ -124,7 +124,16 @@ describe("/api/orarend", () => {
   test("alany nélkül az osztályok és a tanárok listája", async () => {
     const res = await get("");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ classes: CLASSES, teachers: TEACHERS });
+    expect(await res.json()).toEqual({
+      classes: [
+        { ...CLASSES[0], url: "https://orarend.test/api/orarend?osztaly=13C" },
+        { ...CLASSES[1], url: "https://orarend.test/api/orarend?osztaly=09A" },
+      ],
+      teachers: [
+        { ...TEACHERS[0], url: "https://orarend.test/api/orarend?tanar=AA" },
+        { ...TEACHERS[1], url: "https://orarend.test/api/orarend?tanar=BB" },
+      ],
+    });
   });
 
   //! A BUN MAGÁTÓL IS KIÍRNÁ, A NODE NEM. Ezért a fejlécet nézzük, és a
