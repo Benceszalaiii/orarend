@@ -28,6 +28,30 @@ describe("proxy", () => {
     }
   });
 
+  //! A GÉPNEK SZÁNT AJTÓ CSAK AZ EMBER INDÍTOTTA ASSZISZTENSNEK NYÍLIK. A
+  //! tanító- és a keresőrobot ugyanitt továbbra is 403-at kap.
+  test("az ember indította asszisztens eléri az órarend-API-t", () => {
+    const claudeUser =
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)";
+    const chatgptUser =
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot";
+    for (const ua of [claudeUser, chatgptUser]) {
+      expect(proxy(request("/api/orarend?osztaly=13C", { ua })).status).toBe(
+        200,
+      );
+      expect(proxy(request("/api/termek", { ua })).status).toBe(200);
+      expect(proxy(request("/orarend", { ua })).status).toBe(403);
+      expect(proxy(request("/api/kozlemenyek", { ua })).status).toBe(403);
+    }
+    for (const ua of [
+      "Mozilla/5.0 (compatible; GPTBot/1.1; +https://openai.com/gptbot)",
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
+      "Mozilla/5.0 (compatible; PerplexityBot/1.0)",
+    ]) {
+      expect(proxy(request("/api/orarend", { ua })).status).toBe(403);
+    }
+  });
+
   test("a nyitólap a legutóbbi nézetre visz, gyorsítótár nélkül", () => {
     const res = proxy(
       request("/", { ua: BROWSER, cookie: `${LAST_VIEW_COOKIE}=/ma` }),
@@ -69,6 +93,8 @@ describe("matcher", () => {
     ["/api/naptar/abc.ics", true],
     ["/_next/static/chunk.js", false],
     ["/robots.txt", false],
+    ["/llms.txt", false],
+    ["/api/orarend", true],
     ["/sw.js", false],
     ["/icon.png", false],
     ["/manifest.webmanifest", false],

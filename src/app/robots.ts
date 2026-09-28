@@ -1,8 +1,14 @@
 import type { MetadataRoute } from "next";
-import { DISALLOWED_AI_ROBOTS_TOKENS } from "@/lib/ai-bots";
+import {
+  DISALLOWED_AI_ROBOTS_TOKENS,
+  LLM_DOC_PATH,
+  LLM_OPEN_PATHS,
+  USER_TRIGGERED_AI_AGENTS,
+} from "@/lib/ai-bots";
 
 //! ─── A KIÍRT SZABÁLY ───────────────────────────────────────────────────────
-//! Két csoport, és a sorrendjük nem számít: a robot mindig a RÁ NÉZVE
+//! Három csoport (mindenki; az ember indította AI-asszisztens; a többi
+//! AI-robot), és a sorrendjük nem számít: a robot mindig a RÁ NÉZVE
 //! legpontosabb blokkot követi, a `*` csak az marad, akit senki más nem
 //! nevezett meg.
 //*
@@ -28,8 +34,21 @@ export default function robots(): MetadataRoute.Robots {
         //! indexeljen. A válasz maga is `X-Robots-Tag: noindex`-et visel.
         disallow: ["/api/naptar/"],
       },
+      //! AZ EMBER INDÍTOTTA ASSZISZTENS A JSON-VÉGPONTOKAT IS ELÉRI (lásd
+      //! `LLM_OPEN_PATHS`). Külön blokk, mert a robot a RÁ NÉZVE legpontosabb
+      //! blokkot követi — ha a lenti közösben is benne volna, ez nem érvényesülne.
       {
-        userAgent: [...DISALLOWED_AI_ROBOTS_TOKENS],
+        userAgent: [...USER_TRIGGERED_AI_AGENTS],
+        allow: [LLM_DOC_PATH, ...LLM_OPEN_PATHS],
+        disallow: ["/"],
+      },
+      //* A `/llms.txt` nekik is olvasható: csak leírás, és a leghosszabb
+      //* egyezés szabálya szerint felülírja a `/` tiltását.
+      {
+        userAgent: DISALLOWED_AI_ROBOTS_TOKENS.filter(
+          (token) => !USER_TRIGGERED_AI_AGENTS.includes(token),
+        ),
+        allow: [LLM_DOC_PATH],
         disallow: ["/"],
       },
     ],

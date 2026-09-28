@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { isAiBotUserAgent } from "@/lib/ai-bots";
+import { isBlockedAiRequest } from "@/lib/ai-bots";
 import { isViewRoute, LAST_VIEW_COOKIE } from "@/lib/last-view";
 
 //! ─── AZ AI-ROBOTOK KAPUJA ──────────────────────────────────────────────────
@@ -52,7 +52,14 @@ function blockAiBot(): NextResponse {
 //! átirányítást a böngésző és a kereső is elraktározna, és a nyitólap
 //! elérhetetlenné válna.
 export function proxy(request: NextRequest) {
-  if (isAiBotUserAgent(request.headers.get("user-agent"))) return blockAiBot();
+  if (
+    isBlockedAiRequest(
+      request.headers.get("user-agent"),
+      request.nextUrl.pathname,
+    )
+  ) {
+    return blockAiBot();
+  }
 
   //! A TÖBBI ÚTVONALON NINCS MÁS DOLGUNK. A süti-kapu csak a gyökérre szól; a
   //! matcher azért tágabb nála, mert a robotszűrőnek az EGÉSZ lapot kell
@@ -79,13 +86,14 @@ export function proxy(request: NextRequest) {
 //! - `robots.txt`, `sitemap.xml` — EZEKET A ROBOTNAK EL KELL ÉRNIE. Aki 403-at
 //!   kap a robots.txt-re, sosem tudja meg, hogy ki van tiltva; a kiírt szabály
 //!   csak akkor ér valamit, ha olvasható. Ez a két sor a legfontosabb az egész
-//!   listában.
+//!   listában. A `llms.txt` ugyanezért van itt: a gépnek szóló leírás, amit
+//!   pont az AI-asszisztensnek kell tudnia elolvasni.
 //! - `_next/static`, `_next/image` — a váz, a kép, a betűkészlet. Nincs bennük
 //!   tartalom, amit érdemes lenne félteni, viszont belőlük van a legtöbb.
 //! - `sw.js`, `offline.html`, `manifest` és a `public/` ikonjai — a telepített
 //!   alkalmazás darabjai. Ezeket a böngésző kéri le, néha `User-Agent` nélkül.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|robots\\.txt|sitemap\\.xml|sw\\.js|offline\\.html|manifest\\.webmanifest|.*\\.(?:png|ico|ttf|svg)$).*)",
+    "/((?!_next/static|_next/image|robots\\.txt|llms\\.txt|sitemap\\.xml|sw\\.js|offline\\.html|manifest\\.webmanifest|.*\\.(?:png|ico|ttf|svg)$).*)",
   ],
 };
