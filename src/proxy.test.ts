@@ -28,27 +28,22 @@ describe("proxy", () => {
     }
   });
 
-  //! A GÉPNEK SZÁNT AJTÓ CSAK AZ EMBER INDÍTOTTA ASSZISZTENSNEK NYÍLIK. A
-  //! tanító- és a keresőrobot ugyanitt továbbra is 403-at kap.
-  test("az ember indította asszisztens eléri az órarend-API-t", () => {
-    const claudeUser =
-      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)";
-    const chatgptUser =
-      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot";
-    for (const ua of [claudeUser, chatgptUser]) {
+  //! A GÉPNEK SZÁNT AJTÓ MINDEN AI-ROBOTNAK NYITVA — a tanító-, a kereső- és
+  //! az ember indította robotnak is. Minden más út továbbra is 403.
+  test("bármely AI-robot eléri az órarend-API-t, de a lapokat nem", () => {
+    for (const ua of [
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)",
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot",
+      "Mozilla/5.0 (compatible; GPTBot/1.1; +https://openai.com/gptbot)",
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
+      "Mozilla/5.0 (compatible; PerplexityBot/1.0)",
+    ]) {
       expect(proxy(request("/api/orarend?osztaly=13C", { ua })).status).toBe(
         200,
       );
       expect(proxy(request("/api/termek", { ua })).status).toBe(200);
       expect(proxy(request("/orarend", { ua })).status).toBe(403);
       expect(proxy(request("/api/kozlemenyek", { ua })).status).toBe(403);
-    }
-    for (const ua of [
-      "Mozilla/5.0 (compatible; GPTBot/1.1; +https://openai.com/gptbot)",
-      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
-      "Mozilla/5.0 (compatible; PerplexityBot/1.0)",
-    ]) {
-      expect(proxy(request("/api/orarend", { ua })).status).toBe(403);
     }
   });
 

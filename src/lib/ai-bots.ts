@@ -90,12 +90,6 @@ const AI_SEARCH_CRAWLERS = [
 //!
 //! HA EZ VALAHA TÚL SZIGORÚNAK BIZONYUL, EZ AZ EGY TÖMB TÖRLENDŐ — a másik
 //! kettő nem. Ezért van külön, és nem beleolvasztva a fentiekbe.
-//!
-//! KIVÉTEL: A GÉPNEK SZÁNT AJTÓ. A `/llms.txt` és az általa leírt JSON-végpontok
-//! (lásd `LLM_OPEN_PATHS` lent) nekik NYITVA vannak. Ott mindkét ellenérv
-//! elesik: a válasz élő, a kérés pillanatában kért adat — nem elavult másolat —,
-//! és nem a bejelentkezés utáni lap üres váza, hanem pontosan az, amit egy
-//! ember is látna.
 const USER_TRIGGERED_AGENTS = [
   "ChatGPT-User",
   "Claude-User",
@@ -131,20 +125,17 @@ export const DISALLOWED_AI_ROBOTS_TOKENS: readonly string[] = [
   ...ROBOTS_TXT_ONLY_TOKENS,
 ];
 
-//! A robots.txt külön blokkban nevezi meg őket, mert nekik több van nyitva.
-export const USER_TRIGGERED_AI_AGENTS: readonly string[] = [
-  ...USER_TRIGGERED_AGENTS,
-];
-
 //! ─── AMI A GÉPNEK SZÓL ─────────────────────────────────────────────────────
 //! A `/llms.txt` MINDENKINEK nyitva, mint a `robots.txt`: csak leírás, és aki
 //! nem olvashatja el, sosem tudja meg, hogy van mit kérnie. Nem is megy át a
 //! `proxy.ts`-en (lásd a matcher-t).
 export const LLM_DOC_PATH = "/llms.txt";
 
-//! A JSON-VÉGPONTOK CSAK AZ EMBER INDÍTOTTA ASSZISZTENSNEK. Ezekből nem lesz
-//! tanítóanyag és nem lesz keresőindex — a tanító- és a keresőrobot továbbra
-//! is 403-at kap rájuk.
+//! A JSON-VÉGPONTOK MINDEN AI-ROBOTNAK NYITVA. Ezeket kifejezetten gépnek
+//! írtuk: a válasz élő, a kérés pillanatában Jedlikinfóból kért adat — nem a
+//! lap elavuló másolata, és nem a bejelentkezés utáni lap üres váza. Ami a
+//! lapokra szóló tiltást indokolja, itt egyik sem áll. A lapok, és minden más
+//! `/api` hívás, továbbra is zárva.
 export const LLM_OPEN_PATHS: readonly string[] = [
   "/api/orarend",
   "/api/termek",
@@ -152,9 +143,6 @@ export const LLM_OPEN_PATHS: readonly string[] = [
 
 //! Egyszer számoljuk ki, ne kérésenként.
 const NEEDLES = BLOCKED_AI_USER_AGENTS.map((agent) => agent.toLowerCase());
-const USER_TRIGGERED_NEEDLES = USER_TRIGGERED_AGENTS.map((agent) =>
-  agent.toLowerCase(),
-);
 
 //! RÉSZSZTRING ÉS KISBETŰ — MERT A `User-Agent` NEM NÉVJEGY, HANEM MONDAT.
 //! A GPTBot úgy mutatkozik be, hogy `Mozilla/5.0 AppleWebKit/537.36 (KHTML,
@@ -175,21 +163,12 @@ export function isAiBotUserAgent(
   return NEEDLES.some((needle) => haystack.includes(needle));
 }
 
-function isUserTriggeredAgent(userAgent: string): boolean {
-  const haystack = userAgent.toLowerCase();
-  return USER_TRIGGERED_NEEDLES.some((needle) => haystack.includes(needle));
-}
-
-//! A KAPU KÉRDÉSE NEM AZ, HOGY ROBOT-E, HANEM HOGY IDE JÖHET-E. A két lista
-//! közti különbség egyetlen helyen dől el: az ember indította asszisztens a
-//! gépnek szánt végpontokon átmehet, minden más AI-robot sehol.
+//! A KAPU KÉRDÉSE NEM AZ, HOGY ROBOT-E, HANEM HOGY IDE JÖHET-E. A gépnek szánt
+//! végpontokon bármelyik AI-robot átmehet, minden más úton egyik sem.
 export function isBlockedAiRequest(
   userAgent: string | undefined | null,
   pathname: string,
 ): boolean {
   if (!userAgent || !isAiBotUserAgent(userAgent)) return false;
-  if (LLM_OPEN_PATHS.includes(pathname) && isUserTriggeredAgent(userAgent)) {
-    return false;
-  }
-  return true;
+  return !LLM_OPEN_PATHS.includes(pathname);
 }
