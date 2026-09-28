@@ -131,15 +131,24 @@ export const DISALLOWED_AI_ROBOTS_TOKENS: readonly string[] = [
 //! `proxy.ts`-en (lásd a matcher-t).
 export const LLM_DOC_PATH = "/llms.txt";
 
-//! A JSON-VÉGPONTOK MINDEN AI-ROBOTNAK NYITVA. Ezeket kifejezetten gépnek
-//! írtuk: a válasz élő, a kérés pillanatában Jedlikinfóból kért adat — nem a
-//! lap elavuló másolata, és nem a bejelentkezés utáni lap üres váza. Ami a
-//! lapokra szóló tiltást indokolja, itt egyik sem áll. A lapok, és minden más
-//! `/api` hívás, továbbra is zárva.
-export const LLM_OPEN_PATHS: readonly string[] = [
-  "/api/orarend",
-  "/api/termek",
-];
+//! AZ EGÉSZ `/api` MINDEN AI-ROBOTNAK NYITVA. Ezt kifejezetten gépnek írtuk: a
+//! válasz élő, a kérés pillanatában kért adat — nem a lap elavuló másolata,
+//! és nem a bejelentkezés utáni lap üres váza. Ami a lapokra szóló tiltást
+//! indokolja, itt egyik sem áll; ami személyes, azt a bejelentkezés védi, nem
+//! a `User-Agent`. A lapok továbbra is zárva.
+export const LLM_OPEN_PREFIX = "/api/";
+
+//! KIVÉTEL A NAPTÁR-FEED. A címében ott a személyes jegy; egy robot kezében
+//! nincs keresnivalója (lásd `app/robots.ts`).
+export const LLM_CLOSED_PREFIX = "/api/naptar";
+
+export function isOpenForAi(pathname: string): boolean {
+  if (!pathname.startsWith(LLM_OPEN_PREFIX)) return false;
+  return (
+    pathname !== LLM_CLOSED_PREFIX &&
+    !pathname.startsWith(`${LLM_CLOSED_PREFIX}/`)
+  );
+}
 
 //! Egyszer számoljuk ki, ne kérésenként.
 const NEEDLES = BLOCKED_AI_USER_AGENTS.map((agent) => agent.toLowerCase());
@@ -163,12 +172,12 @@ export function isAiBotUserAgent(
   return NEEDLES.some((needle) => haystack.includes(needle));
 }
 
-//! A KAPU KÉRDÉSE NEM AZ, HOGY ROBOT-E, HANEM HOGY IDE JÖHET-E. A gépnek szánt
-//! végpontokon bármelyik AI-robot átmehet, minden más úton egyik sem.
+//! A KAPU KÉRDÉSE NEM AZ, HOGY ROBOT-E, HANEM HOGY IDE JÖHET-E. Az `/api`-n
+//! (a naptár-feed kivételével) bármelyik AI-robot átmehet, a lapokon egyik sem.
 export function isBlockedAiRequest(
   userAgent: string | undefined | null,
   pathname: string,
 ): boolean {
   if (!userAgent || !isAiBotUserAgent(userAgent)) return false;
-  return !LLM_OPEN_PATHS.includes(pathname);
+  return !isOpenForAi(pathname);
 }

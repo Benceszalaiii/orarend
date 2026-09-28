@@ -18,8 +18,10 @@ instead of reusing an earlier answer. Responses are cached for up to 5 minutes.
 ## Timetable API
 
 - [Classes and teachers](https://jedlik.info/api/orarend): `GET /api/orarend`
-  with no parameters. Returns `{ classes: [{ short, name }], teachers: [{ short, name }] }`.
-  Use a `short` value in the requests below.
+  with no parameters. Returns `{ classes: [{ short, name, url }], teachers: [{ short, name, url }] }`.
+  Each `url` is the ready-made link to that class's or teacher's week. If your
+  fetch tool can only open links it has already seen, open this list first
+  and follow the `url` you need instead of building the address yourself.
 - [A class's week](https://jedlik.info/api/orarend?osztaly=13C): `GET /api/orarend?osztaly=<class>`.
   The class code is case- and punctuation-insensitive (`13C`, `13.c` and `13 C` all work).
 - [A teacher's week](https://jedlik.info/api/orarend?tanar=AA): `GET /api/orarend?tanar=<teacher short code or name>`.
