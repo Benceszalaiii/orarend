@@ -1,3 +1,4 @@
+import { jsonUtf8 } from "@/lib/json-response";
 import {
   fetchTimetableClasses,
   fetchTimetableTeachers,
@@ -49,7 +50,7 @@ function clock(minutes: number): string {
 //* Ugyanaz az alak, mint a Jedlikinfo-hibáké, hogy a hívónak egy fajta
 //* hibát kelljen olvasnia.
 function badRequest(message: string) {
-  return Response.json(
+  return jsonUtf8(
     {
       error: {
         kind: "bad-request",
@@ -78,9 +79,9 @@ export async function GET(request: Request) {
     ]);
     const error = classes.error ?? teachers.error;
     if (error) {
-      return Response.json({ error }, { status: ERROR_STATUS[error.kind] });
+      return jsonUtf8({ error }, { status: ERROR_STATUS[error.kind] });
     }
-    return Response.json(
+    return jsonUtf8(
       { classes: classes.classes, teachers: teachers.subjects },
       { headers: { "Cache-Control": LIST_CACHE } },
     );
@@ -109,7 +110,7 @@ export async function GET(request: Request) {
 
   if (!result.ok || result.error) {
     const error = result.error;
-    return Response.json(
+    return jsonUtf8(
       { error, weekStart: result.weekStart ?? mondayOf(week) },
       { status: error ? ERROR_STATUS[error.kind] : 502 },
     );
@@ -117,7 +118,7 @@ export async function GET(request: Request) {
 
   //* A perceket órára is kiírjuk: a géppel olvasó kliensnek ne kelljen
   //* visszaszámolnia, mikor kezdődik a harmadik óra.
-  return Response.json(
+  return jsonUtf8(
     {
       kind: result.kind,
       subject: result.subject,

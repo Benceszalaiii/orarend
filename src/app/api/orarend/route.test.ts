@@ -12,7 +12,10 @@ const CLASSES = [
   { short: "13C", name: "13.C" },
   { short: "09A", name: "9.A" },
 ];
-const TEACHERS = [{ short: "AA", name: "Minta Anna" }];
+const TEACHERS = [
+  { short: "AA", name: "Ágoston Anett" },
+  { short: "BB", name: "Minta Anna" },
+];
 
 const CARDS = {
   full: false,
@@ -37,7 +40,7 @@ const CARDS = {
       endMinute: 45,
       text: "MAT",
       textTitle: "Matematika",
-      rightBottom: "AA",
+      rightBottom: "BB",
       rightBottomTitle: "Minta Anna",
       leftBottom: "112",
       leftBottomTitle: "",
@@ -122,6 +125,21 @@ describe("/api/orarend", () => {
     const res = await get("");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ classes: CLASSES, teachers: TEACHERS });
+  });
+
+  //! A BUN MAGÁTÓL IS KIÍRNÁ, A NODE NEM. Ezért a fejlécet nézzük, és a
+  //! nyers bájtokat is: az ékezetes név UTF-8-ként menjen ki, ne `\u` kóddal
+  //! és ne Latin-1-ként.
+  test("UTF-8-at mond ki, és úgy is küldi", async () => {
+    for (const query of ["", "?osztaly=13C", "?osztaly=13C&tanar=AA"]) {
+      const res = await get(query);
+      expect(res.headers.get("content-type")).toBe(
+        "application/json; charset=utf-8",
+      );
+    }
+    const bytes = new Uint8Array(await (await get("")).arrayBuffer());
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    expect(text).toContain("Ágoston Anett");
   });
 
   test("a kérdező hibája 4xx, és a forrást meg se kérdezzük", async () => {
