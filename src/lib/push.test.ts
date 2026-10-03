@@ -13,6 +13,7 @@ import {
   loadPrefs,
   pushSupport,
   refreshPush,
+  syncPushPersonalization,
   updatePush,
 } from "./push";
 import { DEFAULT_PREFS } from "./push-shared";
@@ -164,8 +165,26 @@ describe("enablePush", () => {
       classes: ["12A"],
       teachers: [],
       everyLesson: true,
+      personalization: { dual: {}, merge: {} },
     });
     expect(loadPrefs()).toEqual(prefs);
+  });
+
+  test("a követett osztály döntéseit is viszi, a többiét nem", async () => {
+    permission = "granted";
+    const hide = { clusterKey: "ang|2|LM", chosen: "" };
+    b.localStorage.setItem(
+      "orarend:dual-schedule:v1",
+      JSON.stringify({ "12A": { A: [], B: [3] }, "09B": { A: [1], B: [] } }),
+    );
+    b.localStorage.setItem(
+      "orarend:merge-prefs:v1",
+      JSON.stringify({ "12A": [hide], "09B": [hide] }),
+    );
+    await enablePush(prefs);
+    expect(
+      JSON.parse(stub.calls[0].init?.body as string).personalization,
+    ).toEqual({ dual: { "12A": { A: [], B: [3] } }, merge: { "12A": [hide] } });
   });
 
   test("a korlát fölötti alanyokat levágja", async () => {
@@ -247,6 +266,7 @@ describe("feliratkozás után", () => {
     expect(stub.calls[0].init?.method).toBe("DELETE");
     expect(sub.unsubscribed).toBe(true);
     expect(b.localStorage.getItem("orarend:push:v1")).toBeNull();
+    expect(b.localStorage.getItem("orarend:push-personal:v1")).toBeNull();
   });
 
   test("refreshPush csak mentett választással küld", async () => {
@@ -258,5 +278,51 @@ describe("feliratkozás után", () => {
     );
     await refreshPush();
     expect(stub.calls).toHaveLength(1);
+  });
+
+  test("syncPushPersonalization csak a döntés változásakor küld", async () => {
+    //* Bekapcsolt értesítés nélkül semmi.
+    await syncPushPersonalization();
+    expect(stub.calls).toHaveLength(0);
+
+    b.localStorage.setItem(
+      "orarend:push:v1",
+      JSON.stringify({ classes: ["12A"] }),
+    );
+    await syncPushPersonalization();
+    expect(stub.calls).toHaveLength(1);
+    //* Ugyanaz az állapot: nincs újabb kérés (téma, nézetváltás is jelez).
+    await syncPushPersonalization();
+    expect(stub.calls).toHaveLength(1);
+
+    b.localStorage.setItem(
+      "orarend:dual-schedule:v1",
+      JSON.stringify({ "12A": { A: [], B: [1, 2] } }),
+    );
+    await syncPushPersonalization();
+    expect(stub.calls).toHaveLength(2);
+    expect(
+      JSON.parse(stub.calls[1].init?.body as string).personalization.dual,
+    ).toEqual({ "12A": { A: [], B: [1, 2] } });
+
+    //* Más osztály döntése ezt a feliratkozást nem érinti.
+    b.localStorage.setItem(
+      "orarend:dual-schedule:v1",
+      JSON.stringify({ "12A": { A: [], B: [1, 2] }, "09B": { A: [5], B: [] } }),
+    );
+    await syncPushPersonalization();
+    expect(stub.calls).toHaveLength(2);
+  });
+
+  test("syncPushPersonalization: sikertelen feltöltés után újrapróbál", async () => {
+    b.localStorage.setItem(
+      "orarend:push:v1",
+      JSON.stringify({ classes: ["12A"] }),
+    );
+    reply = () => new Response("", { status: 500 });
+    await syncPushPersonalization();
+    reply = () => json({ ok: true });
+    await syncPushPersonalization();
+    expect(stub.calls).toHaveLength(2);
   });
 });

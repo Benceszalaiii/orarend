@@ -9,8 +9,12 @@
 //! időpontra végigjátszható anélkül, hogy meg kellene várni.
 
 import { minLabel } from "@/components/timetable/shared";
+import { dualStatusFor } from "./dual-schedule";
+import { dualBlockLesson } from "./dualis";
+import type { DualScheduleEntry } from "./prefs-shared";
 import { LEAD_MINUTES, LEAD_WINDOW_MINUTES } from "./push-shared";
 import type { TimetableLesson, TimetableSubjectKind } from "./timetable";
+import { type MergePreference, resolveDay } from "./timetable-merge";
 
 const TIME_ZONE = "Europe/Budapest";
 
@@ -79,13 +83,82 @@ function uniq(values: readonly string[]): string[] {
 //! CSAK A TANÓRA. A forrás vizsgát és rendezvényt is küldhet (`kind`); azokra
 //! nem szólunk, mert nem az van a csengetési rendben, és nem is mindenkinek
 //! szól.
+//* A duális blokkot nem a forrás küldi: a személyes olvasat teszi a nap helyére
+//* (lásd `personalLessons`). Azon a napon az az EGYETLEN tétel, tehát rá is
+//* ugyanúgy szólunk, mint a nap első órájára.
+const REMINDED_KINDS = new Set(["class", "dual"]);
+
 function lessonsOfDay(
   lessons: readonly TimetableLesson[],
   dayKey: string,
 ): TimetableLesson[] {
   return lessons
-    .filter((l) => l.dateKey === dayKey && l.kind === "class")
+    .filter((l) => l.dateKey === dayKey && REMINDED_KINDS.has(l.kind))
     .sort((a, b) => a.startMin - b.startMin);
+}
+
+//* ---------------------------------------------------------------------------
+//* A SZEMÉLYES OLVASAT
+//* ---------------------------------------------------------------------------
+//! AZ ÉRTESÍTÉS AZT A NAPOT MONDJA, AMIT A RÁCS MUTAT. Ha a diák aznap
+//! duálison van, a rácson egyetlen „Duális képzés" blokk áll; ha a
+//! csoportbontásból a másik ágat rejtette el, az a rácson nincs ott. Egy
+//! értesítés, ami ennek ellentmond, nem pontatlan, hanem téves riasztás.
+//*
+//! EZÉRT NEM ÍRJUK ÚJRA A SZŰRÉST — ugyanaz a megfontolás, mint a
+//! `calendar-feed.ts`-ben: a rács saját függvényei futnak (`dualStatusFor`,
+//! `resolveDay`), ugyanazzal a döntés-listával.
+export type PersonalView = {
+  //! A HÉT BETŰJE, NEM A NAPÉ. A Jedlikinfo egyes napokra üres jelölést ad (pl.
+  //! egy tanítás nélküli hétfőre), a hét egészére viszont mindig ad betűt —
+  //! ugyanaz a szabály, mint a rácson (`calendar.tsx`) és a feedben.
+  /** A hét A/B jelölése (`weekLetterOf`), vagy `""`, ha nem tudjuk. */
+  weekLetter: string;
+  /** A feliratkozó duális beosztása erre az osztályra, ha van. */
+  dual?: DualScheduleEntry;
+  /** A feliratkozó csoportbontás-döntései erre az osztályra, ha vannak. */
+  merge?: readonly MergePreference[];
+};
+
+export function weekLetterOf(days: readonly { week: string }[]): string {
+  return days.find((d) => d.week === "A" || d.week === "B")?.week ?? "";
+}
+
+function hasDecisions(view: PersonalView): boolean {
+  return Boolean(view.dual) || (view.merge?.length ?? 0) > 0;
+}
+
+//* Egy nap órái a feliratkozó szemével. Duális napon a nap helyén egyetlen
+//* blokk áll; máskor a csoportbontásból csak a megtartott ág.
+function personalDay(
+  dayLessons: TimetableLesson[],
+  view: PersonalView,
+): TimetableLesson[] {
+  //! CSAK OTT, AHOL VAN MIT FELVÁLTANI. Adat nélküli napra (szünet,
+  //! forráshiba) nem találunk ki duális napot — a nap üressége a hír.
+  if (dayLessons.length === 0) return [];
+  if (
+    dualStatusFor(
+      view.dual ?? null,
+      dayLessons[0].dayOfWeek,
+      view.weekLetter,
+    ) === "dual"
+  ) {
+    return [dualBlockLesson(dayLessons[0])];
+  }
+  return resolveDay(dayLessons, [...(view.merge ?? [])]).lessons;
+}
+
+/** A nap órái úgy, ahogy a feliratkozó rácsa mutatja — az emlékeztető bemenete. */
+export function personalLessons(
+  lessons: readonly TimetableLesson[],
+  dayKey: string,
+  view: PersonalView,
+): TimetableLesson[] {
+  return personalDay(
+    lessons.filter((l) => l.dateKey === dayKey && l.kind === "class"),
+    view,
+  );
 }
 
 //* Mely kezdési időpontok érdemelnek jelzést: a nap első órája, és minden
@@ -189,9 +262,9 @@ export function reminderText(
 ): { title: string; body: string } {
   if (kind === "teacher") return teacherReminderText(reminder);
 
-  //! HA TÖBB TANTÁRGY KEZDŐDIK EGYSZERRE, MIND KIÍRJUK. A szerver az OSZTÁLYT
-  //! ismeri, a csoportot nem (a csoportbontás döntése a böngészőben marad,
-  //! lásd `/adatvedelem`) — így nem tudjuk, melyik a diáké. Egy találgatott
+  //! HA TÖBB TANTÁRGY KEZDŐDIK EGYSZERRE, MIND KIÍRJUK. Aki a csoportbontásban
+  //! döntött, annál ide már csak a megtartott ág jut el (`personalLessons`);
+  //! aki nem, annál a szerver nem tudja, melyik a diáké. Egy találgatott
   //! tantárgynév rosszabb a felsorolásnál: az utóbbiból a diák egy pillanat
   //! alatt kiválasztja a sajátját, az előbbiről viszont nem derül ki, hogy
   //! tipp volt.
@@ -245,6 +318,11 @@ function slotKey(l: TimetableLesson): string {
 //* A MEZŐ HOZZÁVÉTELE NEM ÖNTI KI A RÉGI LENYOMATOKAT: a régi (öt mezős) és az
 //* új (hat mezős) sor szövegként ugyan eltér, de mezőnként azonos — a
 //* `describeFieldChange` ilyenkor `null`-t ad, és nem lesz belőle értesítés.
+//*
+//! A CSOPORT A SZEMÉLYES OLVASATHOZ KELL. A csoportbontás-döntés az óra
+//! azonosságára szól (tantárgy + csoport + tanár, lásd `lessonIdentity`), és a
+//! lenyomatból csak akkor rakható vissza, ha a csoport is benne van. Változást
+//! önmagában nem jelez (`describeFieldChange` nem nézi).
 function slotValue(l: TimetableLesson): string {
   return [
     l.subjectShort || l.subject,
@@ -253,8 +331,12 @@ function slotValue(l: TimetableLesson): string {
     String(l.endMin),
     l.moved ? "moved" : "",
     l.classShort || l.className,
+    l.group,
   ].join("|");
 }
+
+//* Hány mezős a mai lenyomat-érték — ennél rövidebb a csoport előtti.
+const SLOT_FIELDS = 7;
 
 export function snapshotWeek(
   lessons: readonly TimetableLesson[],
@@ -283,7 +365,8 @@ function parseSlot(key: string): { dayKey: string; startMin: number } {
 }
 
 function parseValue(value: string) {
-  const [subject, teacher, room, endMin, moved, classShort] = value.split("|");
+  const [subject, teacher, room, endMin, moved, classShort, group] =
+    value.split("|");
   return {
     subject,
     teacher,
@@ -293,6 +376,7 @@ function parseValue(value: string) {
     //* A tanári ág előtti lenyomatokban ez a mező nincs meg — `undefined`
     //* helyett üres szöveg, hogy az összehasonlítás ne hazudjon változást.
     classShort: classShort ?? "",
+    group: group ?? "",
   };
 }
 
@@ -437,6 +521,95 @@ export function diffWeeks(input: {
   );
 }
 
+//* ---------------------------------------------------------------------------
+//* A SZEMÉLYES VÁLTOZÁS
+//* ---------------------------------------------------------------------------
+//! A LENYOMAT KÖZÖS, A HÍR SZEMÉLYES. A forrást alanyonként egyszer kérjük le,
+//! és egyetlen lenyomatot tartunk — de a 13C egyik csoportjának teremcseréje a
+//! másik csoportnak nem hír, a munkanapra eső elmaradás pedig annak sem, aki
+//! aznap duálison van. Ezért MINDKÉT lenyomatot a feliratkozó szemével olvassuk
+//! vissza, és a kettő különbsége a hír: pontosan az, ami az ő rácsán változott.
+
+function isoDayOfWeek(dateKey: string): number {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return ((new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7) + 1;
+}
+
+//* A lenyomatból visszaépített óra — annyi mezővel, amennyi a `resolveDay`-nek
+//* és az azonosságnak kell. A kulcs és az érték változatlanul megy tovább.
+function slotLesson(key: string, value: string): TimetableLesson {
+  const { dayKey, startMin } = parseSlot(key);
+  const v = parseValue(value);
+  return {
+    key,
+    dateKey: dayKey,
+    dayOfWeek: isoDayOfWeek(dayKey),
+    startMin,
+    endMin: Number(v.endMin),
+    subject: v.subject,
+    subjectShort: v.subject,
+    teacher: v.teacher,
+    teacherShort: v.teacher,
+    classShort: v.classShort,
+    className: v.classShort,
+    room: v.room,
+    group: v.group,
+    groupColumn: Number(key.split("|")[2]) || 0,
+    groupCount: 1,
+    wholeClass: true,
+    week: "",
+    moved: v.moved,
+    kind: "class",
+  };
+}
+
+function personalSnapshot(
+  snapshot: WeekSnapshot,
+  view: PersonalView,
+): WeekSnapshot {
+  const byDay = new Map<string, TimetableLesson[]>();
+  for (const [key, value] of Object.entries(snapshot)) {
+    const lesson = slotLesson(key, value);
+    byDay.set(lesson.dateKey, [...(byDay.get(lesson.dateKey) ?? []), lesson]);
+  }
+  const out: WeekSnapshot = {};
+  for (const lessons of byDay.values()) {
+    for (const lesson of personalDay(lessons, view)) {
+      //* A duális blokk nem lenyomat-tétel: azon a napon a közös lenyomat
+      //* egyetlen változása sem hír, tehát a nap kimarad.
+      if (lesson.kind === "class") out[lesson.key] = snapshot[lesson.key];
+    }
+  }
+  return out;
+}
+
+export function personalChanges(input: {
+  before: WeekSnapshot;
+  after: WeekSnapshot;
+  fromDayKey: string;
+  view: PersonalView;
+}): Change[] {
+  const { before, after, fromDayKey } = input;
+  if (!hasDecisions(input.view))
+    return diffWeeks({ before, after, fromDayKey });
+
+  //! A CSOPORT ELŐTTI LENYOMATON A DÖNTÉS NEM TALÁL. A régi értékből hiányzik a
+  //! csoport, tehát az órák azonossága más, mint amire a döntés szól — a
+  //! „before" oldalon minden ág látszana, az „after" oldalon csak a megtartott,
+  //! és a különbségből hamis „elmarad" sorok lennének. Ilyenkor (hetente
+  //! egyszer, az átállás után) a csoportbontást kihagyjuk; a duális nap
+  //! azonosság nélkül is szűrhető, az marad.
+  const legacy = Object.values(before).some(
+    (v) => v.split("|").length < SLOT_FIELDS,
+  );
+  const view = legacy ? { ...input.view, merge: undefined } : input.view;
+  return diffWeeks({
+    before: personalSnapshot(before, view),
+    after: personalSnapshot(after, view),
+    fromDayKey,
+  });
+}
+
 //* Hány tétel fér a törzsbe. A rendszersáv ennél többet úgysem mutat
 //* kinyitás nélkül, és a lényeg — hogy VAN változás — az első sorból kiderül.
 const CHANGE_LINES = 3;
@@ -466,10 +639,15 @@ export function changeText(
 //! A KIKÜLDÉS FOGLALÁSÁNAK KULCSA. Ugyanaz a változáshalmaz kétszer ne menjen
 //! ki: ha a következő lekérés ugyanazt a különbséget látja (mert a lenyomat
 //! mentése elbukott, vagy a feladat újraindult), a kulcs már foglalt lesz.
+//*
+//! A SZÖVEG IS A KULCS RÉSZE. Nélküle ugyanannak az órának a MÁSODIK
+//! teremcseréje aznap (214 → 305, aztán 305 → 410) ugyanazt a kulcsot kapná,
+//! és a nap hátralévő részében némán elnyelődne. A szöveg a tartalmat hordozza,
+//! tehát két eltérő hír két kulcs.
 export function changeFingerprint(changes: readonly Change[]): string {
   let hash = 5381;
   const joined = changes
-    .map((c) => `${c.kind}:${c.dayKey}:${c.startMin}`)
+    .map((c) => `${c.kind}:${c.dayKey}:${c.startMin}:${c.text}`)
     .join(";");
   for (let i = 0; i < joined.length; i++) {
     hash = ((hash << 5) + hash + joined.charCodeAt(i)) | 0;

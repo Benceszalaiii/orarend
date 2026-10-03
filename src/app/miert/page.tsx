@@ -8,10 +8,8 @@ export const metadata: Metadata = {
   description: "Miért készült az Órarend, és mihez tartja magát.",
 };
 
-
 export default function MiertPage() {
   return (
-
     <div className="flex min-h-[100dvh] flex-col">
       <main className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
         <Link

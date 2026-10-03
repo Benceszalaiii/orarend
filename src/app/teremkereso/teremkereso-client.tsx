@@ -568,7 +568,8 @@ function SourceNote({
       <p className="text-xs leading-relaxed text-pretty text-muted-foreground">
         {answer && answer.ageMinutes > 0
           ? ` Ez a válasz ${answer.ageMinutes} perce kelt`
-          : ""}. Óránként frissül.
+          : ""}
+        . Óránként frissül.
       </p>
     </div>
   );

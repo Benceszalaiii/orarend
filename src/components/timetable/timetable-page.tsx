@@ -282,6 +282,7 @@ export function TimetablePage({
   //! emlékezett tanár, ott az alany csak a listából (és a belépés nevéből)
   //! derülhet ki — ott a régi sorrend fut tovább, mert ott tényleg kell.
   //! ═════════════════════════════════════════════════════════════════════════
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a munkamenet szándékosan nem indítja újra (lásd a függőséglista fölött)
   useEffect(() => {
     let cancelled = false;
     const focusWeek = focusMondayKey();
@@ -383,7 +384,6 @@ export function TimetablePage({
     //! A MUNKAMENET KÉSŐBB ÉRKEZIK, ÉS EZ SZÁNDÉKOSAN NEM INDÍT ÚJRA. A
     //! névből csak az ELSŐ megnyitás tippje lesz; ha a válasz a lista után
     //! futna be, egy már kiválasztott alanyt írna felül a szeme előtt.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   return (

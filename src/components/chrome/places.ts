@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Cast,
   DoorOpen,
   House,
@@ -22,7 +23,7 @@ import type { MenuItemId } from "@/lib/menu-items";
 
 export type PlaceId = Extract<
   MenuItemId,
-  "duty" | "rooms" | "screens" | "home"
+  "duty" | "rooms" | "subjects" | "screens" | "home"
 >;
 
 export type Place = {
@@ -53,6 +54,14 @@ export const PLACES: readonly Place[] = [
     hint: "Melyik terem üres most",
     Icon: DoorOpen,
     hotkey: "k",
+  },
+  {
+    id: "subjects",
+    href: "/tantargyak",
+    label: "Tantárgyak",
+    hint: "Ki tanítja, és kiknek",
+    Icon: BookOpen,
+    hotkey: "t",
   },
   {
     id: "screens",

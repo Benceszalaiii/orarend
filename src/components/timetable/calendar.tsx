@@ -1152,9 +1152,7 @@ export function TimetableCalendar({
   //! A MINIMÁLIS TARTOMÁNY viszont mindig az 1–7. óra: ha valakinek egész héten
   //! csak egy 8. órája van, a rács különben arra az egy sávra zsugorodna, és
   //! nem lenne mihez viszonyítani, hányadik óráról van szó.
-  const baselinePeriods = periods.filter(
-    (p) => p.number >= 1 && p.number <= 7,
-  );
+  const baselinePeriods = periods.filter((p) => p.number >= 1 && p.number <= 7);
   const lessonMins = [
     ...lessons.map((l) => l.startMin),
     ...lessons.map((l) => l.endMin),
@@ -2194,6 +2192,7 @@ export function TimetableCalendar({
   //! amikor tényleg oda is igazítottunk; a mérés utáni újrafutásig (`colWidth`
   //! a függőségben) nyitva marad. Enélkül a hétfőn maradt a lap.
   const jumpedRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a `colWidth` szándékosan függőség — a mérés utáni újrafutást váltja ki (lásd fent)
   useEffect(() => {
     if (variant !== "fullscreen" || jumpedRef.current) return;
     const index = gridDays.findIndex((d) => d.isToday);
@@ -3445,14 +3444,14 @@ function LegendItems({ stacked = false }: { stacked?: boolean }) {
       <span className={row}>
         <span
           className={cn("size-3 shrink-0 border acc-tint", CELL_RADIUS)}
-          style={{ ["--acc-h"]: 210 } as React.CSSProperties}
+          style={{ "--acc-h": 210 } as React.CSSProperties}
         />
         Tanóra
       </span>
       <span className={row}>
         <span
           className={cn("size-3 shrink-0 border acc-break", CELL_RADIUS)}
-          style={{ ["--acc-h"]: 210 } as React.CSSProperties}
+          style={{ "--acc-h": 210 } as React.CSSProperties}
         />
         Szünet
       </span>

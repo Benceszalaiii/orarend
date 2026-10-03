@@ -27,7 +27,7 @@ export default function AdatvedelemPage() {
           Adatvédelmi tájékoztató
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Utolsó frissítés: 2026. szeptember 16.
+          Utolsó frissítés: 2026. szeptember 30.
         </p>
 
         <div className="mt-8 flex flex-col gap-8 text-sm leading-relaxed text-muted-strong">
@@ -174,10 +174,30 @@ export default function AdatvedelemPage() {
               általad kiválasztott osztályok — tanárként a tanári jelek — nevét
               tároljuk. Ez az oldal egyetlen olyan adata, amely egy adott
               készülékhez köthető; enélkül az értesítés nem tudna megérkezni.
-              Nevet, e-mail-címet, IP-címet, eszközleírót vagy
-              csoportbontás-beállítást nem tárolunk mellé, és az értesítésekből
-              gyűjtött adatot semmilyen más célra — statisztikára sem —
-              használjuk fel.
+              Nevet, e-mail-címet, IP-címet vagy eszközleírót nem tárolunk
+              mellé, és az értesítésekből gyűjtött adatot semmilyen más célra —
+              statisztikára sem — használjuk fel.
+            </p>
+            {/*//! A FELIRATKOZÁS A DÖNTÉSEKET IS VISZI, ÉS EZT KI KELL MONDANI. A
+              //! lap korábban azt írta, hogy csoportbontás-beállítást nem
+              //! tárolunk az értesítés mellé; mióta az értesítés a rács
+              //! döntéseivel szól (duális napon hallgat, a másik csoport óráiról
+              //! nem szól), ez nem igaz — ezért itt nevesítve áll. */}
+            <p>
+              Ha a követett osztályhoz beállítottad a{" "}
+              <span className="font-medium text-foreground">
+                duális beosztásodat
+              </span>{" "}
+              vagy{" "}
+              <span className="font-medium text-foreground">
+                csoportbontás-választásaidat
+              </span>
+              , ezeket is a feliratkozás mellé tesszük — csak a követett
+              osztályokét. Erre azért van szükség, hogy az értesítés ugyanazt
+              mondja, mint a rács: duális napon ne szóljon az iskolai órákról,
+              és ne jelezzen olyan óráról, amelyet a saját órarendedből
+              elrejtettél. Ha módosítod őket, a feliratkozás magától frissül;
+              kikapcsoláskor a sorral együtt törlődnek.
             </p>
             {/*//! A TANÁRI FELIRATKOZÁS TÖBBET MOND EL EGY EMBERRŐL, MINT EGY
               //! OSZTÁLYOS — ezért külön bekezdést kap. Nem az adat titkos (az
@@ -231,8 +251,8 @@ export default function AdatvedelemPage() {
               és — ha beállítottad — a duális beosztásod. Erre azért van
               szükség, mert a naptáralkalmazásod a saját nevében, bejelentkezés
               nélkül kéri le a fájlt: a kiszolgálónak magának kell tudnia, mely
-              órák a tieid. Ez az egyetlen funkció, amelynél ezek a beállítások
-              elhagyják a böngésződet. Nevet, e-mail-címet, IP-címet vagy
+              órák a tieid. Ezen kívül csak a bekapcsolt értesítés viszi el
+              ugyanezeket (lásd fentebb). Nevet, e-mail-címet, IP-címet vagy
               eszközleírót nem tárolunk mellé, és nem vezetünk naplót arról,
               mikor kérte le a naptárad a fájlt.
             </p>
@@ -474,16 +494,18 @@ export default function AdatvedelemPage() {
               csoportbontások, duális beosztás) és az utoljára megnyitott nézet
               a böngésző saját, helyi tárolójában (localStorage) mentődnek,
               kizárólag a te eszközödön. Bejelentkezés nélkül ezek a beállítások
-              nem kerülnek elküldésre semmilyen szerverre — két kivétellel: a
+              nem kerülnek elküldésre semmilyen szerverre — három kivétellel: a
               fentebb leírt osztályszintű statisztika magát az osztály nevét (és
               semmi mást) továbbítja, a{" "}
               <span className="font-medium text-foreground">
                 naptár-feliratkozás
               </span>{" "}
-              pedig — ha te magad kéred — a csoportbontás-választásaidat is
-              (lásd a saját szakaszát fentebb). Ha bejelentkezel, ugyanezek a
-              beállítások a fiókodhoz is mentődnek, hogy másik eszközön is
-              megjelenjenek — lásd a{" "}
+              és a bekapcsolt{" "}
+              <span className="font-medium text-foreground">értesítés</span>{" "}
+              pedig — ha te magad kéred — a csoportbontás-választásaidat és a
+              duális beosztásodat is (lásd a saját szakaszukat fentebb). Ha
+              bejelentkezel, ugyanezek a beállítások a fiókodhoz is mentődnek,
+              hogy másik eszközön is megjelenjenek — lásd a{" "}
               <span className="font-medium text-foreground">
                 Belépés az iskolai fiókkal
               </span>{" "}

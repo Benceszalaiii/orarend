@@ -13,6 +13,7 @@ const circleB =
 
 function MorphingInfinity(props: React.ComponentProps<"svg">) {
   return (
+    // biome-ignore lint/a11y/useSemanticElements: SVG-n nincs <output> megfelelő, a role="status" itt a helyes jelölés
     <svg
       viewBox="0 0 24 24"
       fill="none"

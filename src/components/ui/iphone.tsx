@@ -1,24 +1,24 @@
-import type { HTMLAttributes } from "react"
+import type { HTMLAttributes } from "react";
 
-const PHONE_WIDTH = 433
-const PHONE_HEIGHT = 882
-const SCREEN_X = 21.25
-const SCREEN_Y = 19.25
-const SCREEN_WIDTH = 389.5
-const SCREEN_HEIGHT = 843.5
-const SCREEN_RADIUS = 55.75
+const PHONE_WIDTH = 433;
+const PHONE_HEIGHT = 882;
+const SCREEN_X = 21.25;
+const SCREEN_Y = 19.25;
+const SCREEN_WIDTH = 389.5;
+const SCREEN_HEIGHT = 843.5;
+const SCREEN_RADIUS = 55.75;
 
 // Calculated percentages
-const LEFT_PCT = (SCREEN_X / PHONE_WIDTH) * 100
-const TOP_PCT = (SCREEN_Y / PHONE_HEIGHT) * 100
-const WIDTH_PCT = (SCREEN_WIDTH / PHONE_WIDTH) * 100
-const HEIGHT_PCT = (SCREEN_HEIGHT / PHONE_HEIGHT) * 100
-const RADIUS_H = (SCREEN_RADIUS / SCREEN_WIDTH) * 100
-const RADIUS_V = (SCREEN_RADIUS / SCREEN_HEIGHT) * 100
+const LEFT_PCT = (SCREEN_X / PHONE_WIDTH) * 100;
+const TOP_PCT = (SCREEN_Y / PHONE_HEIGHT) * 100;
+const WIDTH_PCT = (SCREEN_WIDTH / PHONE_WIDTH) * 100;
+const HEIGHT_PCT = (SCREEN_HEIGHT / PHONE_HEIGHT) * 100;
+const RADIUS_H = (SCREEN_RADIUS / SCREEN_WIDTH) * 100;
+const RADIUS_V = (SCREEN_RADIUS / SCREEN_HEIGHT) * 100;
 
 export interface IphoneProps extends HTMLAttributes<HTMLDivElement> {
-  src?: string
-  videoSrc?: string
+  src?: string;
+  videoSrc?: string;
 }
 
 export function Iphone({
@@ -28,8 +28,8 @@ export function Iphone({
   style,
   ...props
 }: IphoneProps) {
-  const hasVideo = !!videoSrc
-  const hasMedia = hasVideo || !!src
+  const hasVideo = !!videoSrc;
+  const hasMedia = hasVideo || !!src;
 
   return (
     <div
@@ -74,6 +74,7 @@ export function Iphone({
             borderRadius: `${RADIUS_H}% / ${RADIUS_V}%`,
           }}
         >
+          {/* biome-ignore lint/performance/noImgElement: a film kamerája ráközelít a kijelzőre, a next/image kis srcset-je ott elmosódna */}
           <img
             src={src}
             alt=""
@@ -83,6 +84,7 @@ export function Iphone({
       )}
 
       <svg
+        aria-hidden="true"
         viewBox={`0 0 ${PHONE_WIDTH} ${PHONE_HEIGHT}`}
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
@@ -173,5 +175,5 @@ export function Iphone({
         </defs>
       </svg>
     </div>
-  )
+  );
 }

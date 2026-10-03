@@ -44,7 +44,8 @@ export function useHiddenMenu(): HiddenMenu {
   );
 
   useEffect(() => {
-    const sync = () => setHidden(new Set(loadHiddenMenu() ?? DEFAULT_HIDDEN_MENU));
+    const sync = () =>
+      setHidden(new Set(loadHiddenMenu() ?? DEFAULT_HIDDEN_MENU));
     sync();
     //* A testreszabó `saveHiddenMenu`-vel ír, az pedig `notifyPrefsChanged`-et
     //* jelez: a lap ugyanabban a képkockában veszi ki a sort, ahogy a kapcsoló
