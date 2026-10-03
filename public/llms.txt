@@ -31,6 +31,12 @@ instead of reusing an earlier answer. Responses are cached for up to 5 minutes.
 - [Free rooms right now](https://jedlik.info/api/termek): `GET /api/termek`,
   optionally `?nap=YYYY-MM-DD&ido=HH:MM` (Budapest time). Returns `free`,
   `busy` and `unknown` rooms. Only works from one week back to three weeks ahead.
+- [Who teaches which subject](https://jedlik.info/api/tantargyak): `GET /api/tantargyak`,
+  optionally `?kereses=<text>` (subjects whose name or short code contains the
+  text) or `?tantargy=<exact subject name>` (one subject). Accents and case do
+  not matter. Returns `subjects: [{ name, short, teachers: [{ short, name, classes }],
+  classes: [{ short, teachers }] }]`, built from this week and next week, so
+  both A and B weeks are included. Clubs (szakkör) have teachers but no class.
 
 Pass exactly one of `osztaly` or `tanar`, not both.
 
@@ -82,4 +88,5 @@ holiday). This site did not cause these; retry later if `retryable` is true.
 - [Today](https://jedlik.info/ma): today's lessons and what is on now
 - [Teachers' timetable](https://jedlik.info/tanari) (`?teacher=AA`)
 - [Free rooms](https://jedlik.info/teremkereso)
+- [Subjects](https://jedlik.info/tantargyak): who teaches a subject, and to which classes (`?tantargy=Fizika`)
 - [Hall duty](https://jedlik.info/ugyelet)

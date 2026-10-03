@@ -66,6 +66,7 @@ describe("push-send", () => {
     expect(await unconfigured.sendPush([sub("https://p/1")], payload)).toEqual({
       sent: 0,
       dropped: 0,
+      failed: 0,
     });
     expect(sent).toEqual([]);
   });
@@ -80,7 +81,7 @@ describe("push-send", () => {
       [sub("https://p/1"), sub("https://p/2")],
       payload,
     );
-    expect(result).toEqual({ sent: 2, dropped: 0 });
+    expect(result).toEqual({ sent: 2, dropped: 0, failed: 0 });
     expect(sent[0]).toEqual({
       endpoint: "https://p/1",
       payload,
@@ -88,14 +89,18 @@ describe("push-send", () => {
     });
   });
 
-  test("a megszűnt feliratkozást (404/410) törli, a többi hibát elnyeli", async () => {
+  test("a megszűnt feliratkozást (404/410) törli, a többit megszámolja", async () => {
     await saveSubscription(sub("https://p/gone"));
+    await saveSubscription(sub("https://p/flaky"));
     failures = { "https://p/gone": 410, "https://p/flaky": 500 };
     const result = await configured.sendPush(
       [sub("https://p/gone"), sub("https://p/flaky"), sub("https://p/ok")],
       payload,
     );
-    expect(result).toEqual({ sent: 1, dropped: 1 });
+    //* A 500 nem lejárt feliratkozás: a sor marad, de a tick válaszában
+    //* látszik — eddig ez néma volt.
+    expect(result).toEqual({ sent: 1, dropped: 1, failed: 1 });
+    expect(await readSubscription("https://p/flaky")).not.toBeNull();
     expect(await readSubscription("https://p/gone")).toBeNull();
   });
 
@@ -103,6 +108,7 @@ describe("push-send", () => {
     expect(await configured.sendPush([], payload)).toEqual({
       sent: 0,
       dropped: 0,
+      failed: 0,
     });
   });
 });

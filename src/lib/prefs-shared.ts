@@ -172,9 +172,12 @@ export function sanitizeMergeList(value: unknown): MergePrefEntry[] {
     if (out.length >= MAX_MERGE_PER_CLASS) break;
     if (!isRecord(raw)) continue;
     const clusterKey = sanitizeIdentity(raw.clusterKey);
-    const chosen = sanitizeIdentity(raw.chosen);
-    //* A `chosen` lehet üres sztring is (= mindent elrejtünk ebből a
-    //* csoportból), de a `clusterKey` nélkül a bejegyzés értelmezhetetlen.
+    //! AZ ÜRES `chosen` JELENTÉS, NEM HIÁNY: „egyik ágat sem tartjuk meg" —
+    //! így menti a `hideIdentity` az elrejtett órát. A `sanitizeIdentity` az
+    //! üreset `null`-lá tenné, és az elrejtés se a fiókba, se a feedbe, se az
+    //! értesítéshez nem jutna el. A `clusterKey` nélkül viszont a bejegyzés
+    //! értelmezhetetlen.
+    const chosen = raw.chosen === "" ? "" : sanitizeIdentity(raw.chosen);
     if (!clusterKey || chosen === null) continue;
     out.push({ clusterKey, chosen });
   }

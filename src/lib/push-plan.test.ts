@@ -6,11 +6,16 @@ import {
   changeText,
   diffWeeks,
   dueReminders,
+  type PersonalView,
+  personalChanges,
+  personalLessons,
   type Reminder,
   reminderStarts,
   reminderText,
   snapshotWeek,
+  weekLetterOf,
 } from "./push-plan";
+import { hideIdentity, lessonIdentity } from "./timetable-merge";
 
 const DAY = "2026-09-14";
 
@@ -192,7 +197,7 @@ describe("snapshotWeek / diffWeeks", () => {
 
   test("a lenyomat csak az órákat tartja", () => {
     expect(Object.keys(before)).toHaveLength(4);
-    expect(before[`${DAY}|480|0`]).toBe("mat|LM|102|525||");
+    expect(before[`${DAY}|480|0`]).toBe("mat|LM|102|525|||");
   });
 
   test("nincs változás: üres", () => {
@@ -306,7 +311,7 @@ describe("changeText", () => {
 });
 
 describe("changeFingerprint", () => {
-  test("determinisztikus, a szövegtől független, a tartalomra érzékeny", () => {
+  test("determinisztikus, a fajtára és a szövegre is érzékeny", () => {
     const a = [
       { kind: "added" as const, dayKey: DAY, startMin: 480, text: "x" },
     ];
@@ -316,8 +321,158 @@ describe("changeFingerprint", () => {
     const c = [
       { kind: "removed" as const, dayKey: DAY, startMin: 480, text: "x" },
     ];
-    expect(changeFingerprint(a)).toBe(changeFingerprint(b));
+    //* Ugyanannak az órának a második teremcseréje aznap MÁS hír — a közös
+    //* kulcs a nap hátralévő részében elnyelte volna.
+    expect(changeFingerprint(a)).toBe(changeFingerprint([...a]));
+    expect(changeFingerprint(a)).not.toBe(changeFingerprint(b));
     expect(changeFingerprint(a)).not.toBe(changeFingerprint(c));
     expect(changeFingerprint([])).toMatch(/^[0-9a-z]+$/);
+  });
+});
+
+//* ---------------------------------------------------------------------------
+//* A SZEMÉLYES OLVASAT
+//* ---------------------------------------------------------------------------
+
+//* Egy bontott óra: az 1. csoportnak matek a 102-ben, a 2.-nak angol a 103-ban.
+const split = [
+  lesson({ dateKey: DAY, group: "13C-1", room: "102" }),
+  lesson({
+    dateKey: DAY,
+    group: "13C-2",
+    groupColumn: 1,
+    subject: "Angol",
+    subjectShort: "ang",
+    room: "103",
+  }),
+];
+//* Az 1. csoport tagja: az angolt elrejtette.
+const groupOne: PersonalView = {
+  weekLetter: "B",
+  merge: hideIdentity([], lessonIdentity(split[1])),
+};
+//* Hétfő duális a B héten.
+const dualMonday: PersonalView = { weekLetter: "B", dual: { A: [], B: [1] } };
+
+describe("weekLetterOf", () => {
+  test("a hét első A/B betűje, a jelöletlen napokat átugorva", () => {
+    expect(weekLetterOf([{ week: "" }, { week: "B" }, { week: "B" }])).toBe(
+      "B",
+    );
+    expect(weekLetterOf([{ week: "" }])).toBe("");
+    expect(weekLetterOf([])).toBe("");
+  });
+});
+
+describe("personalLessons", () => {
+  test("döntés nélkül a nap minden órája", () => {
+    expect(personalLessons(split, DAY, { weekLetter: "B" })).toHaveLength(2);
+  });
+
+  test("a csoportbontásból csak a megtartott ág", () => {
+    const mine = personalLessons(split, DAY, groupOne);
+    expect(mine.map((l) => l.room)).toEqual(["102"]);
+    const [reminder] = dueReminders({
+      lessons: mine,
+      now: { dayKey: DAY, minutes: 470 },
+      everyLesson: false,
+    });
+    //* A diák a SAJÁT termét kapja, nem a „102 / 103" felsorolást.
+    expect(reminderText(reminder, "class", "13C").title).toBe(
+      "Matematika 10 perc múlva",
+    );
+    expect(reminder.rooms).toEqual(["102"]);
+  });
+
+  test("duális napon egyetlen blokk áll a nap helyén", () => {
+    const mine = personalLessons(split, DAY, dualMonday);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({ kind: "dual", startMin: 480 });
+    const [reminder] = dueReminders({
+      lessons: mine,
+      now: { dayKey: DAY, minutes: 470 },
+      everyLesson: false,
+    });
+    expect(reminderText(reminder, "class", "13C")).toEqual({
+      title: "Duális képzés 10 perc múlva",
+      body: "13C · 08:00",
+    });
+  });
+
+  test("a másik hét, az ismeretlen hét és az üres nap nem duális", () => {
+    expect(
+      personalLessons(split, DAY, { ...dualMonday, weekLetter: "A" }),
+    ).toHaveLength(2);
+    //* Betű nélkül nem tudjuk, melyik hét van — az órákra szólunk, ahogy a
+    //* rács is mutatja őket.
+    expect(
+      personalLessons(split, DAY, { ...dualMonday, weekLetter: "" }),
+    ).toHaveLength(2);
+    expect(personalLessons(split, "2026-09-15", dualMonday)).toEqual([]);
+  });
+
+  test("a vizsga és a rendezvény továbbra sem emlékeztető", () => {
+    const exam = lesson({ dateKey: DAY, kind: "event" });
+    expect(personalLessons([exam], DAY, { weekLetter: "B" })).toEqual([]);
+  });
+});
+
+describe("personalChanges", () => {
+  const before = snapshotWeek(split);
+  //* A 2. csoport angolja átkerült a 104-be.
+  const after = snapshotWeek([split[0], { ...split[1], room: "104" }]);
+
+  test("döntés nélkül a közös különbség", () => {
+    expect(
+      personalChanges({
+        before,
+        after,
+        fromDayKey: DAY,
+        view: { weekLetter: "B" },
+      }),
+    ).toEqual(diffWeeks({ before, after, fromDayKey: DAY }));
+  });
+
+  test("az elrejtett ág változása nem hír", () => {
+    expect(
+      personalChanges({ before, after, fromDayKey: DAY, view: groupOne }),
+    ).toEqual([]);
+  });
+
+  test("a saját ág változása hír", () => {
+    const moved = snapshotWeek([{ ...split[0], room: "201" }, split[1]]);
+    const changes = personalChanges({
+      before,
+      after: moved,
+      fromDayKey: DAY,
+      view: groupOne,
+    });
+    expect(changes).toHaveLength(1);
+    expect(changes[0].text).toContain("mat terem: 102 → 201");
+  });
+
+  test("a duális napra eső változás nem hír", () => {
+    expect(
+      personalChanges({ before, after, fromDayKey: DAY, view: dualMonday }),
+    ).toEqual([]);
+  });
+
+  test("a csoport előtti lenyomaton a csoportbontást nem alkalmazza", () => {
+    //* A régi (hat mezős) értékből hiányzik a csoport — a döntés ott nem
+    //* találna, és a két oldal közti eltérésből hamis „elmarad" lenne.
+    const legacy = Object.fromEntries(
+      Object.entries(before).map(([k, v]) => [
+        k,
+        v.split("|").slice(0, 6).join("|"),
+      ]),
+    );
+    expect(
+      personalChanges({
+        before: legacy,
+        after: before,
+        fromDayKey: DAY,
+        view: groupOne,
+      }),
+    ).toEqual([]);
   });
 });

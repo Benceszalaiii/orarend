@@ -40,14 +40,9 @@ describe("sanitizeMergeList", () => {
     expect(sanitizeMergeList({ clusterKey: "k", chosen: "c" })).toEqual([]);
   });
 
-  //! ISMERT HIBA. A `timetable-merge.ts` `hideIdentity`-je az elrejtett órát
-  //! `{ clusterKey: <óra>, chosen: "" }` alakban menti — az üres `chosen` ott
-  //! JELENTÉS („egyik ágat sem tartjuk meg"), nem hiányzó adat. A
-  //! `sanitizeIdentity` viszont az üres szöveget `null`-lá teszi, így a
-  //! `chosen === null` feltétel eldobja: az elrejtett óra sem a fiókba, sem a
-  //! naptár-feedbe nem jut el. Ha a hiba javul, a `test.failing` pirosra vált
-  //! — ilyenkor sima `test`-re kell cserélni.
-  test.failing("az elrejtés (üres chosen) megmarad", () => {
+  //! Az üres `chosen` a `hideIdentity` elrejtése („egyik ágat sem tartjuk
+  //! meg") — jelentés, nem hiányzó adat, tehát meg kell maradnia.
+  test("az elrejtés (üres chosen) megmarad", () => {
     expect(
       sanitizeMergeList([{ clusterKey: "12A|mat|LM|1", chosen: "" }]),
     ).toEqual([{ clusterKey: "12A|mat|LM|1", chosen: "" }]);

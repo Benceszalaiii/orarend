@@ -382,6 +382,8 @@ export type GhostBlock = {
 };
 
 export type ResolvedDay = {
+  /** A választások után ténylegesen látható nyers órák. */
+  lessons: TimetableLesson[];
   runs: LessonRun[];
   ghosts: GhostBlock[];
   conflicts: ConflictCluster[];
@@ -485,6 +487,7 @@ export function resolveDay(
   }
 
   return {
+    lessons: visibleLessons,
     runs: buildRuns(visibleLessons, hiddenByCluster, keyOfCluster, periods),
     ghosts,
     conflicts: chainConflicts(clusters),

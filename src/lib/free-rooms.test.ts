@@ -47,6 +47,7 @@ describe("cardToBooking", () => {
     const booking = cardToBooking(REAL_CARD);
     expect(booking).not.toBeNull();
     expect(booking?.teacher).toBe("Mária Ivett Lipták");
+    expect(booking?.teacherShort).toBe("LM");
     expect(booking?.classShort).toBe("10E");
     expect(booking?.subject).toBe("Digitális kultúra");
     expect(booking?.dateKey).toBe("2026-09-11");
@@ -171,8 +172,10 @@ const lesson = (startMin: number, endMin: number, dayOfWeek = 1) => ({
   startMin,
   endMin,
   subject: "mat",
+  subjectShort: "mat",
   classShort: "13C",
   teacher: "NL",
+  teacherShort: "NL",
   week: "A",
 });
 
