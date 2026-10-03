@@ -75,13 +75,17 @@ export type RoomBooking = {
   endMin: number;
   /** A tantárgy (vagy az esemény) teljes neve. */
   subject: string;
+  //* A tantárgy rövid jele (`mat`) — NEM egyedi: a „Matematika" és a „Szakmai
+  //* matematika" is `mat`. Azonosításra a teljes név való, ez csak felirat.
+  subjectShort: string;
   /** Az osztály jele — üres, ha a kártya nem osztályhoz tartozik (értekezlet). */
   classShort: string;
   /** A tanár neve — üres, ha a forrás nem mond tanárt. */
   teacher: string;
-  //! A TANÁR JELE (`BNM`) — a név mellett külön, mert a szakkör ezzel
-  //! illeszkedik a kártyára (`ClubSlot.teachers`). A név erre alkalmatlan: a
-  //! Jedlikinfo két „Horváth Norbert"-et is ismer, csak a jelük különbözik.
+  //! A TANÁR JELE (`BNM`) — ezzel nyílik meg a tanári órarend, és ezzel
+  //! illeszkedik a szakkör a kártyára (`ClubSlot.teachers`). A név erre
+  //! alkalmatlan: a Jedlikinfo két „Horváth Norbert"-et is ismer, csak a jelük
+  //! különbözik.
   teacherShort: string;
   /** `"A"`, `"B"` vagy `"AB"`, ahogy a forrás adja. */
   week: string;
@@ -178,6 +182,7 @@ export function cardToBooking(card: RawRoomCard): RoomBooking | null {
     startMin: start,
     endMin: end,
     subject: card.textTitle || card.text || "",
+    subjectShort: card.text ?? "",
     //* A terem nézetében a jobb sarok az OSZTÁLY, a bal a TANÁR — lásd fent.
     classShort: card.rightBottom ?? "",
     teacher: card.leftBottomTitle || card.leftBottom || "",

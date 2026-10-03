@@ -172,6 +172,7 @@ const lesson = (startMin: number, endMin: number, dayOfWeek = 1) => ({
   startMin,
   endMin,
   subject: "mat",
+  subjectShort: "mat",
   classShort: "13C",
   teacher: "NL",
   teacherShort: "NL",

@@ -122,10 +122,20 @@ describe("feliratkozások", () => {
 
 describe("zárak", () => {
   test("egy emlékeztető egyszer megy ki", async () => {
-    expect(await leaseReminder("class", "12A", "2026-09-14", 480)).toBe(true);
-    expect(await leaseReminder("class", "12A", "2026-09-14", 480)).toBe(false);
-    expect(await leaseReminder("teacher", "12A", "2026-09-14", 480)).toBe(true);
-    expect(await leaseReminder("class", "12A", "2026-09-14", 535)).toBe(true);
+    const day = "2026-09-14";
+    expect(await leaseReminder("class", "12A", day, 480, "mat")).toBe(true);
+    expect(await leaseReminder("class", "12A", day, 480, "mat")).toBe(false);
+    expect(await leaseReminder("teacher", "12A", day, 480, "mat")).toBe(true);
+    expect(await leaseReminder("class", "12A", day, 535, "mat")).toBe(true);
+  });
+
+  test("ugyanarra a percre más szöveg külön foglalás", async () => {
+    //* A duálison lévő diák és az iskolában ülő osztálytársa ugyanarra a
+    //* percre mást kap — az egyik nem nyelheti el a másikat.
+    const day = "2026-09-14";
+    expect(await leaseReminder("class", "12A", day, 480, "Duális")).toBe(true);
+    expect(await leaseReminder("class", "12A", day, 480, "mat")).toBe(true);
+    expect(await leaseReminder("class", "12A", day, 480, "Duális")).toBe(false);
   });
 
   test("egy változás-ujjlenyomat egyszer", async () => {
@@ -137,9 +147,10 @@ describe("zárak", () => {
 
 describe("gyorsítótárak", () => {
   test("heti órák és lenyomat oda-vissza", async () => {
-    await writeWeekCache("class", "12A", "2026-09-14", [lesson()]);
+    await writeWeekCache("class", "12A", "2026-09-14", [lesson()], "B");
     const cached = await readWeekCache("class", "12A", "2026-09-14");
     expect(cached?.lessons).toEqual([lesson()]);
+    expect(cached?.weekLetter).toBe("B");
     expect(await readWeekCache("class", "12A", "2026-09-21")).toBeNull();
 
     await writeSnapshot("teacher", "LM", "2026-09-14", { a: "b" });

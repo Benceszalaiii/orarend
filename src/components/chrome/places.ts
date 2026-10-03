@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   CalendarDays,
   Cast,
   DoorOpen,
@@ -26,7 +27,7 @@ import type { MenuItemId } from "@/lib/menu-items";
 
 export type PlaceId = Extract<
   MenuItemId,
-  "duty" | "rooms" | "clubs" | "contests" | "screens" | "home"
+  "duty" | "rooms" | "clubs" | "contests" | "subjects" | "screens" | "home"
 >;
 
 //* A buborék sorainak jele: a helyek, és a szakkörök tengelyén a visszaút az
@@ -79,6 +80,14 @@ export const PLACES: readonly (Place & { id: PlaceId })[] = [
     hint: "Meddig lehet nevezni",
     Icon: Trophy,
     hotkey: "y",
+  },
+  {
+    id: "subjects",
+    href: "/tantargyak",
+    label: "Tantárgyak",
+    hint: "Ki tanítja, és kiknek",
+    Icon: BookOpen,
+    hotkey: "t",
   },
   {
     id: "screens",

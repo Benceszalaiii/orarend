@@ -1,3 +1,4 @@
+import { loadAllDualSchedules } from "./dual-schedule";
 import {
   clubsOf,
   contestsOf,
@@ -6,10 +7,13 @@ import {
   MAX_CLUBS,
   MAX_CONTESTS,
   MAX_TEACHERS,
+  type PushPersonalization,
   type PushPrefs,
   prefsEmpty,
+  sanitizePushPersonalization,
 } from "./push-shared";
 import { registerWorker } from "./sw-register";
+import { loadAllLocalPreferences } from "./timetable-merge";
 
 //* ---------------------------------------------------------------------------
 //* ÉRTESÍTÉSEK — A BÖNGÉSZŐ OLDALA
@@ -71,8 +75,52 @@ function savePrefs(prefs: PushPrefs): void {
 function clearPrefs(): void {
   try {
     window.localStorage.removeItem(PREFS_KEY);
+    window.localStorage.removeItem(SENT_KEY);
   } catch {
     /* nincs mit takarítani */
+  }
+}
+
+//* ---------------------------------------------------------------------------
+//* A SZEMÉLYES OLVASAT FELTÖLTÉSE
+//* ---------------------------------------------------------------------------
+//! A SZERVER NEM LÁTJA A `localStorage`-OT. A duális beosztás és a
+//! csoportbontás-döntés itt él, a kiküldés viszont ott dől el — ezért a
+//! feliratkozás minden feltöltése viszi a pillanatnyi állapotot (csak a követett
+//! osztályokét, lásd `sanitizePushPersonalization`).
+const SENT_KEY = "orarend:push-personal:v1";
+
+function personalizationFor(prefs: PushPrefs): PushPersonalization {
+  return sanitizePushPersonalization(
+    {
+      dual: loadAllDualSchedules(),
+      merge: loadAllLocalPreferences(),
+    },
+    prefs.classes,
+  );
+}
+
+//! AMIVEL A SZINKRON ÖSSZEHASONLÍT — ugyanaz a megoldás, mint a naptár-feednél
+//! (`calendar-local.ts`): nem a döntések másolata, csak a lenyomatuk. Enélkül
+//! minden beállítás-jelzés (téma, nézetváltás, osztályválasztás) egy POST
+//! lenne, pedig a feliratkozást csak a döntések érintik.
+function fingerprintOf(personalization: PushPersonalization): string {
+  return JSON.stringify(personalization);
+}
+
+function loadSentFingerprint(): string | null {
+  try {
+    return window.localStorage.getItem(SENT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveSentFingerprint(fingerprint: string): void {
+  try {
+    window.localStorage.setItem(SENT_KEY, fingerprint);
+  } catch {
+    /* privát mód — a következő jelzés újra feltölti, ennyi az ára */
   }
 }
 
@@ -270,6 +318,7 @@ async function postSubscription(
   replaces?: string,
 ): Promise<PostResult> {
   const json = subscription.toJSON();
+  const personalization = personalizationFor(prefs);
   try {
     const res = await fetch("/api/ertesites", {
       method: "POST",
@@ -289,10 +338,14 @@ async function postSubscription(
         clubs: clubsOf(prefs),
         contests: contestsOf(prefs),
         everyLesson: prefs.everyLesson,
+        personalization,
         replaces,
       }),
     });
-    if (res.ok) return "ok";
+    if (res.ok) {
+      saveSentFingerprint(fingerprintOf(personalization));
+      return "ok";
+    }
     return res.status === 403 ? "forbidden" : "server";
   } catch {
     return "server";
@@ -373,6 +426,21 @@ export async function disablePush(): Promise<void> {
 export async function refreshPush(): Promise<void> {
   const prefs = loadPrefs();
   if (prefsEmpty(prefs)) return;
+  const subscription = await currentSubscription();
+  if (!subscription) return;
+  await postSubscription(subscription, prefs);
+}
+
+//! A DÖNTÉS VÁLTOZÁSA IS A FELIRATKOZÁS VÁLTOZÁSA. Ha a diák bejelöli, hogy
+//! szerdán duálison van, a szerver csak akkor hallgat el aznap, ha tud róla.
+//* Csak akkor küld, ha a lenyomat eltér az utoljára elfogadottól — és csak
+//* annál, akinek van élő feliratkozása. Mindenki másnál egy
+//* `localStorage`-olvasás és semmi más.
+export async function syncPushPersonalization(): Promise<void> {
+  const prefs = loadPrefs();
+  if (prefsEmpty(prefs)) return;
+  if (fingerprintOf(personalizationFor(prefs)) === loadSentFingerprint())
+    return;
   const subscription = await currentSubscription();
   if (!subscription) return;
   await postSubscription(subscription, prefs);

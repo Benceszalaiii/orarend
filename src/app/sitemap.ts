@@ -29,7 +29,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "daily",
       priority: 0.8,
     },
-    //* A két iskolai lap (lásd `chrome/places.ts`). A kivetítés nincs itt: az
+    //* Az iskolai lapok (lásd `chrome/places.ts`). A kivetítés nincs itt: az
     //* termenkénti link, és a lapja `noindex`.
     {
       url: "https://jedlik.info/ugyelet",
@@ -41,6 +41,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: "https://jedlik.info/teremkereso",
       lastModified: new Date(),
       changeFrequency: "daily",
+      priority: 0.6,
+    },
+    {
+      url: "https://jedlik.info/tantargyak",
+      lastModified: new Date(),
+      changeFrequency: "weekly",
       priority: 0.6,
     },
   ];

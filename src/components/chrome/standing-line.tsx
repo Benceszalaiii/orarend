@@ -132,7 +132,13 @@ function useWideChrome(): boolean {
 }
 
 //* A sáv sorrendje a régi: a nyitólap elöl, mögötte az iskola lapjai.
-const RAIL_ORDER: readonly PlaceId[] = ["home", "duty", "rooms", "screens"];
+const RAIL_ORDER: readonly PlaceId[] = [
+  "home",
+  "duty",
+  "rooms",
+  "subjects",
+  "screens",
+];
 const RAIL_PLACES = RAIL_ORDER.flatMap((id) =>
   PLACES.filter((p) => p.id === id),
 );

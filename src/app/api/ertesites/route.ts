@@ -11,7 +11,9 @@ import {
   MAX_CLASSES,
   MAX_CLUBS,
   MAX_CONTESTS,
+  MAX_SUBSCRIBE_BYTES,
   MAX_TEACHERS,
+  sanitizePushPersonalization,
 } from "@/lib/push-shared";
 import {
   type PushSubscription,
@@ -70,6 +72,7 @@ type Body = {
   clubs?: unknown;
   contests?: unknown;
   everyLesson?: unknown;
+  personalization?: unknown;
   replaces?: unknown;
 };
 
@@ -129,9 +132,21 @@ export async function POST(request: Request) {
     );
   }
 
+  //! A MÉRETET AZ ELEMZÉS ELŐTT NÉZZÜK. A törzsben a diák döntései is
+  //! utaznak, és a végpont belépés nélkül hívható — ugyanaz a kétlépcsős
+  //! plafon, mint a naptár-feednél: előbb a bejelentett, aztán a tényleges
+  //! méret, mert a fejléc hazudhat.
+  const declared = Number(request.headers.get("content-length") ?? 0);
+  if (declared > MAX_SUBSCRIBE_BYTES)
+    return new Response(null, { status: 413 });
+  const raw = await request.text();
+  if (new Blob([raw]).size > MAX_SUBSCRIBE_BYTES) {
+    return new Response(null, { status: 413 });
+  }
+
   let payload: Body | null;
   try {
-    payload = (await request.json()) as Body;
+    payload = JSON.parse(raw) as Body;
   } catch {
     return new Response(null, { status: 400 });
   }
@@ -248,6 +263,19 @@ export async function POST(request: Request) {
       payload?.everyLesson === undefined
         ? (inherited?.everyLesson ?? false)
         : payload.everyLesson === true,
+    //! A DÖNTÉSEKET IS ÖRÖKÖLNI KELL, UGYANAZÉRT, MINT AZ OSZTÁLYOKAT. A
+    //! workerből jövő végpontcsere nem látja a `localStorage`-ot; enélkül a
+    //! kulcsforgatás után a duális napon újra szólna a matek. A lap viszont
+    //! mindig a pillanatnyi állapotot küldi, az felülír.
+    //* Az örökölt példányt is a MOSTANI osztálylistára szűrjük: egy régebbi
+    //* kliens a mező nélkül is módosíthatja az osztályokat, és a levett osztály
+    //* döntése ne maradjon a sorban.
+    personalization: sanitizePushPersonalization(
+      payload?.personalization === undefined
+        ? (stored?.personalization ?? inherited?.personalization)
+        : payload.personalization,
+      classes,
+    ),
   };
 
   //* Első feliratkozás-e: ettől függ, kap-e visszaigazoló jelzést (lásd lent).

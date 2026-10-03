@@ -40,6 +40,7 @@ export type MenuItemId =
   | "rooms"
   | "clubs"
   | "contests"
+  | "subjects"
   | "screens"
   | "merge"
   | "dual"
@@ -156,6 +157,12 @@ export const MENU_ITEMS: readonly MenuItemMeta[] = [
         },
       ]
     : []),
+  {
+    id: "subjects",
+    label: "Tantárgyak",
+    hint: "Ki tanítja, és kiknek",
+    group: "site",
+  },
   {
     id: "screens",
     label: "Kivetítés",

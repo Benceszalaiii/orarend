@@ -1,10 +1,15 @@
 import type { MetadataRoute } from "next";
-import { DISALLOWED_AI_ROBOTS_TOKENS } from "@/lib/ai-bots";
+import {
+  DISALLOWED_AI_ROBOTS_TOKENS,
+  LLM_CLOSED_PREFIX,
+  LLM_DOC_PATH,
+  LLM_OPEN_PREFIX,
+} from "@/lib/ai-bots";
 
 //! ─── A KIÍRT SZABÁLY ───────────────────────────────────────────────────────
-//! Két csoport, és a sorrendjük nem számít: a robot mindig a RÁ NÉZVE
-//! legpontosabb blokkot követi, a `*` csak az marad, akit senki más nem
-//! nevezett meg.
+//! Két csoport (mindenki; az AI-robotok), és a sorrendjük nem számít: a robot
+//! mindig a RÁ NÉZVE legpontosabb blokkot követi, a `*` csak az marad, akit
+//! senki más nem nevezett meg.
 //*
 //! Ez a lap NEM zár ki minden robotot — a keresőt kifejezetten várjuk. Aki
 //! találatot ad, az embert hoz ide; aki tanítóanyagot gyűjt vagy kész választ
@@ -28,9 +33,14 @@ export default function robots(): MetadataRoute.Robots {
         //! indexeljen. A válasz maga is `X-Robots-Tag: noindex`-et visel.
         disallow: ["/api/naptar/"],
       },
+      //! AZ AI-ROBOT A GÉPNEK SZÁNT AJTÓN JÖHET BE, MÁSHOL NEM. A `/llms.txt`
+      //! és az `/api` nyitva, a naptár-feed és a lapok zárva. A leghosszabb
+      //! egyezés dönt: az `/api/naptar` tiltása hosszabb az `/api/` engedélyénél,
+      //! az pedig a `/` tiltásánál.
       {
         userAgent: [...DISALLOWED_AI_ROBOTS_TOKENS],
-        disallow: ["/"],
+        allow: [LLM_DOC_PATH, LLM_OPEN_PREFIX],
+        disallow: ["/", LLM_CLOSED_PREFIX],
       },
     ],
     sitemap: "https://jedlik.info/sitemap.xml",

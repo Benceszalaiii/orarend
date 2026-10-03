@@ -74,6 +74,7 @@ export function Iphone({
             borderRadius: `${RADIUS_H}% / ${RADIUS_V}%`,
           }}
         >
+          {/* biome-ignore lint/performance/noImgElement: a film kamerája ráközelít a kijelzőre, a next/image kis srcset-je ott elmosódna */}
           <img
             src={src}
             alt=""
@@ -83,6 +84,7 @@ export function Iphone({
       )}
 
       <svg
+        aria-hidden="true"
         viewBox={`0 0 ${PHONE_WIDTH} ${PHONE_HEIGHT}`}
         fill="none"
         xmlns="http://www.w3.org/2000/svg"

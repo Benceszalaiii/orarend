@@ -2247,6 +2247,7 @@ export function TimetableCalendar({
   //! amikor tényleg oda is igazítottunk; a mérés utáni újrafutásig (`colWidth`
   //! a függőségben) nyitva marad. Enélkül a hétfőn maradt a lap.
   const jumpedRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a `colWidth` szándékosan függőség — a mérés utáni újrafutást váltja ki (lásd fent)
   useEffect(() => {
     if (variant !== "fullscreen" || jumpedRef.current) return;
     const index = gridDays.findIndex((d) => d.isToday);
@@ -3507,14 +3508,14 @@ function LegendItems({ stacked = false }: { stacked?: boolean }) {
       <span className={row}>
         <span
           className={cn("size-3 shrink-0 border acc-tint", CELL_RADIUS)}
-          style={{ ["--acc-h"]: 210 } as React.CSSProperties}
+          style={{ "--acc-h": 210 } as React.CSSProperties}
         />
         Tanóra
       </span>
       <span className={row}>
         <span
           className={cn("size-3 shrink-0 border acc-break", CELL_RADIUS)}
-          style={{ ["--acc-h"]: 210 } as React.CSSProperties}
+          style={{ "--acc-h": 210 } as React.CSSProperties}
         />
         Szünet
       </span>

@@ -42,18 +42,24 @@ export function pushSendReady(): boolean {
 //! maradna a tárolóban, holott már senkihez sem tartozik.
 const GONE = new Set([404, 410]);
 
-export type SendResult = { sent: number; dropped: number };
+export type SendResult = {
+  sent: number;
+  dropped: number;
+  /** Nem lejárt, de a szolgáltató által elutasított vagy hálózati hiba. */
+  failed: number;
+};
 
 export async function sendPush(
   subscriptions: readonly PushSubscription[],
   payload: PushPayload,
 ): Promise<SendResult> {
   if (!configured || subscriptions.length === 0) {
-    return { sent: 0, dropped: 0 };
+    return { sent: 0, dropped: 0, failed: 0 };
   }
 
   let sent = 0;
   let dropped = 0;
+  let failed = 0;
 
   await Promise.all(
     subscriptions.map(async (sub) => {
@@ -77,6 +83,15 @@ export async function sendPush(
           dropped++;
           return;
         }
+        failed++;
+        //* Ez eddig teljesen néma volt: VAPID-kulcshiba vagy szolgáltatói
+        //* elutasítás mellett a tick úgy nézett ki, mintha nem lett volna
+        //* címzett. A végpont csak a darabszámot kapja meg (nem végpontot vagy
+        //* kulcsot), így a QStash válaszából azonnal látszik a valódi hiba.
+        console.error("push delivery failed", {
+          status: status ?? "network",
+          message: err instanceof Error ? err.message : "unknown error",
+        });
         //! EGY ROSSZ VÉGPONT NEM VIHETI EL A TÖBBIT. A `Promise.all` egyetlen
         //! elutasítást is továbbdobna, és a háttérfeladat félbeszakadna — a
         //! sorban következő osztályok diákjai kapnának semmit egy idegen
@@ -85,5 +100,5 @@ export async function sendPush(
     }),
   );
 
-  return { sent, dropped };
+  return { sent, dropped, failed };
 }

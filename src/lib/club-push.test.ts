@@ -67,6 +67,7 @@ function occupancy(): WeekOccupancy {
                 startMin: 870,
                 endMin: 955,
                 subject: "Tehetséggondozó szakkör",
+                subjectShort: "",
                 classShort: "",
                 teacher: "Banáné Nagy Mónika",
                 teacherShort: "BNM",

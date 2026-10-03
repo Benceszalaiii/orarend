@@ -382,6 +382,8 @@ export type GhostBlock = {
 };
 
 export type ResolvedDay = {
+  /** A választások után ténylegesen látható nyers órák. */
+  lessons: TimetableLesson[];
   runs: LessonRun[];
   ghosts: GhostBlock[];
   conflicts: ConflictCluster[];
@@ -410,8 +412,6 @@ export function resolveDay(
       const id = lessonIdentity(lesson);
       lessonsByIdentity.set(id, [...(lessonsByIdentity.get(id) ?? []), lesson]);
     }
-    const choices = maximalCombinations(options, lessonsByIdentity);
-
     let visible = identities;
     let decided = false;
 
@@ -485,6 +485,7 @@ export function resolveDay(
   }
 
   return {
+    lessons: visibleLessons,
     runs: buildRuns(visibleLessons, hiddenByCluster, keyOfCluster, periods),
     ghosts,
     conflicts: chainConflicts(clusters),

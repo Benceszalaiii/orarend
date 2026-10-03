@@ -7,6 +7,13 @@
 //! `public/sw.js`-t is át kell írni; ezért van minden, amit a worker olvas,
 //! ebben az EGY típusban, és semmi más.
 
+import {
+  type DualScheduleEntry,
+  type MergePrefEntry,
+  sanitizeDual,
+  sanitizeMergeList,
+} from "./prefs-shared";
+
 //! TÍZ PERC. Nem paraméter, hanem a funkció maga: ennyi idő alatt lehet
 //! átérni a suli egyik szárnyából a másikba, és ennyivel előbb még van értelme
 //! szólni. Kevesebb már késő, több pedig olyankor jönne, amikor a diák épp az
@@ -45,8 +52,9 @@ export const MAX_TEACHERS = 2;
 export const MAX_CLUBS = 10;
 export const MAX_CONTESTS = 10;
 
-//* Egy feliratkozás beállításai. Ennyit tud rólunk a szerver — és ennél többet
-//* nem is akarunk, hogy tudjon (lásd `/adatvedelem`).
+//* Egy feliratkozás beállításai. Ennyit tud rólunk a szerver, plusz a lenti
+//* személyes olvasatot — és ennél többet nem is akarunk, hogy tudjon (lásd
+//* `/adatvedelem`).
 export type PushPrefs = {
   /** Mely osztályok órarendjéről jöjjön jelzés. Legfeljebb `MAX_CLASSES`. */
   classes: string[];
@@ -75,6 +83,62 @@ export type PushPrefs = {
   //* Aki mégis mindent kér (pl. sok teremcsere), az `everyLesson`-nel kapja.
   everyLesson: boolean;
 };
+
+//! ─── A SZEMÉLYES OLVASAT ───────────────────────────────────────────────────
+//! AZ OSZTÁLY ÓRARENDJE NEM A DIÁK NAPJA. A duális napon a munkahelyen van, a
+//! csoportbontásból pedig csak az egyik ág az övé — a rács mindkettőt a
+//! készüléken tárolt döntésből rajzolja ki. Amíg a szerver ezt nem látta, az
+//! értesítés a munkanapon is „matek 10 perc múlva"-t mondott, és a másik csoport
+//! teremcseréjéről is szólt. Ezért a feliratkozás a döntéseket is felviszi —
+//! UGYANAZT a két listát, amit a naptár-feed (`calendar-shared.ts`), és
+//! ugyanazzal az ellenőrzéssel (`prefs-shared.ts`).
+//*
+//* Csak a feliratkozott osztályokéit: a többi osztályhoz mentett döntésnek itt
+//* nincs keresnivalója. A tanári órarendre ez nem vonatkozik (duális napja nincs,
+//* és a saját óráit nem rejti el) — ott a teljes órarend marad az olvasat.
+export type PushPersonalization = {
+  /** Duális beosztás osztályonként — csak ahol legalább egy nap be van jelölve. */
+  dual: Record<string, DualScheduleEntry>;
+  /** Csoportbontás-döntések osztályonként — csak ahol van döntés. */
+  merge: Record<string, MergePrefEntry[]>;
+};
+
+//! A TÖRZS PLAFONJA. Öt osztály döntései a valóságban néhány kilobájt; a
+//! korlát nem ezt méri, hanem azt, hogy egy percenként olvasott sor ne
+//! hízhasson meg — a háttérfeladat minden tickben minden feliratkozót beolvas.
+export const MAX_SUBSCRIBE_BYTES = 32 * 1024;
+
+/**
+ * A böngészőből jövő döntések szűrése. Csak a `classes` listában szereplő
+ * osztály kulcsa maradhat meg; a listák ellenőrzése SZÓ SZERINT a
+ * beállítás-szinkroné.
+ */
+export function sanitizePushPersonalization(
+  value: unknown,
+  classes: readonly string[],
+): PushPersonalization {
+  const out: PushPersonalization = { dual: {}, merge: {} };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return out;
+  const raw = value as { dual?: unknown; merge?: unknown };
+  const dual = isRecord(raw.dual) ? raw.dual : {};
+  const merge = isRecord(raw.merge) ? raw.merge : {};
+
+  for (const short of new Set(classes)) {
+    const schedule = sanitizeDual(dual[short]);
+    //* Az üres beosztás a feed szempontjából „nincs duális nap" — itt sincs
+    //* értelme tárolni, a hiánya ugyanezt jelenti.
+    if (schedule && (schedule.A.length > 0 || schedule.B.length > 0)) {
+      out.dual[short] = schedule;
+    }
+    const prefs = sanitizeMergeList(merge[short]);
+    if (prefs.length > 0) out.merge[short] = prefs;
+  }
+  return out;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 export const DEFAULT_PREFS: PushPrefs = {
   classes: [],

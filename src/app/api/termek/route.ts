@@ -7,6 +7,7 @@ import {
   loadWeekOccupancy,
   servableWeeks,
 } from "@/lib/free-rooms-source";
+import { jsonUtf8 } from "@/lib/json-response";
 import { budapestNow } from "@/lib/push-plan";
 import { mondayOf } from "@/lib/timetable";
 
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
   //! ugyanaz a megfontolás, mint a `push-plan.ts`-ben.
   const dateKey = dayParam?.trim() || now.dayKey;
   if (!DATE_PATTERN.test(dateKey)) {
-    return Response.json(
+    return jsonUtf8(
       { error: "A `nap` paraméter alakja `ÉÉÉÉ-HH-NN`." },
       { status: 400 },
     );
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
   const timeParam = params.get("ido");
   const minute = timeParam ? parseMinute(timeParam) : now.minutes;
   if (minute === null) {
-    return Response.json(
+    return jsonUtf8(
       { error: "Az `ido` paraméter alakja `ÓÓ:PP`." },
       { status: 400 },
     );
@@ -64,7 +65,7 @@ export async function GET(request: Request) {
   //! lekérhető tartomány, ahelyett hogy csendben üres listát adna.
   if (!isServableDate(dateKey)) {
     const weeks = servableWeeks();
-    return Response.json(
+    return jsonUtf8(
       {
         error:
           "Csak a mai hét környékére tudunk teremfoglaltságot mondani. A `nap` ezen kívül esik.",
@@ -79,7 +80,7 @@ export async function GET(request: Request) {
   if (!occupancy) {
     //* Se friss, se lejárt példány — a Jedlikinfo nem érhető el, és nem a
     //* látogató hibájából. Az 503 megmondja, hogy érdemes később újrapróbálni.
-    return Response.json(
+    return jsonUtf8(
       {
         error:
           "A Jedlikinfo API-ból most nem sikerült lekérni a teremfoglaltságot.",
@@ -90,7 +91,7 @@ export async function GET(request: Request) {
 
   const answer = await withClubNames(freeRoomsAt(occupancy, dateKey, minute));
 
-  return Response.json({
+  return jsonUtf8({
     ...answer,
     //! MENNYIRE RÉGI EZ A VÁLASZ. A pillanatkép óránként frissül, és egy
     //! sikertelen seprés után LEJÁRT példányt is kiszolgálunk — ezt elhallgatni

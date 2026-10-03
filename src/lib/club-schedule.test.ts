@@ -30,6 +30,7 @@ function booking(patch: Partial<RoomBooking>): RoomBooking {
     startMin: 430,
     endMin: 475,
     subject: "09. évfolyam matematika szakkör",
+    subjectShort: "",
     classShort: "",
     teacher: "Banáné Nagy Mónika",
     teacherShort: "BNM",

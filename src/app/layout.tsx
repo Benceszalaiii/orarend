@@ -10,6 +10,7 @@ import { ThemeStyle } from "@/components/appearance/theme-style";
 import { CalendarSync } from "@/components/calendar-sync";
 import { PrefsSync } from "@/components/prefs-sync";
 import { AddToHomeScreen } from "@/components/pwa/add-to-home-screen";
+import { PushSync } from "@/components/pwa/push-sync";
 import { RegisterSW } from "@/components/register-sw";
 import { cn } from "@/lib/utils";
 
@@ -159,6 +160,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             //! kör első lépése egy `localStorage`-olvasás, és üres tárolónál
             //! azonnal visszatér. */}
         <CalendarSync />
+        {/*//! AZ ÉRTESÍTÉS IS A RÁCS DÖNTÉSEIVEL SZÓL. Ugyanaz az indok, mint a
+            //! naptárnál: a duális nap és a csoportbontás bárhol átállítható,
+            //! és a szervernek mindegyikről tudnia kell. Aki nem kapcsolta be
+            //! az értesítéseket, annál egyetlen kérést sem indít. */}
+        <PushSync />
         {/*//* A telepítés tippje csak iOS-en, csak egyszer — a döntést maga a
             //* komponens hozza meg (lásd `lib/a2hs.ts`). */}
         <AddToHomeScreen />

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Redis } from "@upstash/redis";
 import type { WeekSnapshot } from "./push-plan";
-import type { PushPrefs } from "./push-shared";
+import type { PushPersonalization, PushPrefs } from "./push-shared";
 import { clubsOf, contestsOf, subjectsOf } from "./push-shared";
 import {
   subjectStoreKey,
@@ -35,13 +35,18 @@ export function pushStoreReady(): boolean {
 //! `usage-store.ts`); ITT ez nem mondható ki, ezért ki sem mondjuk — az
 //! `/adatvedelem` nevesítve leírja, mi tárolódik és meddig.
 //*
-//* Amit NEM tárolunk mellé: se nevet, se IP-t, se eszközleírót, se azt, hogy
-//* melyik csoportbontás a diáké (az a döntés a böngészőben marad). A sor
-//* mindössze annyit tud: „erre a címre menjen jelzés EZEKRŐL az osztályokról".
+//* Amit NEM tárolunk mellé: se nevet, se IP-t, se eszközleírót. A sor annyit
+//* tud: „erre a címre menjen jelzés EZEKRŐL az osztályokról" — és ha a diák
+//* beállította, hogy a rácsán mi az övé (duális nap, csoportbontás), akkor azt
+//* is, különben az értesítés mást mondana, mint a rács (lásd `push-shared.ts`).
 export type PushSubscription = {
   endpoint: string;
   p256dh: string;
   auth: string;
+  //! A RÉGI SOROKBAN NINCS, és ez nem hiba: a hiánya a teljes osztály-
+  //! órarendet jelenti — pontosan azt, amit a döntés nélküli rács is mutat.
+  /** A feliratkozó duális beosztása és csoportbontás-döntései osztályonként. */
+  personalization?: PushPersonalization;
 } & PushPrefs;
 
 type StoredSubscription = PushSubscription & { createdAt: number };
@@ -244,16 +249,23 @@ function subjectNs(kind: TimetableSubjectKind, short: string): string {
   return subjectStoreKey(kind, short);
 }
 
-//* Az emlékeztető foglalása napra és percre. Fél nap élettartam: a nap végére
-//* magától eltűnik, de egy elhúzódó kimaradást is átvészel.
+//* Az emlékeztető foglalása napra, percre és SZÖVEGRE. Fél nap élettartam: a
+//* nap végére magától eltűnik, de egy elhúzódó kimaradást is átvészel.
+//*
+//! A SZÖVEG AZÉRT KELL, MERT UGYANARRA A PERCRE TÖBB HÍR IS JUTHAT. A duálison
+//! lévő diáknak 7:50-kor a duális blokk jár, az osztálytársának a matek; az
+//! egyik csoportnak a 214, a másiknak a 305. Egy percre szóló közös kulcs
+//! mellett az első kiküldés elnyelné a többit.
 export function leaseReminder(
   kind: TimetableSubjectKind,
   short: string,
   dayKey: string,
   startMin: number,
+  text: string,
 ): Promise<boolean> {
+  const variant = createHash("sha256").update(text).digest("hex").slice(0, 12);
   return lease(
-    `push:sent:${subjectNs(kind, short)}:${dayKey}:${startMin}`,
+    `push:sent:${subjectNs(kind, short)}:${dayKey}:${startMin}:${variant}`,
     60 * 60 * 12,
   );
 }
@@ -285,6 +297,11 @@ const WEEK_CACHE_SECONDS = 60 * 30;
 export type CachedWeekLessons = {
   fetchedAt: number;
   lessons: TimetableLesson[];
+  //! A DUÁLIS NAPHOZ A HÉT BETŰJE IS KELL, és az nem az órákon, hanem a napokon
+  //! áll. A mező előtti példányokban nincs meg — azokat a háttérfeladat
+  //! elavultnak tekinti, és újat kér.
+  /** A hét A/B jelölése (`weekLetterOf`), vagy `""`, ha a forrás nem adta. */
+  weekLetter?: string;
 };
 
 export async function readWeekCache(
@@ -303,11 +320,12 @@ export async function writeWeekCache(
   short: string,
   weekStart: string,
   lessons: TimetableLesson[],
+  weekLetter: string,
 ): Promise<void> {
   if (!redis) return;
   await redis.set(
     `push:week:${subjectNs(kind, short)}:${weekStart}`,
-    { fetchedAt: Date.now(), lessons } satisfies CachedWeekLessons,
+    { fetchedAt: Date.now(), lessons, weekLetter } satisfies CachedWeekLessons,
     { ex: WEEK_CACHE_SECONDS },
   );
 }

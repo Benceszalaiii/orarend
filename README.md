@@ -25,6 +25,15 @@ fekvő lapra is kinyomtatható.
   (`webcal://`), és **pontosan azokat az órákat tartalmazza, amiket a rácson is
   látsz** — az elrejtett csoportok órái nem kerülnek bele. Az adat óránként
   frissül; a linket egy kattintással vissza lehet vonni.
+- **Tantárgyak** (`/tantargyak`). Tárgyanként: ki tanítja, és melyik
+  osztálynak, linkkel a tanár és az osztály órarendjére. Az e heti és a jövő
+  heti órarendből áll össze (így az A és a B hét is benne van), a teremkereső
+  óránkénti sepréséből — a Jedlikinfo felé egyetlen újabb kérés nélkül. Ékezet
+  nélkül is keres, és a kiválasztott tárgy linkje megosztható
+  (`?tantargy=Fizika`). A lista a sok tanárt és osztályt érintő tárgyakkal
+  kezd. Egy tárgyon belül osztályonként (alapból) vagy tanáronként nézhető
+  (`&nezet=tanar`); ha az órarendben választottál osztályt, az kerül előre, és
+  meg is van jelölve — ezt a lap csak a böngészőből olvassa, nem küldi el.
 - **Nyomtatás.** `@page { size: A4 landscape }`, saját világos palettával, ami
   megtartja a tantárgyak színeit: a szín itt információ, nem dekoráció.
 - **Megnevezett hibák.** Az órarend adatai nem a mieink, ezért minden hibafajtának

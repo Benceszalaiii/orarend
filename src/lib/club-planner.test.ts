@@ -239,6 +239,7 @@ function booking(patch: Partial<RoomBooking>): RoomBooking {
     startMin: 900,
     endMin: 945,
     subject: "Matematika",
+    subjectShort: "",
     classShort: "10A",
     teacher: "",
     teacherShort: "XY",

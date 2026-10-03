@@ -455,31 +455,60 @@
   .acc-tint-strong,
   .acc-dot,
   .acc-text,
-  .acc-break {
+  .acc-break,
+  .acc-glow {
     --acc-h: var(--h-ciklus, 210);
     --acc-c: var(--c-ciklus, 1);
     --acc-l: var(--l-ciklus, 0);
   }
   [data-palette="prizma"]
-    :is(.acc-tint, .acc-tint-strong, .acc-dot, .acc-text, .acc-break) {
+    :is(
+      .acc-tint,
+      .acc-tint-strong,
+      .acc-dot,
+      .acc-text,
+      .acc-break,
+      .acc-glow
+    ) {
     --acc-h: var(--h-prizma, 210);
     --acc-c: var(--c-prizma, 1);
     --acc-l: var(--l-prizma, 0);
   }
   [data-palette="nyugodt"]
-    :is(.acc-tint, .acc-tint-strong, .acc-dot, .acc-text, .acc-break) {
+    :is(
+      .acc-tint,
+      .acc-tint-strong,
+      .acc-dot,
+      .acc-text,
+      .acc-break,
+      .acc-glow
+    ) {
     --acc-h: var(--h-nyugodt, 210);
     --acc-c: var(--c-nyugodt, 1);
     --acc-l: var(--l-nyugodt, 0);
   }
   [data-palette="alkony"]
-    :is(.acc-tint, .acc-tint-strong, .acc-dot, .acc-text, .acc-break) {
+    :is(
+      .acc-tint,
+      .acc-tint-strong,
+      .acc-dot,
+      .acc-text,
+      .acc-break,
+      .acc-glow
+    ) {
     --acc-h: var(--h-alkony, 210);
     --acc-c: var(--c-alkony, 1);
     --acc-l: var(--l-alkony, 0);
   }
   [data-palette="nyar"]
-    :is(.acc-tint, .acc-tint-strong, .acc-dot, .acc-text, .acc-break) {
+    :is(
+      .acc-tint,
+      .acc-tint-strong,
+      .acc-dot,
+      .acc-text,
+      .acc-break,
+      .acc-glow
+    ) {
     --acc-h: var(--h-nyar, 210);
     --acc-c: var(--c-nyar, 1);
     --acc-l: var(--l-nyar, 0);
@@ -585,6 +614,44 @@
     border-bottom-color: oklch(
       calc(0.78 + var(--acc-l, 0)) calc(0.09 * var(--acc-c, 1)) var(--acc-h) /
       0.6
+    );
+  }
+
+  /*//! A TANTÁRGY FÉNYE (`/tantargyak`). A kiválasztott tárgy címe mögött a
+      //! saját színe dereng — ugyanaz a szín, amivel a rácson áll, tehát a
+      //! diák a lapon is ráismer. Kör alakú átmenet, nem doboz: nincs éle,
+      //! ezért nem kártya, hanem fény. A `closest-side` miatt a négyzetes
+      //! elemen is kör marad. */
+  .acc-glow {
+    background-image: radial-gradient(
+      closest-side,
+      oklch(
+          calc(0.62 + var(--acc-l, 0)) calc(0.18 * var(--acc-c, 1)) var(--acc-h) /
+          0.26
+        )
+        0%,
+      oklch(
+          calc(0.62 + var(--acc-l, 0)) calc(0.18 * var(--acc-c, 1)) var(--acc-h) /
+          0.09
+        )
+        45%,
+      transparent 100%
+    );
+  }
+  .dark .acc-glow {
+    background-image: radial-gradient(
+      closest-side,
+      oklch(
+          calc(0.74 + var(--acc-l, 0)) calc(0.15 * var(--acc-c, 1)) var(--acc-h) /
+          0.24
+        )
+        0%,
+      oklch(
+          calc(0.74 + var(--acc-l, 0)) calc(0.15 * var(--acc-c, 1)) var(--acc-h) /
+          0.08
+        )
+        45%,
+      transparent 100%
     );
   }
 
@@ -732,6 +799,77 @@
   }
   ::view-transition-new(tt-focus) {
     animation-name: tt-morph-in;
+  }
+
+  /*//! ─── A TANTÁRGY ÁTÚSZÁSA (`/tantargyak`) ─────────────────────────────
+      //! A listasor pöttye és neve EGY mozdulattal válik a részlet címévé —
+      //! a szem követi, amire koppintott, és nem kell újra megkeresnie a
+      //! lapon. A nevek csak az átmenet idejére kerülnek fel
+      //! (`subject-morph.ts`); a kijelölés csíkja (`subj-select`) állandó,
+      //! mert egyszerre mindig csak egy sor viseli.
+      //*
+      //* Exponenciális lassulás: a mozdulat nagy része az első harmadban
+      //* lezajlik, a vége csak leül. */
+  ::view-transition-group(subj-dot),
+  ::view-transition-group(subj-name) {
+    animation-duration: 460ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 4;
+  }
+  ::view-transition-group(subj-select) {
+    animation-duration: 340ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 220ms;
+  }
+
+  /*//* A részlet tartalma a cím UTÁN érkezik, sorban, felülről — a fény a
+      //* pöttyből nyílik ki, a kártyák egymás után ülnek le. Ha az animáció
+      //* nem fut (csökkentett mozgás), minden azonnal a helyén van. */
+  @keyframes subj-rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+  .subj-rise {
+    animation: subj-rise 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(min(var(--i, 0), 12) * 34ms + 60ms);
+  }
+  /*//! A LISTA ALJA ELHALVÁNYUL, NEM ELVÁGÓDIK — széles kijelzőn, ahol a
+      //! lista saját hasábban görget. Az éles vágás egy félbetört sort
+      //! mutatna; a halványulás azt mondja: „lent van még". Az alsó belső
+      //! térköz miatt az utolsó sor kigörgethető a halványulás fölé. */
+  @media (min-width: 64rem) {
+    .tt-list-scroll {
+      mask-image: linear-gradient(
+        to bottom,
+        #000 calc(100% - 2rem),
+        transparent 100%
+      );
+      padding-bottom: 2rem;
+    }
+  }
+  /*//* Nézetváltás: rövid áttűnés, nem újabb lépcsőzetes hullám. */
+  @keyframes subj-swap {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+  .subj-swap {
+    animation: subj-swap 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes subj-bloom {
+    from {
+      opacity: 0;
+      transform: scale(0.2);
+    }
+  }
+  .subj-bloom {
+    animation: subj-bloom 1100ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   /*//! ---------------------------------------------------------------------
@@ -1617,6 +1755,11 @@
     ::view-transition-group(*),
     ::view-transition-old(*),
     ::view-transition-new(*) {
+      animation: none;
+    }
+    .subj-rise,
+    .subj-swap,
+    .subj-bloom {
       animation: none;
     }
   }
