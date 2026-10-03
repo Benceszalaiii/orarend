@@ -29,12 +29,7 @@ import {
   refreshPush,
   updatePush,
 } from "@/lib/push";
-import {
-  LEAD_MINUTES,
-  maxSubjects,
-  type PushPrefs,
-  subjectsOf,
-} from "@/lib/push-shared";
+import { maxSubjects, type PushPrefs, subjectsOf } from "@/lib/push-shared";
 import {
   SUBJECT_WORDS,
   type TimetableSubject,

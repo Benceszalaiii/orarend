@@ -412,8 +412,6 @@ export function resolveDay(
       const id = lessonIdentity(lesson);
       lessonsByIdentity.set(id, [...(lessonsByIdentity.get(id) ?? []), lesson]);
     }
-    const choices = maximalCombinations(options, lessonsByIdentity);
-
     let visible = identities;
     let decided = false;
 
