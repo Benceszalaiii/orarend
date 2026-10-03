@@ -34,9 +34,17 @@ export async function generateMetadata({
   params,
 }: PageProps<"/versenyek/[slug]">): Promise<Metadata> {
   const { slug } = await params;
+  //! A CÍM UGYANAZON A KAPUN MEGY ÁT, MINT A LAP — a bevezetés előtt és a
+  //! piszkozatnál a 404 böngészőfülén sem állhat ott a verseny neve (lásd
+  //! ugyanezt a szakkör lapján).
+  const generic = {
+    title: "Verseny - Órarend",
+    robots: { index: false },
+  } satisfies Metadata;
+  const actor = await resolveActor().catch(() => null);
+  if (!canBrowseClubs(actor, clubsLaunched())) return generic;
   const c = await getCompetitionDetail(slug).catch(() => null);
-  //! A piszkozat neve sem szivároghat ki a lap címében.
-  if (!c || c.status === "DRAFT") return { title: "Verseny - Órarend" };
+  if (!c || !canSeeCompetition(actor, c)) return generic;
   return {
     title: `${c.name} - Órarend`,
     description: `${CATEGORY_LABELS[c.category]} · ${formatWhen(c.startsAt)}`,

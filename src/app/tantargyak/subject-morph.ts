@@ -55,8 +55,26 @@ function label(scope: HTMLElement): void {
   }
 }
 
+//! A SOR SZÖVEGE A CSÍK FÖLÖTT. A kijelölés csíkja (`subj-select`) saját
+//! rétegként úszik, és a rétegek a gyökér pillanatképe FÖLÖTT ülnek — a
+//! csík (átlátszatlan tónus) így eltakarná annak a sornak a szövegét,
+//! ahonnan indul és ahová érkezik, az átmenet teljes idejére. Ezért a két
+//! érintett sor is saját réteget kap, a csík fölött (`globals.css`). A
+//! csík a sor leszármazottja, ezért nem kerül bele a sor képébe.
+const ROWS = { from: "subj-row-from", to: "subj-row-to" } as const;
+
+function labelRows(rows: Partial<Record<keyof typeof ROWS, string>>): void {
+  for (const key of Object.keys(ROWS) as (keyof typeof ROWS)[]) {
+    const name = rows[key];
+    const el = name ? rowOf(name) : null;
+    if (el) el.style.viewTransitionName = ROWS[key];
+  }
+}
+
 function clear(): void {
-  for (const el of document.querySelectorAll<HTMLElement>("[data-morph]")) {
+  for (const el of document.querySelectorAll<HTMLElement>(
+    "[data-morph], [data-subject-row]",
+  )) {
     el.style.viewTransitionName = "";
   }
 }
@@ -82,11 +100,19 @@ export function subjectMorph(options: {
   //* Nyitáskor a koppintott sor a forrás, csukáskor a részlet címe.
   const source = to ? rowOf(to) : detail();
   if (source) label(source);
+  //* Csak az a sor kap réteget, amelyik a régi képen is látszik — különben
+  //* a semmiből tűnne fel, a gyökér áttűnésétől elcsúszva.
+  const rows = {
+    from: from && rowOf(from) ? from : undefined,
+    to: to && rowOf(to) ? to : undefined,
+  };
+  labelRows(rows);
 
   const transition = doc.startViewTransition?.(() => {
     flushSync(commit);
     after?.();
     clear();
+    labelRows(rows);
     //* Cél csak akkor kell, ha volt forrás — különben a név a semmiből
     //* nőne ki, ami rosszabb, mint a sima áttűnés.
     const target = to ? detail() : from ? rowOf(from) : null;

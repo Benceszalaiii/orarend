@@ -184,8 +184,11 @@ export function maxSubjects(kind: "class" | "teacher"): number {
 //! szövegjavításhoz meg kellene VÁRNI, amíg a régi worker mindenkinél lecserélődik
 //! — az napokig tarthat.
 export type PushPayload = {
-  /** `lesson` = óra előtti emlékeztető, `change` = megváltozott az órarend. */
-  kind: "lesson" | "change";
+  /**
+   * `lesson` = óra előtti emlékeztető, `change` = megváltozott az órarend,
+   * `post` = új bejegyzés egy szakkör hírfolyamán. A worker nem olvassa.
+   */
+  kind: "lesson" | "change" | "post";
   title: string;
   body: string;
   /** Melyik lapot nyissa meg a koppintás. */

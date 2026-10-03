@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import {
   type Actor,
   canApproveClub,
+  canBrowseClubs,
   canCreateClub,
   canEditClub,
   canJoinClub,
   canProposeClub,
+  clubsLaunched,
 } from "@/lib/club-access";
 import {
   invalidateScheduleClubs,
@@ -108,6 +110,13 @@ export async function saveClub(input: {
 }): Promise<ClubActionResult> {
   const actor = await resolveActor();
   if (!actor) return fail("Ehhez be kell lépned.");
+  //* A bevezetés előtt csak tanár és admin jut el ide (lásd `loadRef`).
+  if (!canBrowseClubs(actor, clubsLaunched())) {
+    return fail("Szakkört tanár hozhat létre, vagy belépett diák javasolhat.");
+  }
+  if (input.slug !== undefined && typeof input.slug !== "string") {
+    return fail("Nincs ilyen szakkör.");
+  }
 
   const parsed = clubInputSchema.safeParse(input.club);
   if (!parsed.success) {
@@ -155,7 +164,7 @@ export async function saveClub(input: {
     //! vissza az ötlethez — azt a tanár a saját ötletlapi gombjával teheti meg.
     //! A `clubId: null` feltétel miatt egy már megvalósult ötletet nem lehet
     //! egy második szakkörhöz is hozzárendelni.
-    if (create && input.ideaId) {
+    if (create && typeof input.ideaId === "string") {
       await prisma.clubIdea.updateMany({
         where: { id: input.ideaId, clubId: null, hidden: false },
         data: { clubId: created.id },
@@ -206,7 +215,16 @@ export async function saveClub(input: {
   return { ok: true, slug: input.slug };
 }
 
-async function loadRef(slug: string) {
+//! A BEVEZETÉS ELŐTT AZ ACTION SEM LÉTEZIK. A lap 404-et ad a diáknak, de az
+//! action nyilvános végpont: az azonosítója a kliens csomagjában ott van, és a
+//! lap nélkül is hívható. Ugyanaz a kapu, mint a lapé (`canBrowseClubs`) — ha
+//! nem engedi, a szakkör „nincs", nem „tilos".
+//*
+//! A SLUG A KÉRÉSBŐL JÖN, TEHÁT BÁRMI LEHET. Egy nem-szöveg a Prismán dobna,
+//! és a felület egy névtelen hibát kapna egy érthető „nincs ilyen" helyett.
+async function loadRef(slug: unknown, actor: Actor | null) {
+  if (typeof slug !== "string" || slug.length > 200) return null;
+  if (!canBrowseClubs(actor, clubsLaunched())) return null;
   const row = await prisma.club.findUnique({
     where: { slug },
     select: {
@@ -228,7 +246,7 @@ async function loadRef(slug: string) {
 
 export async function approveClub(slug: string): Promise<ClubActionResult> {
   const actor = await resolveActor();
-  const ref = await loadRef(slug);
+  const ref = await loadRef(slug, actor);
   if (!ref) return fail("Nincs ilyen szakkör.");
   if (!canApproveClub(actor, ref) || !actor) {
     return fail("Ezt a javaslatot csak a felkért tanár hagyhatja jóvá.");
@@ -251,7 +269,7 @@ export async function approveClub(slug: string): Promise<ClubActionResult> {
 //! sajátját ugyanígy.
 export async function rejectProposal(slug: string): Promise<ClubActionResult> {
   const actor = await resolveActor();
-  const ref = await loadRef(slug);
+  const ref = await loadRef(slug, actor);
   if (!ref || ref.status !== "PROPOSED") return fail("Nincs ilyen javaslat.");
   const own = actor !== null && ref.proposedById === actor.userId;
   if (!own && !canApproveClub(actor, ref)) {
@@ -264,7 +282,7 @@ export async function rejectProposal(slug: string): Promise<ClubActionResult> {
 
 export async function archiveClub(slug: string): Promise<ClubActionResult> {
   const actor = await resolveActor();
-  const ref = await loadRef(slug);
+  const ref = await loadRef(slug, actor);
   if (!ref || ref.status !== "ACTIVE") return fail("Nincs ilyen élő szakkör.");
   if (!canEditClub(actor, ref)) return fail("Ezt a szakkört nem zárhatod le.");
   await prisma.club.update({
@@ -286,7 +304,7 @@ export async function archiveClub(slug: string): Promise<ClubActionResult> {
 export async function joinClub(slug: string): Promise<ClubActionResult> {
   const actor = await resolveActor();
   if (!actor) return fail("A jelentkezéshez be kell lépned.");
-  const ref = await loadRef(slug);
+  const ref = await loadRef(slug, actor);
   if (!ref || !canJoinClub(actor, ref)) {
     return fail("Ehhez a szakkörhöz most nem lehet jelentkezni.");
   }
@@ -303,7 +321,7 @@ export async function joinClub(slug: string): Promise<ClubActionResult> {
 export async function leaveClub(slug: string): Promise<ClubActionResult> {
   const actor = await resolveActor();
   if (!actor) return fail("Ehhez be kell lépned.");
-  const ref = await loadRef(slug);
+  const ref = await loadRef(slug, actor);
   if (!ref) return fail("Nincs ilyen szakkör.");
   //* A kilépés mindig mehet — egy megszűnt szakkörből is ki lehet lépni.
   await prisma.clubMember.deleteMany({

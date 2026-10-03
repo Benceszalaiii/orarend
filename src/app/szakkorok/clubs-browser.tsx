@@ -2,7 +2,9 @@
 
 import {
   Briefcase,
+  CalendarCheck,
   ChevronDown,
+  ChevronRight,
   Clock,
   DoorOpen,
   Search,
@@ -12,6 +14,14 @@ import {
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyPanel, listGroup } from "@/components/ma/week-panels";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { accentStyle } from "@/lib/accent";
 import {
   type ClubFitVerdict,
@@ -29,6 +39,7 @@ import {
   formatMinute,
   openFor,
   targetsClass,
+  tracksOfClass,
   WEEKDAY_NAMES,
 } from "@/lib/clubs";
 import {
@@ -44,38 +55,36 @@ import {
   SOURCE_LABEL,
   SourceMark,
   useStudentClass,
-  VERDICT_FILL,
   VERDICT_ORDER,
-  VERDICT_TITLE,
 } from "./_components/fit-marks";
 import { type MapHover, WeekMap } from "./_components/week-map";
 
 //* ---------------------------------------------------------------------------
 //* A SZAKKÖRLISTA — A HETEDHEZ MÉRVE
 //* ---------------------------------------------------------------------------
-//! AZ ELSŐ KÉRDÉS NEM AZ, HOGY „MI VAN", HANEM HOGY „MI FÉR BELE". A diák az
-//! év elején leül, és azt keresi, amire tényleg el tud menni. A lap ezért az
-//! osztálya hetéhez méri az összes szakkört (`club-fit.ts`, a készüléken), és
-//! a „belefér" csoporttal KEZD. A többi csoport nem tűnik el: összecsukva,
-//! darabszámmal ott áll alatta.
+//! A LISTA A FŐSZEREPLŐ, NEM A PANEL. A diák a szakköröket keresi; hogy mi
+//! fér bele a hetébe, az egy kérdés, amit feltesz — nem egy fal, amin át kell
+//! jutnia. A személyre szabás ezért EGY gomb a kereső mellett („10.A · 12 fér
+//! bele a hetedbe"), és a hét-térkép ablakban nyílik.
 //!
-//! A SÁV A SZŰRŐ IS. A négy szelet (belefér · részben · ütközik · nem tudjuk)
-//! arányos, és mindegyik gomb: rákoppintva csak az a csoport marad. Nincs
-//! külön szűrőpanel — ugyanaz az adat, amire rá lehet koppintani.
+//! AZ ABLAK AZT MUTATJA, AMI LEHETSÉGES. A térképen csak az áll, amire
+//! elmehetsz: ami az osztályodnak (évfolyamodnak) szól vagy nyitott, és nem
+//! ütközik az óráiddal — a térkép nem azzal kezd, ami nem megy.
 //!
-//! A SÁV CSAK AZT SZÁMOLJA, AMIRE ELMEHETSZ: ami az osztályodnak (vagy az
-//! évfolyamodnak) szól, és ami mindenkinek nyitott. A más évfolyamoknak
-//! hirdetett szakkörök a lista végén állnak, saját ítélettel — nem rejtjük el
-//! őket, de a „12 fér bele" nem ígérhet olyat, amire nem jelentkezhetsz.
+//! A LISTÁT AZ RENDEZI, KINEK SZÓL — NEM AZ, HOGY BELEFÉR-E. Előbb, ami az
+//! osztályodnak vagy évfolyamodnak szól, aztán ami a szakmádnak, aztán ami
+//! mindenkinek nyitott. A más évfolyamoké és szakmáké a végén, összecsukva:
+//! egy 13.-osnak a 9.-eseknek hirdetett szakkör zaj, de nem titok. Az, hogy
+//! belefér-e a hetedbe, másodlagos adat: csoporton belül előre hozza a
+//! beleférőt, és a sor végén áll — de csoportot nem alkot.
 //!
 //! A SZŰRÉS ITT TÖRTÉNIK, NEM A SZERVEREN. Ötven szakkör kényelmesen elfér
 //! egy válaszban, és a gépelésre azonnal reagáló lista többet ér egy
 //! kérésenkénti körnél.
 //!
-//! A HÉT-TÉRKÉP A SÁV ALATT ÁLL (`week-map.tsx`), és ugyanazt a listát
-//! szűri: egy nap, egy csomó vagy egy kihúzott időablak. A lista és a térkép
-//! egymásra mutat — a sor fölött a térképen kigyúlnak a szakkör jelei, a jel
-//! fölött a sor.
+//! A HÉT-TÉRKÉP UGYANAZT A LISTÁT SZŰRI (`week-map.tsx`): egy nap, egy csomó
+//! vagy egy kihúzott időablak. A kijelölt idő az ablak bezárása után is ott
+//! áll a kereső mellett, és onnan is elenged.
 
 type KindFilter = "all" | ClubKind;
 type ClubFitInfo = { verdict: ClubFitVerdict; slots: SlotFit[] };
@@ -116,7 +125,6 @@ export function ClubsBrowser({
 }) {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<KindFilter>("all");
-  const [verdict, setVerdict] = useState<ClubFitVerdict | null>(null);
   const [timeWindow, setTimeWindow] = useState<MapWindow | null>(null);
   const [hover, setHover] = useState<MapHover>(null);
   const [className, setClassName] = useStudentClass(accountClass);
@@ -178,8 +186,6 @@ export function ClubsBrowser({
     ]),
   ) as Record<ClubFitVerdict, number>;
 
-  //! A SZŰRŐ NEM RAGADHAT BE ÜRES CSOPORTRA: ha a keresés kiürítette, elengedjük.
-  const activeVerdict = verdict && counts[verdict] > 0 ? verdict : null;
   const searching =
     query.trim() !== "" || kind !== "all" || timeWindow !== null;
   const groups = buildGroups({
@@ -189,29 +195,22 @@ export function ClubsBrowser({
     studentClass,
     teacher,
     approvals,
-    verdict: activeVerdict,
   });
 
   //! A TÉRKÉP ALAPJA NEM SZŰKÜL GÉPELÉS KÖZBEN. A jelek helye attól függ,
   //! ki fér el egymás mellett; ha minden leütésre átrendeződnének, a térkép
   //! remegne. A keresésen kívül esők a helyükön maradnak, csak elhalványulnak.
+  //! Ami ütközik, az viszont rá sem kerül: a térkép a lehetőségeket mutatja.
   const mapClubs = useMemo(
-    () => (studentClass ? clubs.filter(reachable) : clubs),
-    [clubs, studentClass, reachable],
-  );
-  const lit = useMemo(
     () =>
-      new Set(
-        searched
-          .filter(
-            (c) =>
-              activeVerdict === null ||
-              fits?.get(c.slug)?.verdict === activeVerdict,
+      studentClass
+        ? clubs.filter(
+            (c) => reachable(c) && fits?.get(c.slug)?.verdict !== "clash",
           )
-          .map((c) => c.slug),
-      ),
-    [searched, activeVerdict, fits],
+        : clubs,
+    [clubs, studentClass, reachable, fits],
   );
+  const lit = useMemo(() => new Set(searched.map((c) => c.slug)), [searched]);
   const onRowHover = useCallback(
     (slug: string | null) => setHover(slug ? { slug, from: "list" } : null),
     [],
@@ -219,85 +218,80 @@ export function ClubsBrowser({
 
   return (
     <div className="mt-6 flex flex-col gap-6">
-      {!teacher && (
-        <FitPanel
-          className={className}
-          fitWeeks={fitWeeks}
-          counts={counts}
-          total={eligible.length}
-          verdict={activeVerdict}
-          timeWindow={timeWindow}
-          onVerdict={(v) => setVerdict((cur) => (cur === v ? null : v))}
-          onClass={(next) => {
-            saveCachedClass(next);
-            setClassName(next);
-            setVerdict(null);
-          }}
-          map={
-            <WeekMap
-              clubs={mapClubs}
-              fits={fits}
-              fitWeeks={fitWeeks}
-              lit={lit}
-              hover={hover}
-              onHover={setHover}
-              timeWindow={timeWindow}
-              onTimeWindow={setTimeWindow}
-            />
-          }
-        />
-      )}
-
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <label className="relative block sm:w-72">
-            <span className="sr-only">Keresés</span>
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Név, tanár vagy terem"
-              className="h-10 w-full rounded-full border border-input bg-background pr-3 pl-9 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            />
-          </label>
-          {timeWindow && (
-            //* A térképen kijelölt idő itt is ott áll: aki a lista közepén
-            //* jár, annak is látszik, miért ennyi a sor — és innen is elenged.
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        {!teacher && (
+          <FitWeek
+            className={className}
+            fitWeeks={fitWeeks}
+            counts={counts}
+            total={eligible.length}
+            timeWindow={timeWindow}
+            onTimeWindow={setTimeWindow}
+            onClass={(next) => {
+              saveCachedClass(next);
+              setClassName(next);
+            }}
+            map={
+              <WeekMap
+                clubs={mapClubs}
+                fits={fits}
+                fitWeeks={fitWeeks}
+                lit={lit}
+                hover={hover}
+                onHover={setHover}
+                timeWindow={timeWindow}
+                onTimeWindow={setTimeWindow}
+              />
+            }
+          />
+        )}
+        <label className="relative block sm:w-64">
+          <span className="sr-only">Keresés</span>
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Név, tanár vagy terem"
+            className="h-10 w-full rounded-full border border-input bg-background pr-3 pl-9 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          />
+        </label>
+        {timeWindow && (
+          //* A térképen kijelölt idő itt is ott áll: aki a lista közepén
+          //* jár, annak is látszik, miért ennyi a sor — és innen is elenged.
+          <button
+            type="button"
+            onClick={() => setTimeWindow(null)}
+            className="inline-flex h-8 w-fit shrink-0 items-center gap-1.5 rounded-full border border-primary/60 bg-primary/10 pr-2 pl-3 text-xs font-medium whitespace-nowrap text-foreground tabular-nums transition-colors touch-target hover:bg-primary/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
+          >
+            <Clock className="size-3.5 text-primary" aria-hidden />
+            {windowLabel(timeWindow)}
+            <X className="size-3.5 text-muted-strong" aria-hidden />
+            <span className="sr-only">: az időablak törlése</span>
+          </button>
+        )}
+        <fieldset className="-mx-4 flex min-w-0 gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
+          <legend className="sr-only">Fajta</legend>
+          {(["all", ...kinds] as const).map((k) => (
             <button
+              key={k}
               type="button"
-              onClick={() => setTimeWindow(null)}
-              className="inline-flex h-8 w-fit shrink-0 items-center gap-1.5 rounded-full border border-primary/60 bg-primary/10 pr-2 pl-3 text-xs font-medium whitespace-nowrap text-foreground tabular-nums transition-colors touch-target hover:bg-primary/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
+              aria-pressed={kind === k}
+              onClick={() => setKind(k)}
+              className={cn(
+                "h-8 shrink-0 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-colors touch-target focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                kind === k
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border text-muted-strong hover:text-foreground",
+              )}
             >
-              <Clock className="size-3.5 text-primary" aria-hidden />
-              {windowLabel(timeWindow)}
-              <X className="size-3.5 text-muted-strong" aria-hidden />
-              <span className="sr-only">: az időablak törlése</span>
+              {k === "all" ? "Mind" : CLUB_KIND_LABELS[k]}
             </button>
-          )}
-          <fieldset className="-mx-4 flex min-w-0 gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
-            <legend className="sr-only">Fajta</legend>
-            {(["all", ...kinds] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={kind === k}
-                onClick={() => setKind(k)}
-                className={cn(
-                  "h-8 shrink-0 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-colors touch-target focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                  kind === k
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-border text-muted-strong hover:text-foreground",
-                )}
-              >
-                {k === "all" ? "Mind" : CLUB_KIND_LABELS[k]}
-              </button>
-            ))}
-          </fieldset>
-        </div>
+          ))}
+        </fieldset>
       </div>
 
       {matches.length === 0 ? (
@@ -334,8 +328,8 @@ export function ClubsBrowser({
           {groups.map((group, index) => (
             <ClubGroup
               //* A kulcs a nyitott-csukott alapállapotot is visszaállítja, ha a
-              //* szűrő vagy a keresés megváltozik.
-              key={`${group.id}-${activeVerdict ?? ""}-${searching}`}
+              //* keresés megváltozik.
+              key={`${group.id}-${searching}`}
               group={group}
               fits={fits}
               startOpen={!group.collapsed || searching}
@@ -358,7 +352,6 @@ function buildGroups({
   studentClass,
   teacher,
   approvals,
-  verdict,
 }: {
   eligible: ClubCardData[];
   others: ClubCardData[];
@@ -366,7 +359,6 @@ function buildGroups({
   studentClass: string | null;
   teacher: string | null;
   approvals: string[];
-  verdict: ClubFitVerdict | null;
 }): Group[] {
   //! A TANÁR: előbb a saját szakkörei és a rá váró javaslatok, aztán minden.
   if (teacher) {
@@ -390,66 +382,75 @@ function buildGroups({
     ].filter((g) => g.clubs.length > 0);
   }
 
-  if (!fits) {
+  if (!studentClass) {
     return [
-      {
-        id: "all",
-        title: studentClass
-          ? `Neked szól vagy bárkinek nyitott · ${studentClass}`
-          : "Minden szakkör",
-        clubs: eligible,
-        collapsed: false,
-      },
-      {
-        id: "others",
-        title: "Más évfolyamoknak, szakmáknak",
-        clubs: others,
-        collapsed: true,
-      },
+      { id: "all", title: "Minden szakkör", clubs: eligible, collapsed: false },
     ].filter((g) => g.clubs.length > 0);
   }
 
-  //* Csoporton belül előre, ami kifejezetten az osztályodnak szól.
-  const aimed = (list: ClubCardData[]) =>
-    studentClass
-      ? [
-          ...list.filter((c) => targetsClass(c, studentClass)),
-          ...list.filter((c) => !targetsClass(c, studentClass)),
-        ]
+  //! CSOPORTON BELÜL ELŐRE, AMI BELEFÉR — ez a másodlagos rend. Az ítélet
+  //! sorrendje (`VERDICT_ORDER`), azon belül a hét sorrendje marad (a lista
+  //! már így érkezik, és a `sort` stabil). Amíg a heted nem jött meg, csak a
+  //! hét sorrendje számít.
+  const byFit = (list: ClubCardData[]) =>
+    fits
+      ? [...list].sort(
+          (a, b) =>
+            fitRank(fits.get(a.slug)?.verdict) -
+            fitRank(fits.get(b.slug)?.verdict),
+        )
       : list;
-  const verdicts = verdict ? [verdict] : VERDICT_ORDER;
-  const firstOpen = VERDICT_ORDER.find((v) =>
-    eligible.some((c) => fits.get(c.slug)?.verdict === v),
+  //* Nyelvi előkészítőnél nem tudjuk a szakmát — ott a szakmai irányú nyitott
+  //* szakkör is a „mindenkinek" csoportba kerül, nem a „szakmádnak".
+  const ownTracks = tracksOfClass(studentClass);
+  const aimed = eligible.filter((c) => targetsClass(c, studentClass));
+  const trade = eligible.filter(
+    (c) => !aimed.includes(c) && ownTracks !== null && c.tracks.length > 0,
   );
+  const open = eligible.filter((c) => !aimed.includes(c) && !trade.includes(c));
   return [
-    ...verdicts.map((v) => ({
-      id: v,
-      title: VERDICT_TITLE[v],
-      clubs: aimed(eligible.filter((c) => fits.get(c.slug)?.verdict === v)),
-      collapsed: verdict === null && v !== firstOpen,
-    })),
+    {
+      id: "aimed",
+      title: `Neked szól · ${studentClass}`,
+      clubs: byFit(aimed),
+      collapsed: false,
+    },
+    {
+      id: "trade",
+      title: "A szakmádnak",
+      clubs: byFit(trade),
+      collapsed: false,
+    },
+    {
+      id: "open",
+      title: "Mindenkinek nyitott",
+      clubs: byFit(open),
+      collapsed: false,
+    },
+    //! A MÁS ÉVFOLYAMOKÉ ÉS SZAKMÁKÉ ÖSSZECSUKVA — megvan, de nem tolakszik.
     {
       id: "others",
-      title: "Más évfolyamoknak",
-      clubs: others.filter(
-        (c) => verdict === null || fits.get(c.slug)?.verdict === verdict,
-      ),
+      title: "Más évfolyamoknak, szakmáknak",
+      clubs: byFit(others),
       collapsed: true,
     },
   ].filter((g) => g.clubs.length > 0);
 }
 
+function fitRank(verdict: ClubFitVerdict | undefined): number {
+  return verdict ? VERDICT_ORDER.indexOf(verdict) : VERDICT_ORDER.length;
+}
+
 //* ---------------------------------------------------------------------------
-//* A SÁV
+//* A HETED — EGY GOMB ÉS EGY ABLAK
 //* ---------------------------------------------------------------------------
-function FitPanel({
+function FitWeek({
   className,
   fitWeeks,
   counts,
   total,
-  verdict,
   timeWindow,
-  onVerdict,
+  onTimeWindow,
   onClass,
   map,
 }: {
@@ -457,11 +458,10 @@ function FitPanel({
   fitWeeks: FitWeeks;
   counts: Record<ClubFitVerdict, number>;
   total: number;
-  verdict: ClubFitVerdict | null;
   timeWindow: MapWindow | null;
-  onVerdict: (v: ClubFitVerdict) => void;
+  onTimeWindow: (next: MapWindow | null) => void;
   onClass: (next: string) => void;
-  //* A hét-térkép — a panel alján áll minden állapotban, osztály nélkül is:
+  //* A hét-térkép — az ablak alján áll minden állapotban, osztály nélkül is:
   //* akkor csak a szakkörök helye látszik, a heted nélkül.
   map: React.ReactNode;
 }) {
@@ -476,27 +476,124 @@ function FitPanel({
     };
   }, []);
 
-  const shell =
-    "rounded-2xl border border-hero-foreground/15 bg-hero-foreground/[0.06] p-4 sm:p-5";
-
-  //* Hidratálás előtt nem tudjuk, van-e mentett osztály — a hely már most
-  //* akkora, amekkora lesz, hogy a lista ne ugorjon.
+  //* Hidratálás előtt nem tudjuk, van-e mentett osztály — a gomb helye már
+  //* most akkora, amekkora lesz, hogy a kereső ne ugorjon.
   if (className === undefined) {
     return (
-      <div className={cn(shell, "h-[13.5rem] sm:h-[11.5rem]")} aria-hidden />
+      <div
+        className="h-10 w-full shrink-0 animate-pulse rounded-full bg-muted motion-reduce:animate-none sm:w-60"
+        aria-hidden
+      />
     );
   }
 
+  const ready = fitWeeks.state === "ready";
+  const label =
+    className === null
+      ? "Mi fér bele a hetembe?"
+      : fitWeeks.state === "error"
+        ? "a heted most nem érhető el"
+        : !ready
+          ? "a heted betöltése…"
+          : counts.fits === 0
+            ? "nézd meg, mi fér bele"
+            : `${counts.fits} fér bele a hetedbe`;
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-10 w-full min-w-0 shrink-0 items-center gap-2 rounded-full border border-primary/40 bg-primary/[0.07] pr-2.5 pl-3 text-sm text-foreground transition-colors touch-target hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none sm:w-auto"
+        >
+          <CalendarCheck className="size-4 shrink-0 text-primary" aria-hidden />
+          {className !== null && (
+            <span className="font-semibold">{className}</span>
+          )}
+          <span
+            className={cn(
+              "min-w-0 truncate",
+              className !== null && "text-muted-strong",
+              ready && counts.fits > 0 && "tabular-nums",
+            )}
+          >
+            {className !== null && <span aria-hidden>· </span>}
+            {label}
+          </span>
+          <ChevronRight
+            className="ml-auto size-4 shrink-0 text-muted-strong"
+            aria-hidden
+          />
+        </button>
+      </DialogTrigger>
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] gap-0 overflow-y-auto p-4 sm:max-w-3xl sm:p-5"
+        //! AZ ESC ELŐSZÖR A KIJELÖLÉST ENGEDI EL, mint a térképen; csak a
+        //! második zárja az ablakot.
+        onEscapeKeyDown={(e) => {
+          if (!timeWindow) return;
+          e.preventDefault();
+          onTimeWindow(null);
+        }}
+      >
+        <FitSummary
+          className={className}
+          classes={classes}
+          fitWeeks={fitWeeks}
+          counts={counts}
+          total={total}
+          timeWindow={timeWindow}
+          onClass={onClass}
+        />
+        {map}
+        <div className="mt-4 flex justify-end">
+          <DialogClose asChild>
+            <button
+              type="button"
+              className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {timeWindow ? "Mutasd a listában" : "Kész"}
+            </button>
+          </DialogClose>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+//! A FEJLÉC A LEHETŐSÉGET MONDJA KI. „12 fér bele, 3 részben" — nem azt,
+//! hány ütközik. Az ütközők a listában megvannak, összecsukva.
+function FitSummary({
+  className,
+  classes,
+  fitWeeks,
+  counts,
+  total,
+  timeWindow,
+  onClass,
+}: {
+  className: string | null;
+  classes: TimetableClass[];
+  fitWeeks: FitWeeks;
+  counts: Record<ClubFitVerdict, number>;
+  total: number;
+  timeWindow: MapWindow | null;
+  onClass: (next: string) => void;
+}) {
+  //* A bezáró gomb a jobb felső sarokban áll — a választó nem csúszhat alá.
+  const head =
+    "flex flex-wrap items-start justify-between gap-x-4 gap-y-2 pr-8";
+
   if (className === null) {
     return (
-      <section aria-labelledby="fit-heading" className={shell}>
-        <h2 id="fit-heading" className="text-lg font-semibold text-foreground">
+      <div>
+        <DialogTitle className="text-lg leading-snug font-semibold text-foreground">
           Melyik osztályba jársz?
-        </h2>
-        <p className="mt-1 max-w-xl text-pretty text-sm text-muted-strong">
+        </DialogTitle>
+        <DialogDescription className="mt-1 max-w-xl text-pretty text-muted-strong">
           Megmutatjuk, melyik szakkör fér bele a hetedbe — a saját órarended
           alapján, ezen a készüléken. Belépni nem kell.
-        </p>
+        </DialogDescription>
         <div className="mt-4">
           {classes.length > 0 ? (
             <ClassSelect classes={classes} value="" onChange={onClass} />
@@ -513,8 +610,7 @@ function FitPanel({
             </p>
           )}
         </div>
-        {map}
-      </section>
+      </div>
     );
   }
 
@@ -527,132 +623,60 @@ function FitPanel({
 
   if (fitWeeks.state === "error") {
     return (
-      <section aria-labelledby="fit-heading" className={shell}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2
-            id="fit-heading"
-            className="text-lg font-semibold text-foreground"
-          >
+      <div>
+        <div className={head}>
+          <DialogTitle className="text-lg leading-snug font-semibold text-foreground">
             Most nem tudjuk, mi fér bele
-          </h2>
+          </DialogTitle>
           {switcher}
         </div>
-        <p className="mt-1 max-w-xl text-pretty text-sm text-muted-strong">
+        <DialogDescription className="mt-1 max-w-xl text-pretty text-muted-strong">
           A Jedlikinfo nem adta ki a {className} órarendjét, és ezen a
           készüléken sincs elmentett heted. Ez nem a te hibád; nézz vissza
           később. A lista attól még pontos: az időpontok az iskola órarendjéből
           és a vezető tanároktól jönnek.
-        </p>
-        {map}
-      </section>
+        </DialogDescription>
+      </div>
     );
   }
 
   const ready = fitWeeks.state === "ready";
-  const fitsCount = counts.fits;
   const ends = ready ? dayEnds(fitWeeks.weeks, fitWeeks.dual) : null;
+  const { fits, partly } = counts;
+  const possible = fits + partly + counts.unknown;
 
   return (
-    <section aria-labelledby="fit-heading" className={shell}>
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+    <div>
+      <div className={head}>
         <div className="min-w-0">
-          <h2
-            id="fit-heading"
-            className="text-lg font-semibold text-balance text-foreground"
+          <DialogTitle
+            className="text-lg leading-snug font-semibold text-balance text-foreground"
             aria-live="polite"
           >
             {!ready
               ? `A ${className} órarendjét nézzük…`
               : timeWindow && total === 0
                 ? "A kijelölt időben nincs neked szóló szakkör"
-                : fitsCount === 0
-                  ? "Egyik szakkör sem fér bele teljesen a hetedbe"
-                  : `${fitsCount} szakkör fér bele a hetedbe`}
-          </h2>
-          <p className="mt-0.5 text-sm text-muted-strong">
+                : fits > 0
+                  ? `${fits} szakkör fér bele a hetedbe`
+                  : possible > 0
+                    ? "Ezekre a szakkörökre eljuthatsz"
+                    : "Most egyik szakkör sem fér bele a hetedbe"}
+          </DialogTitle>
+          <DialogDescription className="mt-0.5 text-pretty text-muted-strong">
             {!ready
               ? "A saját csoportjaid szerint, ezen a készüléken."
-              : timeWindow
-                ? `${total} neked szóló vagy nyitott szakkörből, a kijelölt időben (${windowLabel(timeWindow)}).`
-                : `${total} neked szóló vagy nyitott szakkörből, a csoportjaid szerint.`}
-          </p>
+              : `${fits > 0 && partly > 0 ? `További ${partly} részben. ` : ""}${
+                  timeWindow
+                    ? `A kijelölt időben (${windowLabel(timeWindow)}), a neked szóló és a nyitott szakkörökből.`
+                    : "A neked szóló és a nyitott szakkörökből, a csoportjaid szerint."
+                }`}
+          </DialogDescription>
         </div>
         {switcher}
       </div>
-
       {ends && <DualNote ends={ends} />}
-
-      {/*//! A SÁV SZIGORÚAN ARÁNYOS: minden szelet pontosan a darabszámával nő,
-          //! az üres csoportnak nincs szelete. A szeletekre is rá lehet
-          //! koppintani (egérrel ez a természetes mozdulat), de a szűrő
-          //! hozzáférhető alakja a felirat-sor alatta — a szelet ugyanazt a
-          //! gombot nyomja meg, ezért a billentyűzet elől el van rejtve. */}
-      <div
-        className={cn(
-          "mt-4 flex h-3 gap-0.5 overflow-hidden rounded-full",
-          !ready && "animate-pulse bg-foreground/10 motion-reduce:animate-none",
-        )}
-      >
-        {ready &&
-          VERDICT_ORDER.map((v) =>
-            counts[v] === 0 ? null : (
-              <button
-                key={v}
-                type="button"
-                tabIndex={-1}
-                aria-hidden
-                onClick={() => onVerdict(v)}
-                style={{ flexGrow: counts[v], flexBasis: 0 }}
-                className={cn(
-                  "h-full min-w-1.5 cursor-pointer rounded-[2px] transition-opacity duration-200 hover:opacity-80 motion-reduce:transition-none",
-                  VERDICT_FILL[v],
-                  verdict && verdict !== v && "opacity-30",
-                )}
-              />
-            ),
-          )}
-      </div>
-
-      <fieldset
-        className="mt-3 flex flex-wrap gap-x-1 gap-y-1"
-        aria-busy={!ready}
-      >
-        <legend className="sr-only">Szűrés aszerint, belefér-e</legend>
-        {VERDICT_ORDER.map((v) => {
-          const n = counts[v];
-          return (
-            <button
-              key={v}
-              type="button"
-              disabled={!ready || n === 0}
-              aria-pressed={verdict === v}
-              onClick={() => onVerdict(v)}
-              className={cn(
-                "inline-flex h-8 items-center gap-2 rounded-full border px-3 text-sm whitespace-nowrap sm:h-9 transition-colors touch-target focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
-                verdict === v
-                  ? "border-foreground/50 bg-foreground/10 text-foreground"
-                  : "border-transparent text-muted-strong hover:bg-foreground/5 hover:text-foreground",
-                "disabled:pointer-events-none disabled:opacity-45",
-              )}
-            >
-              <span
-                className={cn(
-                  "size-2.5 shrink-0 rounded-[3px]",
-                  VERDICT_FILL[v],
-                )}
-                aria-hidden
-              />
-              <span className="font-semibold tabular-nums text-foreground">
-                {ready ? n : "–"}
-              </span>
-              {VERDICT_TITLE[v]}
-            </button>
-          );
-        })}
-      </fieldset>
-
-      {map}
-    </section>
+    </div>
   );
 }
 
@@ -703,7 +727,7 @@ function ClassSelect({
         aria-label="Osztály"
         value={value}
         onChange={(e) => e.target.value && onChange(e.target.value)}
-        className="h-9 min-w-24 touch-target appearance-none rounded-full border border-hero-foreground/20 bg-background py-1 pr-8 pl-3 text-sm font-medium text-foreground outline-none transition-colors hover:bg-hero-foreground/10 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="h-9 min-w-24 touch-target appearance-none rounded-full border border-input bg-background py-1 pr-8 pl-3 text-sm font-medium text-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         {value === "" && (
           <option value="" disabled>
@@ -792,9 +816,6 @@ function ClubGroup({
               <ClubRow
                 club={club}
                 fit={fits?.get(club.slug) ?? null}
-                //! A „BELEFÉR" CSOPORTBAN NEM ISMÉTELJÜK a sor végén: ott
-                //! minden időpont belefér, a fejléc már kimondta.
-                slotVerdicts={group.id !== "fits"}
                 highlighted={highlight === club.slug}
                 onHover={onRowHover}
               />
@@ -814,13 +835,11 @@ function ClubGroup({
 const ClubRow = memo(function ClubRow({
   club,
   fit,
-  slotVerdicts,
   highlighted,
   onHover,
 }: {
   club: ClubCardData;
   fit: ClubFitInfo | null;
-  slotVerdicts: boolean;
   highlighted: boolean;
   onHover: (slug: string | null) => void;
 }) {
@@ -899,7 +918,7 @@ const ClubRow = memo(function ClubRow({
                   {slot.room}
                 </span>
               )}
-              {slotVerdicts && fit?.slots[i] && (
+              {fit?.slots[i] && (
                 //* Mobilon mindig saját sorban, a nap alá igazítva — nem a
                 //* terem hosszán múlik, hová törik.
                 <SlotVerdict

@@ -157,6 +157,8 @@ model User {
   createdCompetitions Competition[]      @relation("competitionCreator")
   clubIdeas           ClubIdea[]         @relation("clubIdeaAuthor")
   clubIdeaVotes       ClubIdeaVote[]
+  clubPosts           ClubPost[]         @relation("clubPostAuthor")
+  clubComments        ClubComment[]      @relation("clubCommentAuthor")
 
   @@unique([email])
   @@map("user")
@@ -550,6 +552,8 @@ model Club {
   competitions Competition[]
   //* Az ötlet(ek), amiből a szakkör lett (lásd `ClubIdea`).
   ideas        ClubIdea[]
+  //* A hírfolyam bejegyzései (lásd `ClubPost`).
+  posts        ClubPost[]
 
   @@index([status])
   @@map("club")
@@ -628,6 +632,54 @@ model ClubMember {
 }
 
 //! ═══════════════════════════════════════════════════════════════════════════
+//! A SZAKKÖR HÍRFOLYAMA — BEJEGYZÉSEK ÉS HOZZÁSZÓLÁSOK
+//! ═══════════════════════════════════════════════════════════════════════════
+//! A Google Classroom „Stream" lapjának mintájára: a szakkör tagjai és vezetői
+//! bejegyzést írnak, a többiek hozzászólnak. A szabályok a `club-board.ts`-ben.
+//!
+//! KI LÁTJA: BÁRMELYIK BELÉPETT FELHASZNÁLÓ — belépés nélkül senki (döntés,
+//! 2026-10-03). A tagság nyilvános, a beszélgetés csak az iskoláé: ide diákok
+//! írnak a nevükkel, és ennek nem kell a kereső elé kerülnie.
+//!
+//! NINCS ELREJTÉS, CSAK TÖRLÉS. A szerző, a vezető tanár és az admin töröl; a
+//! törölt bejegyzés a hozzászólásaival együtt VÉGLEG eltűnik. Ha a felhasználó
+//! fiókja törlődik, a bejegyzései és hozzászólásai vele mennek (`Cascade`) —
+//! a szöveg az övé, nem a szakköré.
+
+model ClubPost {
+  id       String @id @default(cuid())
+  clubId   String
+  club     Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User   @relation("clubPostAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  //* Sima szöveg — a lap a sortöréseket és a http(s) linkeket jeleníti meg,
+  //* semmi mást (lásd `boardSegments`).
+  body     String @db.Text
+
+  createdAt DateTime      @default(now())
+  comments  ClubComment[]
+
+  @@index([clubId, createdAt])
+  @@index([authorId, createdAt])
+  @@map("club_post")
+}
+
+model ClubComment {
+  id       String   @id @default(cuid())
+  postId   String
+  post     ClubPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User     @relation("clubCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  body     String   @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([postId, createdAt])
+  @@index([authorId, createdAt])
+  @@map("club_comment")
+}
+
+//! ═══════════════════════════════════════════════════════════════════════════
 //! MIRE LENNE IGÉNY? — SZAKKÖR-ÖTLETEK
 //! ═══════════════════════════════════════════════════════════════════════════
 //! A szakkörlista azt mutatja, AMI VAN. Az ötletlap azt, AMIRE A DIÁKOK
@@ -640,10 +692,10 @@ model ClubMember {
 //! Az ötlet szerzője sem látszik — a tartalom számít, nem a név.
 
 model ClubIdea {
-  id    String @id @default(cuid())
+  id    String  @id @default(cuid())
   //! A DUPLIKÁCIÓ ELLEN. „Drón szakkör", „drón", „DRÓN!" ugyanaz az ötlet —
   //! a második felírás az elsőre szavaz (lásd `ideaKey`).
-  key   String @unique
+  key   String  @unique
   title String
   note  String?
 

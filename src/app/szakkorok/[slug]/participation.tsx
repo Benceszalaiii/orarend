@@ -30,7 +30,8 @@ import { joinClub, leaveClub } from "../actions";
 //!   Követem     — FIÓK NÉLKÜL. A szakkör felkerül a rácsodra ezen a
 //!                 készüléken (belépve a többin is, a beállítás-szinkronnal).
 //!   Értesítés   — FIÓK NÉLKÜL. Ugyanaz a névtelen feliratkozás, mint az órák
-//!                 harangja: tíz perccel előtte, és ha kiesik az órarendből.
+//!                 harangja: tíz perccel előtte, ha kiesik az órarendből,
+//!                 és ha új bejegyzés kerül a hírfolyamra.
 //!
 //! A jelentkezés és az értesítés magával hozza a követést: aki odajár, vagy
 //! szólni kér, az a rácsán is látni akarja. Fordítva nem: a követés
@@ -202,7 +203,7 @@ export function Participation({ slug, loggedIn, isMember, canJoin }: Props) {
           ? "Követed: a szakkör ott van az órarendedben ezen a készüléken"
           : "Követéssel a szakkör felkerül az órarendedre — belépés nélkül is"}
         {notify
-          ? `, és szólunk ${LEAD_MINUTES} perccel előtte, meg ha kiesik az órarendből.`
+          ? `, és szólunk ${LEAD_MINUTES} perccel előtte, ha kiesik az órarendből, és ha új bejegyzés kerül a hírfolyamra.`
           : "."}
         {support === "needs-install" &&
           " Értesítést iPhone-on csak a kezdőképernyőre kitett Órarend kaphat."}

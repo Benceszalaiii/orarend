@@ -87,6 +87,12 @@ Mechanisms a generic timetable viewer could not truthfully copy:
   club is itself information. Joining a club or entering a competition needs a
   school login. Teachers create clubs; a student can propose one, and it only
   goes live when the teacher they named approves it (`src/lib/club-access.ts`).
+  Each club page is laid out like a Google Classroom course: a colour banner,
+  tabs (stream · people · details) and a **stream** where members and leaders
+  post and comment. The stream is the one club surface that needs a login to
+  *read* (decision 2026-10-03): students write there under their own name, so
+  it stays inside the school and out of search engines. Push for a new post
+  names only the club, never the text or the author.
   Competitions start with individual entries only. The app **cannot send
   email** (addresses are synthetic `.invalid`), so every notification is push
   or in-app.
@@ -115,7 +121,11 @@ Mechanisms a generic timetable viewer could not truthfully copy:
 - Name: **Órarend**.
 - Existing routes: `/orarend` (week grid, default), `/ma` (today's view),
   `/adatvedelem` (privacy), `/statisztika` (operator-only usage report,
-  password-gated, noindex). Planned: `/szakkorok` and `/versenyek`.
+  password-gated, noindex), `/tantargyak` (subjects), `/teremkereso` (free
+  rooms), `/ugyelet` (hall duty). `/szakkorok` and `/versenyek` exist behind
+  the `NEXT_PUBLIC_CLUBS_PUBLIC` launch flag: before launch only teachers and
+  admins see them (students get a 404), and the landing page, changelog and
+  sitemap only mention them once the flag is on.
 - The subject-color system is **data, not decoration**: a hash of the subject
   seeds one of 12 accent hues (`src/lib/accent.ts`), and print explicitly
   re-requests those backgrounds because the color identifies the subject.
@@ -149,7 +159,9 @@ Mechanisms a generic timetable viewer could not truthfully copy:
    student needs to *know* — the timetable, clubs, competitions, deadlines —
    works without a login. Per-user server data exists only where the student
    acted on purpose: synced preferences, a club membership, a competition
-   entry. Anonymous measurements stay aggregate by construction: if a
+   entry, a post or comment on a club stream. The one deliberate exception to
+   free reading is the club stream: it is conversation between students, not
+   schedule information, so it is visible to logged-in users only. Anonymous measurements stay aggregate by construction: if a
    measurement could describe one student, it does not ship.
 5. **Legibility outranks fitting.** The grid refuses to shrink below a scale
    where the subject name survives; it scrolls instead.

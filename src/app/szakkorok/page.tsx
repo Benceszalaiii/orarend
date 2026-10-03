@@ -21,6 +21,11 @@ export const metadata: Metadata = {
   title: "Szakkörök - Órarend",
   description:
     "A Jedlik szakkörei, felkészítői és korrepetálásai: mikor, hol, kinek szólnak, és ki tartja őket.",
+  alternates: { canonical: "https://jedlik.info/szakkorok" },
+  //! AZ ELŐNÉZET NEM KERÜL KERESŐBE. A bevezetés előtt a lapot csak tanár és
+  //! admin látja, a robot 404-et kap — de ha egy tanár belépve megosztja, a
+  //! címnek akkor sincs keresnivalója a találatok közt.
+  ...(clubsLaunched() ? {} : { robots: { index: false, follow: false } }),
 };
 
 //! MINDIG FRISS: a javaslatokat csak az érintettek látják, tehát a lap a

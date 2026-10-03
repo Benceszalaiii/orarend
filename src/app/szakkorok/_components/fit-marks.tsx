@@ -90,29 +90,15 @@ export function SlotVerdict({
   );
 }
 
-//! AZ ÍTÉLET SZÍNE. A „belefér" az egyetlen színes: a `--primary` kék, ahogy a
-//! rács is jelöli, ami szabad. Az ütközés NEM piros — nem hiba, csak nem neked
-//! szól most —, a piros az élő és a cselekvő szerepeké marad.
+//! AZ ÍTÉLETEK SORRENDJE: ELŐBB, AMI LEHETSÉGES. A „nem tudjuk" még lehet
+//! jó; az „ütközik" áll a legvégén. A lista csoporton BELÜL rendez így — a
+//! csoportot az adja, kinek szól a szakkör (lásd `clubs-browser.tsx`).
 export const VERDICT_ORDER: ClubFitVerdict[] = [
   "fits",
   "partly",
-  "clash",
   "unknown",
+  "clash",
 ];
-
-export const VERDICT_TITLE: Record<ClubFitVerdict, string> = {
-  fits: "Belefér",
-  partly: "Részben",
-  clash: "Ütközik",
-  unknown: "Nem tudjuk",
-};
-
-export const VERDICT_FILL: Record<ClubFitVerdict, string> = {
-  fits: "bg-primary",
-  partly: "bg-primary/40",
-  clash: "bg-foreground/22",
-  unknown: "border border-dashed border-foreground/35 bg-transparent",
-};
 
 //! A DIÁK OSZTÁLYA. Először a készülék (amit az órarendben választott) — az a
 //! frissebb szándék; ha az nincs, a fiók osztálya (iskolai belépésnél ismert).

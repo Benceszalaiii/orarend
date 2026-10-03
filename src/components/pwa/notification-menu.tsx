@@ -32,7 +32,6 @@ import {
 import {
   clubsOf,
   contestsOf,
-  LEAD_MINUTES,
   maxSubjects,
   type PushPrefs,
   subjectsOf,

@@ -325,7 +325,7 @@ export function WeekMap({
     <fieldset
       ref={hostRef}
       onKeyDown={onKeyDown}
-      className="relative mt-4 min-w-0 border-t border-hero-foreground/10 pt-3 sm:mt-5 sm:pt-4"
+      className="relative mt-4 min-w-0 border-t border-border pt-3 sm:mt-5 sm:pt-4"
     >
       <legend className="sr-only">
         A heted és a szakkörök időpontjai — szűrés napra vagy időre

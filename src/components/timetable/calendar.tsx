@@ -49,6 +49,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { clubsVisibleHere } from "@/lib/club-events";
 import { loadClubSuggest, saveClubSuggest } from "@/lib/club-suggest-pref";
 import { DUAL_LABEL, type DualStatus, dualBlockLesson } from "@/lib/dualis";
+import { loadFillSplit, saveFillSplit } from "@/lib/fill-split-pref";
 import type {
   CalendarEvent,
   TimetableError as TimetableErrorInfo,
@@ -84,7 +85,12 @@ import {
 import { reportClassUse } from "@/lib/usage";
 import { useHiddenMenu } from "@/lib/use-hidden-menu";
 import { cn } from "@/lib/utils";
-import { GlanceNote, GlanceToggle, SuggestToggle } from "./glance-controls";
+import {
+  FillToggle,
+  GlanceNote,
+  GlanceToggle,
+  SuggestToggle,
+} from "./glance-controls";
 import { EventCard, LessonBlock } from "./lesson-block";
 import { type FocusTarget, LessonSheet } from "./lesson-sheet";
 import { GhostCard, MergeButton } from "./merge-controls";
@@ -281,9 +287,13 @@ function overlapping(a: SideItem, b: SideItem): boolean {
 //* különben a fél oszlop kártyákat takarna el, ami rosszabb a teljesnél. A
 //* teljes oszlopot kérő (összevont) kártya senkivel nem fedhet át: ha mégis
 //* van mellette óra, marad a sávozás, mert az mindkettőt megmutatja.
-function assignBySide(cluster: LayoutItem[]): boolean {
+function assignBySide(cluster: LayoutItem[], fill: boolean): boolean {
   const sides = cluster.map(itemSide);
   if (sides.some((side) => side === null)) return false;
+  //! KÉRÉSRE A MAGÁNYOS FÉL KITÖLTI AZ OSZLOPOT (lásd `fill-split-pref.ts`).
+  //! Csak az egyelemű klaszter: ha bármi átfed vele, a szemközti fél NEM üres,
+  //! és a két csoport órája egymás mellett marad.
+  if (fill && cluster.length === 1) sides[0] = FULL;
   for (let i = 0; i < cluster.length; i++) {
     for (let j = i + 1; j < cluster.length; j++) {
       if (!overlapping(cluster[i], cluster[j])) continue;
@@ -305,6 +315,7 @@ function layoutDay(
   runs: LessonRun[],
   ghosts: GhostBlock[],
   events: CalendarEvent[],
+  fill = false,
 ): LayoutItem[] {
   const items: LayoutItem[] = [
     ...runs.map((r) => ({
@@ -341,7 +352,7 @@ function layoutDay(
     //! óra is így kap fél oszlopot (egyelemű klaszter), a két egymásra eső
     //! csoport pedig mindig ugyanabban a sorrendben áll — nem aszerint, melyik
     //! kezdődött előbb.
-    if (assignBySide(cluster)) {
+    if (assignBySide(cluster, fill)) {
       cluster = [];
       return;
     }
@@ -1065,6 +1076,18 @@ export function TimetableCalendar({
     setSuggesting(next);
     weekCache.current.clear();
     void loadRef.current(view.weekStart);
+  };
+
+  //! ─── KITÖLTÖTT BONTOTT ÓRÁK ──────────────────────────────────────────────
+  //! Csak rajzolás: a hetet nem kell újra lekérni, a `layoutDay` dönt.
+  const [filling, setFilling] = useState(false);
+  useEffect(() => {
+    setFilling(loadFillSplit());
+  }, []);
+  const toggleFill = () => {
+    const next = !filling;
+    saveFillSplit(next);
+    setFilling(next);
   };
 
   //! A MENTETT HÉTBŐL VISSZA KELL TALÁLNI A FRISSHEZ. A rács hálózat nélkül a
@@ -2342,11 +2365,15 @@ export function TimetableCalendar({
   const showLegend = menu.shows("legend");
   const showSuggest =
     hasSubject && mode === "class" && clubsHere && menu.shows("suggest");
+  //* A tanári rácson nincs fél oszlop (lásd `teacherLessons`) — nincs mit
+  //* kitölteni.
+  const showFill = hasSubject && mode === "class" && menu.shows("fill");
   const hasSettings =
     showMerge ||
     showDual ||
     showGlance ||
     showSuggest ||
+    showFill ||
     showNotify ||
     showCalendar ||
     showLegend ||
@@ -2743,6 +2770,9 @@ export function TimetableCalendar({
                             active={suggesting}
                             onToggle={toggleSuggest}
                           />
+                        )}
+                        {showFill && (
+                          <FillToggle active={filling} onToggle={toggleFill} />
                         )}
                         {showNotify && notifySetup?.({ subjectShort })}
                         {showCalendar &&
@@ -3243,6 +3273,7 @@ export function TimetableCalendar({
                       resolved.runs,
                       resolved.ghosts,
                       dayEvents,
+                      filling,
                     );
                     const showNow =
                       d.isToday &&

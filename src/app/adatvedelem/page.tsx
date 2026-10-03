@@ -27,7 +27,7 @@ export default function AdatvedelemPage() {
           Adatvédelmi tájékoztató
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Utolsó frissítés: 2026. szeptember 30.
+          Utolsó frissítés: 2026. október 3.
         </p>
 
         <div className="mt-8 flex flex-col gap-8 text-sm leading-relaxed text-muted-strong">
@@ -330,11 +330,33 @@ export default function AdatvedelemPage() {
             </p>
             <p>
               <span className="font-medium text-foreground">
+                Hírfolyam — bejegyzések és hozzászólások.
+              </span>{" "}
+              Minden szakkör lapján van egy hírfolyam, ahová a szakkör tagjai és
+              vezetői bejegyzést és hozzászólást írhatnak. Amit oda írsz, azt a
+              neveddel és az osztályoddal együtt{" "}
+              <span className="font-medium text-foreground">
+                minden belépett felhasználó láthatja
+              </span>{" "}
+              — belépés nélkül senki, és a keresők sem. A szöveget és az idejét
+              a fiókodhoz kötve tároljuk, amíg ki nem törlöd. A saját
+              bejegyzésedet és hozzászólásodat bármikor törölheted; a szakkör
+              vezető tanára és az üzemeltető is törölheti. A törlés végleges, a
+              bejegyzéssel a hozzászólásai is eltűnnek. A fiókod törlésével
+              minden bejegyzésed és hozzászólásod megszűnik.
+            </p>
+            <p>
+              <span className="font-medium text-foreground">
                 Értesítés egy szakkörről
               </span>{" "}
               ugyanazzal a névtelen feliratkozással megy, mint az órák
               értesítése (lásd fentebb): a feliratkozás mellett csak a követett
-              szakkörök címe tárolódik, a fiókodhoz nem kötjük.
+              szakkörök címe tárolódik, a fiókodhoz nem kötjük. Ha a hírfolyamra
+              új bejegyzés kerül, erről is szólunk — de az értesítésben csak a
+              szakkör neve áll, a bejegyzés szövege és a szerzője nem: azt a lap
+              mutatja, belépés után. Bejegyzéskor a böngésződ a saját
+              feliratkozása címét is elküldheti, hogy a saját bejegyzésedről ne
+              kapj értesítést; ezt csak erre használjuk, nem tároljuk.
             </p>
             <p>
               <span className="font-medium text-foreground">
@@ -614,6 +636,21 @@ export default function AdatvedelemPage() {
               </span>{" "}
               szakaszt. Minden helyben tárolt adat bármikor törölhető a böngésző
               adatainak törlésével.
+            </p>
+            {/*//! NEM MINDEN BEÁLLÍTÁS KÖVETI A FIÓKOT. A fenti mondat szerint a
+                //! belépett diák beállításai a fiókjához is mentődnek — a
+                //! rajzolási kapcsolók viszont szándékosan készülékhez kötöttek
+                //! (`fill-split-pref.ts`), ezt ki kell mondani. */}
+            <p>
+              A rács megjelenését állító kapcsoló, a{" "}
+              <span className="font-medium text-foreground">
+                bontott órák kitöltése
+              </span>{" "}
+              (
+              <span className="font-medium text-foreground">
+                orarend:fill-split:v1
+              </span>
+              ) belépve sem kerül a fiókodba: csak ezen az eszközön él.
             </p>
             {/*//! AZ ÓRÁHOZ KÖTÖTT LINKEK ÉS KIVETÍTŐ-CÍMEK KÉT HELYEN ÉLHETNEK
                 //! (`lesson-extras-store.ts`), és a költözésük a belépéskor

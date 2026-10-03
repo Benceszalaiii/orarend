@@ -16,6 +16,12 @@ fekvő lapra is kinyomtatható.
   ütköző kártyák azonosság szerint csoportokba kerülnek, a diák kiválasztja a
   sajátját, és a választás osztályonként megmarad — onnantól a rács az *ő*
   órarendje, nem az osztályé.
+- **Bontott órák kitöltése.** A csak egy csoportnak szóló óra alapból fél
+  oszlopot kap, hogy látszódjon: az osztály fele nem ül ott. Ha a másik
+  csoportnak abban a sávban nincs órája (pl. egy 13C-s héten szinte mindig), a
+  Beállítások *Bontott órák kitöltése* kapcsolójával az óra a teljes oszlopot
+  kitölti; ahol két csoport órája ténylegesen egymásra esik, ott a két fél
+  megmarad. Készülékhez kötött beállítás.
 - **Most sáv.** Aktuális óra, szünet vagy *Mára vége*, visszaszámlálóval a
   következő váltásig.
 - **Értesítések.** 10 perccel az óra kezdése előtt, és ha megváltozik az órarend.
@@ -334,13 +340,25 @@ tanítás*, *nem ellenőrizhető* (`lib/club-schedule.ts`).
   (`webcal://`).
 - Szakkört **tanár** hoz létre; **diák javasolhat**, és a felkért tanár hagyja
   jóvá (`lib/club-access.ts`).
+- **A szakkör lapja** a Google Classroom kurzusainak mintájára: színes borító,
+  fülek (*Hírfolyam* · *Tagok* · *Részletek*, `?lap=`), bal oldalt a heti
+  alkalmak és a jelentkezés. A **hírfolyamra** a tagok és a vezetők írnak
+  bejegyzést és hozzászólást; olvasni csak belépve lehet. A szerző, a vezető
+  és az admin töröl. Új bejegyzésről push megy a szakkörről értesítést kérő
+  készülékekre — csak a szakkör nevével, szöveg és szerző nélkül
+  (`lib/club-board.ts`, `szakkorok/[slug]/board-actions.ts`).
 
 ### Felfedezés
 
 - **„Neked is jó időpontban"** — a szakkörlista a böngészőben menti heteiből
   (A és B hét is, ha megvan) megmondja, melyik szakkör fér bele a diák
   órarendjébe, az elrejtett csoportok nélkül; a kártya az ütköző órát is
-  megnevezi (`lib/club-fit.ts`).
+  megnevezi (`lib/club-fit.ts`). A lista tetején egyetlen gomb áll
+  („13C · 10 fér bele a hetedbe"); a hét-térkép ablakban nyílik, és csak azt
+  mutatja, amire a diák eljuthat. A lista azt rendezi előre, kinek szól a
+  szakkör (az osztálynak/évfolyamnak, a szakmának, mindenkinek); a
+  más évfolyamoké és szakmáké összecsukva a végén. Hogy belefér-e, az
+  csoporton belül rendez, és a sor végén áll.
 - **Beleférő szakkörök a rácson** — kapcsolható (alapból ki): az osztálynak
   vagy évfolyamának szóló és a mindenkinek nyitott szakkörök halvány,
   szaggatott kártyaként a diák szabad sávjaiban
@@ -381,6 +399,12 @@ teremkeresőt — de az órarend csak **a szükséges termeket** kéri le
 | --- | --- |
 | `NEXT_PUBLIC_CLUBS_PUBLIC` | `1` = a szakkörök mindenkinek látszanak. Előtte csak tanár és üzemeltető látja (feltöltéshez). Build-időben beég: átállítás után új build kell |
 
+A kapcsoló nem csak a lapokat zárja: a szakkör- és verseny-actionök is
+megkérdezik (`canBrowseClubs`), a nyitólap „Frissen a sütőből" sávja, a
+`/valtozasok` és a `sitemap.xml` pedig csak `1` mellett említi a két részt.
+Ha az adatbázis nem válaszol, a két rész saját hibalapot ad újrapróbálással
+(`szakkorok/error.tsx`, `versenyek/error.tsx`), nem a Next alapértelmezettjét.
+
 ## Felépítés
 
 ```
@@ -390,6 +414,12 @@ src/
     orarend/       heti rács (alapértelmezett útvonal)
     ma/            a mai nap egy képernyőn
     tanari/        tanári heti nézet
+    szakkorok/     szakkörök: lista, szakkör lapja hírfolyammal, javaslat, ötletek
+    versenyek/     versenyek: határidő-folyam, nevezés, eredmények
+    tabla/         folyosói kijelző (a nap szakkörei, határidők)
+    tantargyak/    tárgyanként ki tanítja és kiknek
+    teremkereso/   üres termek óránként
+    ugyelet/       folyosóügyelet
     valtozasok/    változások listája
     belepes/       opcionális iskolai belépés
     adatvedelem/   adatvédelmi tájékoztató

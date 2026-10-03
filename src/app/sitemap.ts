@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { clubsLaunched } from "@/lib/club-access";
 
 //! A GYÖKÉR MOST MÁR ÖNÁLLÓ LAP, EZÉRT ITT A HELYE. Amíg a `/` egy
 //! kliensoldali átirányítás volt, semmi értelme nem lett volna felvenni: a
@@ -49,5 +50,25 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 0.6,
     },
+    //! A SZAKKÖRÖK ÉS A VERSENYEK CSAK A BEVEZETÉS UTÁN. Előtte a robot 404-et
+    //! kapna rájuk (lásd `canBrowseClubs`) — egy beküldött, de nem létező lap
+    //! a keresőnek hibának számít. Az egyes szakkörök lapjai nincsenek itt: a
+    //! listából mind elérhető, és a lista frissebb, mint egy napi sitemap.
+    ...(clubsLaunched()
+      ? ([
+          {
+            url: "https://jedlik.info/szakkorok",
+            lastModified: new Date(),
+            changeFrequency: "weekly",
+            priority: 0.6,
+          },
+          {
+            url: "https://jedlik.info/versenyek",
+            lastModified: new Date(),
+            changeFrequency: "weekly",
+            priority: 0.6,
+          },
+        ] satisfies MetadataRoute.Sitemap)
+      : []),
   ];
 }

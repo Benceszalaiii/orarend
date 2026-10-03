@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { canEditClub } from "@/lib/club-access";
+import { canBrowseClubs, canEditClub, clubsLaunched } from "@/lib/club-access";
 import { LATEST_END } from "@/lib/club-planner";
 import {
   planClubRooms,
@@ -19,8 +19,9 @@ import prisma from "@/lib/prisma";
 //! nézi. Ugyanaz a jog, mint a szerkesztésé (`canEditClub`) — akinek az
 //! időpontot joga van átírni, az kérdezheti meg, mire írja át.
 async function allowed(slug: string): Promise<boolean> {
+  if (typeof slug !== "string") return false;
   const actor = await resolveActor();
-  if (!actor) return false;
+  if (!actor || !canBrowseClubs(actor, clubsLaunched())) return false;
   const club = await prisma.club.findUnique({
     where: { slug },
     select: {

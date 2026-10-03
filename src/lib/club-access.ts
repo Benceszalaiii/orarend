@@ -104,6 +104,39 @@ export function canJoinClub(actor: Actor | null, club: ClubRef): boolean {
 }
 
 //* ---------------------------------------------------------------------------
+//* A HÍRFOLYAM
+//* ---------------------------------------------------------------------------
+//! OLVASNI BÁRMELYIK BELÉPETT FELHASZNÁLÓ, belépés nélkül senki (döntés,
+//! 2026-10-03). A javaslatnak nincs hírfolyama: amíg tanár nem vállalta, nincs
+//! kinek írni.
+export function canReadBoard(actor: Actor | null, club: ClubRef): boolean {
+  return actor !== null && club.status !== "PROPOSED";
+}
+
+//! ÍRNI A TAGOK ÉS A VEZETŐK — bejegyzést és hozzászólást egyaránt, mint a
+//! Classroomban, ha a tanár a diákoknak is megengedi. A megszűnt szakkör
+//! hírfolyama olvasható marad, de lezárul.
+export function canWriteBoard(
+  actor: Actor | null,
+  club: ClubRef,
+  isMember: boolean,
+): boolean {
+  if (!actor || club.status !== "ACTIVE") return false;
+  return isMember || actor.isAdmin || leads(actor, club);
+}
+
+//! TÖRÖLNI A SZERZŐ, A VEZETŐ ÉS AZ ADMIN. A vezető a szakköréért felel, ezért
+//! ő a moderátor; másik tanár nem nyúlhat bele egy idegen szakkör beszélgetésébe.
+export function canDeleteBoardItem(
+  actor: Actor | null,
+  club: ClubRef,
+  authorId: string,
+): boolean {
+  if (!actor) return false;
+  return authorId === actor.userId || actor.isAdmin || leads(actor, club);
+}
+
+//* ---------------------------------------------------------------------------
 //* VERSENYEK
 //* ---------------------------------------------------------------------------
 

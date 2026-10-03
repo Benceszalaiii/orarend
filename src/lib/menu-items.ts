@@ -46,6 +46,7 @@ export type MenuItemId =
   | "dual"
   | "glance"
   | "suggest"
+  | "fill"
   | "notify"
   | "calendar"
   | "legend";
@@ -96,6 +97,12 @@ export const MENU_ITEMS: readonly MenuItemMeta[] = [
         },
       ]
     : []),
+  {
+    id: "fill",
+    label: "Bontott órák kitöltése",
+    hint: "Teljes oszlop, ha a másik csoportnak nincs órája",
+    group: "settings",
+  },
   {
     id: "notify",
     label: "Értesítés",

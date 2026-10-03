@@ -456,7 +456,8 @@
   .acc-dot,
   .acc-text,
   .acc-break,
-  .acc-glow {
+  .acc-glow,
+  .acc-banner {
     --acc-h: var(--h-ciklus, 210);
     --acc-c: var(--c-ciklus, 1);
     --acc-l: var(--l-ciklus, 0);
@@ -468,7 +469,8 @@
       .acc-dot,
       .acc-text,
       .acc-break,
-      .acc-glow
+      .acc-glow,
+      .acc-banner
     ) {
     --acc-h: var(--h-prizma, 210);
     --acc-c: var(--c-prizma, 1);
@@ -481,7 +483,8 @@
       .acc-dot,
       .acc-text,
       .acc-break,
-      .acc-glow
+      .acc-glow,
+      .acc-banner
     ) {
     --acc-h: var(--h-nyugodt, 210);
     --acc-c: var(--c-nyugodt, 1);
@@ -494,7 +497,8 @@
       .acc-dot,
       .acc-text,
       .acc-break,
-      .acc-glow
+      .acc-glow,
+      .acc-banner
     ) {
     --acc-h: var(--h-alkony, 210);
     --acc-c: var(--c-alkony, 1);
@@ -507,7 +511,8 @@
       .acc-dot,
       .acc-text,
       .acc-break,
-      .acc-glow
+      .acc-glow,
+      .acc-banner
     ) {
     --acc-h: var(--h-nyar, 210);
     --acc-c: var(--c-nyar, 1);
@@ -531,6 +536,29 @@
     border-color: oklch(
       calc(0.5 + var(--acc-l, 0)) calc(0.062 * var(--acc-c, 1)) var(--acc-h)
     );
+  }
+  /*//! A SZAKKÖR BORÍTÓJA — a Classroom kurzusainak színes fejléce. Fehér
+      //! szöveg ül rajta, ezért a világosság mindkét témában ALACSONY marad
+      //! (≤ 0.5): így a felirat palettától és színtől függetlenül olvasható. */
+  .acc-banner {
+    color: #fff;
+    background-color: oklch(
+      calc(0.42 + var(--acc-l, 0) / 2) calc(0.12 * var(--acc-c, 1)) var(--acc-h)
+    );
+    background-image:
+      radial-gradient(
+        120% 160% at 100% 0%,
+        oklch(0.62 calc(0.15 * var(--acc-c, 1)) var(--acc-h) / 0.75),
+        transparent 60%
+      ),
+      linear-gradient(
+        135deg,
+        oklch(
+          calc(0.46 + var(--acc-l, 0) / 2) calc(0.13 * var(--acc-c, 1))
+            var(--acc-h)
+        ),
+        oklch(0.3 calc(0.1 * var(--acc-c, 1)) calc(var(--acc-h) + 30))
+      );
   }
   .acc-tint-strong {
     background-color: oklch(0.935 calc(0.056 * var(--acc-c, 1)) var(--acc-h));
@@ -819,6 +847,13 @@
   ::view-transition-group(subj-select) {
     animation-duration: 340ms;
     animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  /*//! A két érintett sor a csík FÖLÖTT (`subject-morph.ts`) — különben a
+      //! csík tónusa az egész átúszás alatt letakarná a szövegüket. */
+  ::view-transition-group(subj-row-from),
+  ::view-transition-group(subj-row-to) {
+    animation-duration: 220ms;
+    z-index: 3;
   }
   ::view-transition-old(root),
   ::view-transition-new(root) {

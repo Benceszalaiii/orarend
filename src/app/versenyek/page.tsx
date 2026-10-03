@@ -17,6 +17,11 @@ export const metadata: Metadata = {
   title: "Versenyek - Órarend",
   description:
     "Versenyek a Jedlikben: kinek szólnak, mikor vannak, és meddig lehet nevezni.",
+  alternates: { canonical: "https://jedlik.info/versenyek" },
+  //! AZ ELŐNÉZET NEM KERÜL KERESŐBE. A bevezetés előtt a lapot csak tanár és
+  //! admin látja, a robot 404-et kap — de ha egy tanár belépve megosztja, a
+  //! címnek akkor sincs keresnivalója a találatok közt.
+  ...(clubsLaunched() ? {} : { robots: { index: false, follow: false } }),
 };
 
 export const dynamic = "force-dynamic";

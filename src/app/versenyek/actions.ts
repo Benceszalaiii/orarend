@@ -3,9 +3,12 @@
 import { revalidatePath } from "next/cache";
 import {
   type Actor,
+  canBrowseClubs,
   canCreateCompetition,
   canManageCompetition,
+  canSeeCompetition,
   canWithdraw,
+  clubsLaunched,
   entryVerdict,
 } from "@/lib/club-access";
 import { resolveActor, teacherNames } from "@/lib/club-store";
@@ -63,22 +66,34 @@ async function uniqueSlug(name: string): Promise<string> {
   return `${base}-${Date.now().toString(36)}`;
 }
 
-async function loadRef(slug: string) {
-  return prisma.competition.findUnique({
+const REF_SELECT = {
+  id: true,
+  slug: true,
+  status: true,
+  teachers: true,
+  createdById: true,
+  startsAt: true,
+  registrationDeadline: true,
+  capacity: true,
+  grades: true,
+  classes: true,
+} as const;
+
+//! A BEVEZETÉS ELŐTT, ÉS A PISZKOZATNÁL, A VERSENY „NINCS". Az action nyilvános
+//! végpont: a lap 404-e nem védi, az azonosítója a kliens csomagjában ott van.
+//! Ugyanaz a két kapu, mint a lapé (`canBrowseClubs`, `canSeeCompetition`) —
+//! így egy idegen piszkozatra nevezni, vagy a bevezetés előtt jelentkezni sem
+//! lehet, és a válasz nem árulja el, hogy a slug létezik.
+//*
+//! A SLUG A KÉRÉSBŐL JÖN, TEHÁT BÁRMI LEHET — nem-szövegre a Prisma dobna.
+async function loadRef(slug: unknown, actor: Actor | null) {
+  if (typeof slug !== "string" || slug.length > 200) return null;
+  if (!canBrowseClubs(actor, clubsLaunched())) return null;
+  const ref = await prisma.competition.findUnique({
     where: { slug },
-    select: {
-      id: true,
-      slug: true,
-      status: true,
-      teachers: true,
-      createdById: true,
-      startsAt: true,
-      registrationDeadline: true,
-      capacity: true,
-      grades: true,
-      classes: true,
-    },
+    select: REF_SELECT,
   });
+  return ref && canSeeCompetition(actor, ref) ? ref : null;
 }
 
 export async function saveCompetition(input: {
@@ -160,7 +175,7 @@ export async function saveCompetition(input: {
     return { ok: true, slug };
   }
 
-  const ref = await loadRef(input.slug);
+  const ref = await loadRef(input.slug, actor);
   if (!ref) return fail("Nincs ilyen verseny.");
   if (!canManageCompetition(actor, ref)) {
     return fail("Ezt a versenyt nem szerkesztheted.");
@@ -187,7 +202,7 @@ export async function setCompetitionStatus(
   if (!COMPETITION_STATUSES.includes(status))
     return fail("Érvénytelen állapot.");
   const actor = await resolveActor();
-  const ref = await loadRef(slug);
+  const ref = await loadRef(slug, actor);
   if (!ref) return fail("Nincs ilyen verseny.");
   if (!canManageCompetition(actor, ref)) {
     return fail("Ennek a versenynek az állapotát nem változtathatod.");
@@ -201,7 +216,7 @@ export async function setCompetitionStatus(
 //! amire talán neveztek), az „Elmarad" állapotot kap, nem tűnik el.
 export async function deleteDraft(slug: string): Promise<ContestActionResult> {
   const actor = await resolveActor();
-  const ref = await loadRef(slug);
+  const ref = await loadRef(slug, actor);
   if (!ref || ref.status !== "DRAFT") return fail("Nincs ilyen piszkozat.");
   if (!canManageCompetition(actor, ref)) return fail("Ezt nem törölheted.");
   await prisma.competition.delete({ where: { id: ref.id } });
@@ -221,13 +236,23 @@ export async function enterCompetition(
   slug: string,
 ): Promise<ContestActionResult> {
   const actor = await resolveActor();
-  const ref = await loadRef(slug);
-  if (!ref) return fail("Nincs ilyen verseny.");
+  const found = await loadRef(slug, actor);
+  if (!found) return fail("Nincs ilyen verseny.");
   if (actor?.isTeacher) return fail("Tanárként nem lehet nevezni.");
 
-  //! A LÉTSZÁMOT ÉS A BEÍRÁST EGY TRANZAKCIÓBAN NÉZZÜK. Két egyszerre érkező
-  //! nevezés különben mindkettő az utolsó helyet látná szabadnak.
+  //! A LÉTSZÁMOT ÉS A BEÍRÁST EGY TRANZAKCIÓBAN NÉZZÜK, A VERSENY SORÁT ZÁRVA.
+  //! A tranzakció egymagában kevés: Postgresben az alapszint (READ COMMITTED)
+  //! mellett két egyszerre érkező nevezés mindkettő ugyanazt a számot olvassa,
+  //! és mindkettő az utolsó helyet látja szabadnak. A `FOR UPDATE` sorba
+  //! állítja őket: a második csak az első beírása után számol. Az állapotot és
+  //! a határidőt is a zár UTÁN olvassuk újra — a szervező közben lezárhatta.
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM "competition" WHERE "id" = ${found.id} FOR UPDATE`;
+    const ref = await tx.competition.findUnique({
+      where: { id: found.id },
+      select: REF_SELECT,
+    });
+    if (!ref) return fail("Nincs ilyen verseny.");
     const count = await tx.competitionEntry.count({
       where: { competitionId: ref.id },
     });
@@ -251,7 +276,7 @@ export async function withdrawCompetition(
 ): Promise<ContestActionResult> {
   const actor = await resolveActor();
   if (!actor) return fail("Ehhez be kell lépned.");
-  const ref = await loadRef(slug);
+  const ref = await loadRef(slug, actor);
   if (!ref) return fail("Nincs ilyen verseny.");
   if (!canWithdraw(ref, new Date())) {
     return fail(
@@ -272,7 +297,7 @@ export async function saveResults(
   results: ResultInput,
 ): Promise<ContestActionResult> {
   const actor = await resolveActor();
-  const ref = await loadRef(slug);
+  const ref = await loadRef(slug, actor);
   if (!ref) return fail("Nincs ilyen verseny.");
   if (!canManageCompetition(actor, ref)) {
     return fail("Ennek a versenynek az eredményét nem rögzítheted.");
