@@ -4,8 +4,8 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
 
 export const metadata: Metadata = {
-  title: "Miért - Órarend",
-  description: "Miért készült az Órarend, és mihez tartja magát.",
+  title: "Miért - Jedlik Info",
+  description: "Miért készült a Jedlik Info, és mihez tartja magát.",
 };
 
 export default function MiertPage() {

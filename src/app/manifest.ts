@@ -19,8 +19,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Órarend — Jedlik",
-    short_name: "Órarend",
+    name: "Jedlik Info",
+    short_name: "Jedlik Info",
     description:
       "A mai nap egy képernyőn: mi megy most, mennyi van hátra, és hova mész utána.",
     lang: "hu",

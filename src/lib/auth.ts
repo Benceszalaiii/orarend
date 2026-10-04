@@ -137,7 +137,7 @@ async function adoptGoogleEmail(
 }
 
 export const auth = betterAuth({
-  appName: "Órarend",
+  appName: "Jedlik Info",
   baseURL: BASE_URL,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
 
@@ -595,7 +595,7 @@ export const auth = betterAuth({
     //! ez itt biztonsági funkció is, nem csak kényelmi.
     passkey({
       rpID: RP_ID,
-      rpName: "Órarend",
+      rpName: "Jedlik Info",
       //* Az elfogadott origin. Enélkül a kliens által küldött origint hinné el
       //* a szerver — itt szögezzük le a sajátunkra.
       origin: BASE_URL,

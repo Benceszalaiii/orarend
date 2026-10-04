@@ -85,9 +85,9 @@ function Door({
   variant: "default" | "outline";
 }) {
   return (
-    //! A KOBALT KITÖLTÉSŰ AJTÓ SZÖVEGE SÖTÉT. A `Button` alap változata
-    //! `text-primary-foreground`-ot, azaz fehéret ad — az a kobalton 2,97:1.
-    //! Az `--ink-on-primary` ugyanezen a kitöltésen 6,2:1; a `cn` a
+    //! A KÉK KITÖLTÉSŰ AJTÓ SZÖVEGE AZ `--ink-on-primary`. Világos témában
+    //! fehér a címerkéken (6,97:1), sötétben sötét a világosabb kéken
+    //! (4,75:1) — a token témánként azt adja, ami átmegy. A `cn` csak a
     //! szövegszínt cseréli, a gomb minden más viselkedése változatlan.
     <Button
       asChild

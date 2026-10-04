@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
+import { BrandLockup } from "@/components/brand/ji-mark";
 import { minLabel, rangeLabel } from "@/components/timetable/shared";
 import { Iphone } from "@/components/ui/iphone";
 import {
@@ -883,6 +884,13 @@ export function GridFilm() {
               //* bal élén áll, egyetlen megismételt méret nélkül. */}
           <div className="mx-auto w-full max-w-[120rem] pl-[10vw]">
             <div className="relative max-w-[32rem] md:max-w-[42rem] xl:max-w-[32rem]">
+              {/*//* A NÉV A CÍM FÖLÖTT. A nyitókép meleg papírja témától
+                  //* független, ezért a jel itt a rögzített címerkéket kapja
+                  //* (`tone="color"`), nem a téma betűszínét. */}
+              <BrandLockup
+                tone="color"
+                className="mb-7 text-lg text-[oklch(0.26_0.05_248)]"
+              />
               <h1 className="text-[clamp(2.1rem,5vw,3.9rem)] font-bold leading-[0.98] tracking-[-0.045em] text-[oklch(0.26_0.05_248)]">
                 Amire eddig vágytatok.
                 <span className="mt-2 block font-script text-[clamp(2.9rem,7.4vw,5.75rem)] leading-[0.86] text-primary">
@@ -895,7 +903,7 @@ export function GridFilm() {
               </p>
               <Link
                 href="/orarend"
-                className="mt-9 inline-flex items-center rounded-full bg-primary px-6 py-3.5 text-sm font-semibold text-ink-on-primary shadow-[0_12px_32px_-14px_oklch(0.45_0.16_245/0.85)] transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[oklch(0.35_0.09_248)] motion-reduce:transition-none"
+                className="mt-9 inline-flex items-center rounded-full bg-primary px-6 py-3.5 text-sm font-semibold text-ink-on-primary shadow-[0_12px_32px_-14px_oklch(0.45_0.13_261.33/0.85)] transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[oklch(0.35_0.09_248)] motion-reduce:transition-none"
               >
                 Nyisd meg az órarendet
               </Link>
@@ -1349,7 +1357,7 @@ export function GridFilm() {
               //! világossággal 4,1:1, és még mindig ugyanaz a kék, ami a
               //! cím második sorát és a gombot is festi. */
           --bell-dim: oklch(0.26 0.05 248 / 0.22);
-          --bell-lit: oklch(0.52 0.155 245);
+          --bell-lit: oklch(0.4691 0.133 261.33);
         }
 
         /*//* A sín doboza a jelölő teljes szélessége: a „most" hajszálvonal a
@@ -1460,7 +1468,7 @@ export function GridFilm() {
             90deg,
             var(--bell-lit) 0%,
             var(--bell-lit) 62%,
-            oklch(0.52 0.155 245 / 0) 100%
+            oklch(0.4691 0.133 261.33 / 0) 100%
           );
         }
 

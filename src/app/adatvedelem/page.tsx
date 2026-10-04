@@ -4,8 +4,8 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
 
 export const metadata: Metadata = {
-  title: "Adatvédelem - Órarend",
-  description: "Adatvédelmi tájékoztató az Órarend alkalmazáshoz.",
+  title: "Adatvédelem - Jedlik Info",
+  description: "Adatvédelmi tájékoztató a Jedlik Info alkalmazáshoz.",
 };
 
 export default function AdatvedelemPage() {
@@ -36,10 +36,11 @@ export default function AdatvedelemPage() {
               Ki üzemelteti az oldalt
             </h2>
             <p>
-              Az Órarendet Szalai Bence üzemelteti, magánjellegű, nem hivatalos
-              projektként. Az oldal nem az iskola hivatalos szolgáltatása,
-              kizárólag a nyilvánosan elérhető órarendadatok kényelmesebb
-              megjelenítését szolgálja.
+              A Jedlik Infót Szalai Bence üzemelteti, magánjellegű, nem
+              hivatalos projektként. Az oldal nem az iskola hivatalos
+              szolgáltatása, és nem azonos az iskola saját JedlikInfó
+              portáljával (jedlikinfo.jedlik.eu); kizárólag a nyilvánosan
+              elérhető órarendadatok kényelmesebb megjelenítését szolgálja.
             </p>
           </section>
 

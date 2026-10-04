@@ -118,7 +118,21 @@ Mechanisms a generic timetable viewer could not truthfully copy:
 
 ## Brand Commitments
 
-- Name: **Órarend**.
+- Name: **Jedlik Info** (since 2026-10-04; previously Órarend). It is **not**
+  the school's own JedlikInfó portal (`jedlikinfo.jedlik.eu`), which is the data
+  source and the school login. Every surface that could be mistaken for the
+  school keeps saying so: the footer, the privacy page, the README and the
+  share image all state "nem hivatalos, magánjellegű projekt".
+- Mark: the lowercase **"ji"**, flat stems and round dots. The letters wear the
+  crest blue, the dot of the i the crest red. Red keeps its one meaning from the
+  app: *now*. The pun is deliberate: a *pont* is a dot, *pontos* is on time.
+- Colours come from the school's 2020 crest on jedlik.eu: blue `#2D57A4` (now
+  `--primary`; a lighter `#5784D6` with dark text in dark mode) and red
+  `#E61B20` (≈ the existing `--brand`, `#E41B1F`). The mark borrows the crest's
+  colours only, never its shield or pictures: an unofficial app must not look
+  like a mark issued by the school.
+- One geometry source, `src/lib/brand-mark.ts`; every icon is regenerated from
+  it with `bun run brand:icons`.
 - Existing routes: `/orarend` (week grid, default), `/ma` (today's view),
   `/adatvedelem` (privacy), `/statisztika` (operator-only usage report,
   password-gated, noindex), `/tantargyak` (subjects), `/teremkereso` (free
@@ -136,8 +150,9 @@ Mechanisms a generic timetable viewer could not truthfully copy:
 
 - Live Jedlikinfo API, verified reachable during this session.
 - Real bell schedule and real class list (09A … 13C and more) from the API.
-- **No public/ directory, no icon set, no manifest.** A PWA needs these authored
-  from scratch; there is no existing logo asset to reuse.
+- **Brand sources.** The school crest (jedlik.eu, 2020 version) and the Győri
+  SZC logo were reviewed on 2026-10-04; only the crest's two colours are used.
+  The icon set and manifest are generated from `src/lib/brand-mark.ts`.
 - `@vercel/analytics` is installed, but the account is on the Hobby plan, where
   **custom events are not available** (Vercel's plan table lists them as Pro+).
   Per-class usage is therefore measured by the app's own `/api/hasznalat`

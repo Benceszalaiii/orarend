@@ -8,7 +8,7 @@ import { StatTile } from "./_components/stat-tile";
 import { type AdminUserRow, UserManager } from "./user-manager";
 
 export const metadata: Metadata = {
-  title: "Felhasználók – Órarend",
+  title: "Felhasználók – Jedlik Info",
   robots: { index: false, follow: false },
 };
 

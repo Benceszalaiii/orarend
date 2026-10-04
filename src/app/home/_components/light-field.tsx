@@ -14,7 +14,7 @@ import {
 } from "./week";
 
 //! ═══════════════════════════════════════════════════════════════════════════
-//! A KOBALT FÉNYKAMRA — A SÁV MÖGÖTT A HÉT VILÁGÍT
+//! A KÉK FÉNYKAMRA — A SÁV MÖGÖTT A HÉT VILÁGÍT
 //! ═══════════════════════════════════════════════════════════════════════════
 //! MIÉRT NEM DÍSZ. A lap tézise szerint a nyitólap nem beszél az órarendről,
 //! hanem AZ órarend (lásd `film.tsx`). A kobalt sáv volt az egyetlen hely, ahol
@@ -26,9 +26,9 @@ import {
 //! nagyon közelről, fényként.
 //*
 //! CSAK VILÁGOSÍT, SOSEM SÖTÉTÍT. Ez nem esztétikai döntés, hanem ez tartja a
-//! szöveget olvashatóként. Az `--ink-on-primary` a kobalton 6,21:1-et ad (85%-on
-//! 5,00:1-et); minden képpont, amit a mező megvilágít, ENNÉL VILÁGOSABB alapot
-//! kap, tehát a kontraszt csak nőhet (+0,15 lineáris fénynél 8,8:1). Egyetlen
+//! szöveget olvashatóként. A sötét betű (`--ink-on-band`) a sáv kékjén
+//! 4,75:1-et ad; minden képpont, amit a mező megvilágít, ENNÉL VILÁGOSABB
+//! alapot kap, tehát a kontraszt csak nőhet. Egyetlen
 //! sötétítő tag sincs a shaderben — se vignetta, se árnyék. A szemcse
 //! szimmetrikus és ±0,006, vagyis a mérésben nem látszik.
 //*
@@ -144,8 +144,8 @@ function oklchToLinear(
   ];
 }
 
-//* `--primary` a sötét palettából (`globals.css`) — a lap `colorScheme: dark`.
-const BASE = oklchToLinear(0.6692, 0.1607, 245.011);
+//* A `--band` (`globals.css`): a sáv mindkét témában ezen a kéken áll.
+const BASE = oklchToLinear(0.62, 0.133, 261.33);
 
 //! A FOLT SZÍNE VILÁGOS ÉS HALVÁNY, NEM A KÁRTYA TELÍTETT SZÍNE. A tizenkét hue
 //! a tantárgyat azonosítja, de itt nem azonosít semmit: nem olvasható, csak

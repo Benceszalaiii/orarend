@@ -7,7 +7,7 @@
 //! Szándékosan kézzel írt és rövid: egy offline gyorsítótár-könyvtár több
 //! viselkedést hozna, mint amennyit ez a lap használ.
 
-const VERSION = "orarend-v3";
+const VERSION = "orarend-v4";
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -244,7 +244,7 @@ self.addEventListener("fetch", (event) => {
 //* látható értesítést hozzon — enélkül idővel visszavonják a jogot.
 const FALLBACK = {
   kind: "change",
-  title: "Órarend",
+  title: "Jedlik Info",
   body: "Változott valami az órarendedben.",
   url: "/ma",
   tag: "orarend-fallback",

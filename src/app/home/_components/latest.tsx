@@ -19,13 +19,14 @@ import { LightField } from "./light-field";
 //! A tételek innentől nem szövegek egy színen, hanem DIÁK egy világító
 //! asztalon: a szalag metaforája ugyanaz maradt, csak lett alatta lámpa.
 //*
-//! ÉS EZÉRT SÖTÉT RAJTA A BETŰ. A kobalt (#1C9CF0) fehérrel 2,97:1-et ad, a
-//! szokásos halványított másodlagos sorral 2,36:1-et — egy egész sávnyi
-//! olvashatatlan szöveg. Az `--ink-on-primary` ugyanezen az alapon 6,2:1-et
-//! hoz (85%-on 5,0-et), vagyis a háttér marad, a szöveg sötétedik. Lásd a
-//! token indoklását a `globals.css`-ben. A mező ezt NEM ronthatja el: csak
-//! világosít, sosem sötétít (lásd `light-field.tsx` fejlécét), tehát minden
-//! megvilágított képpont a 6,2:1 FÖLÉ visz, nem alá.
+//! ÉS EZÉRT SÖTÉT RAJTA A BETŰ. A sáv a `--band` kékjén áll (a címerkék
+//! világosabb párja), és a `.latest` szabály a `--primary`-t és az
+//! `--ink-on-primary`-t erre a párra irányítja át — így a sáv minden sora
+//! változatlan maradhatott. A sötét betű ezen 4,75:1. A mező ezt NEM
+//! ronthatja el: csak világosít, sosem sötétít (lásd `light-field.tsx`
+//! fejlécét), tehát minden megvilágított képpont a 4,75:1 FÖLÉ visz, nem alá.
+//! Ezért nem a téma `--primary`-je: világos módban az a sötétebb címerkék
+//! FEHÉR betűvel, és a világosodó alap azt a kontrasztot rontaná.
 //*
 //! A LAP STÍLUSAI JS-OLDALI MEGJEGYZÉSSEL VANNAK DOKUMENTÁLVA, NEM CSS-SEL. A
 //! projekt egyik szerkesztő-horga kiszedi a `<style>` sablonliterálba írt CSS
@@ -320,7 +321,7 @@ const STRIP_CSS = `
 @property --strip-head { syntax: "<number>"; inherits: true; initial-value: 0.125; }
 @property --i { syntax: "<number>"; inherits: false; initial-value: 0; }
 
-.latest { position: relative; padding-block: 6rem; isolation: isolate; }
+.latest { position: relative; padding-block: 6rem; isolation: isolate; --primary: var(--band); --ink-on-primary: var(--ink-on-band); }
 @media (min-width: 48rem) {
   .latest { padding-block: 7rem; }
 }

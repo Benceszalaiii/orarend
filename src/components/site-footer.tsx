@@ -3,6 +3,7 @@
 import { ArrowUpRight, Download, Star } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { BrandLockup } from "@/components/brand/ji-mark";
 import { IosInstallSteps } from "@/components/pwa/add-to-home-screen";
 import {
   Popover,
@@ -183,11 +184,17 @@ export function SiteFooter({ className }: { className?: string }) {
         //* sora nem csúszhat alá telepített ablakban.
         className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] sm:flex-row sm:items-center sm:justify-between sm:px-6"
       >
-        <p className="text-xs text-muted-foreground">
-          Készítette{" "}
-          <span className="font-medium text-muted-strong">{DEVELOPER}</span> —
-          nem hivatalos, magánjellegű projekt.
-        </p>
+        {/*//* A NÉV ÉS AZ ÁLLÍTÁS EGYÜTT. A jel közvetlenül a „nem hivatalos"
+            //* sor fölött áll: aki a címer színeit látja, ugyanabban a
+            //* pillantásban olvassa, hogy ez nem az iskola oldala. */}
+        <div className="flex flex-col gap-2">
+          <BrandLockup className="text-sm text-foreground" />
+          <p className="text-xs text-muted-foreground">
+            Készítette{" "}
+            <span className="font-medium text-muted-strong">{DEVELOPER}</span> —
+            nem hivatalos, magánjellegű projekt.
+          </p>
+        </div>
         <SiteFooterLinks />
       </div>
     </footer>

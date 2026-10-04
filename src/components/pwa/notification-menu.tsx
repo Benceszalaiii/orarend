@@ -200,7 +200,7 @@ export function NotificationMenu({
       reason === "denied"
         ? "A böngésző nem engedélyezte az értesítéseket. A lap beállításai közt (a címsor melletti ikon) lehet visszavonni a tiltást."
         : reason === "no-worker"
-          ? "Az engedély megvan, de az Órarend háttérszolgáltatása nem indult el — enélkül nincs mire megérkeznie az értesítésnek. Tölts újra a lapot, és próbáld újra."
+          ? "Az engedély megvan, de a Jedlik Info háttérszolgáltatása nem indult el — enélkül nincs mire megérkeznie az értesítésnek. Tölts újra a lapot, és próbáld újra."
           : reason === "misconfigured"
             ? "Az értesítések ezen a kiszolgálón nincsenek beállítva. Ez nem a te böngésződön múlik."
             : //! A LEJÁRT BELÉPÉS A LEGVALÓSZÍNŰBB OK, ÉS EZ NEM HIBA, HANEM
@@ -288,12 +288,12 @@ export function NotificationMenu({
                 //! lapként a gomb megnyomása után SEMMI nem történne, és a diák
                 //! azt hinné, elromlott.
                 <>
-                  Az iPhone csak a kezdőképernyőre kitett Órarendnek küld
+                  Az iPhone csak a kezdőképernyőre kitett Jedlik Infónak küld
                   értesítést. Tedd ki előbb — utána itt bekapcsolható.
                 </>
               ) : support === "blocked" ? (
                 <>
-                  Ebben a böngészőben korábban letiltottad az Órarend
+                  Ebben a böngészőben korábban letiltottad a Jedlik Info
                   értesítéseit. Ezt csak te tudod visszavonni: a címsor melletti
                   ikonra koppintva, a lap engedélyeinél.
                 </>
