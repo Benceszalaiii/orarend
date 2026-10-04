@@ -21,7 +21,7 @@ import { Landing } from "./home/_components/landing";
 //! tudja, mit tud ez az oldal; aki tudja, annak az órarend kell, azonnal.
 
 export const metadata: Metadata = {
-  title: "Órarend — a Jedlik hete egy lapon",
+  title: "Jedlik Info — a Jedlik hete egy lapon",
   description:
     "A Jedlik órarendje osztályokra, csoportbontásokra és duális hetekre bontva: heti rács teljes képernyőn, vagy a mai nap egyetlen képernyőn, óráról órára.",
   //! A NYITÓLAP KÉT CÍMEN ÁLL (`/` és `/home`), DE EGY LAP. A kanonikus cím a

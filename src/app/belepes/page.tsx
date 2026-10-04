@@ -6,7 +6,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SignInPanel } from "./sign-in-panel";
 
 export const metadata: Metadata = {
-  title: "Belépés - Órarend",
+  title: "Belépés - Jedlik Info",
   description:
     "Belépés az iskolai fiókkal, hogy az órarend-beállításaid átjöjjenek a többi eszközödre.",
   //* Ennek a lapnak nincs keresőben helye: se tartalma, se célja azon kívül,

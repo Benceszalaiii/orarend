@@ -5,7 +5,7 @@ import { AccessDenied } from "../_components/access-denied";
 import { AnnouncementManager } from "./announcement-manager";
 
 export const metadata: Metadata = {
-  title: "Közlemények – Órarend",
+  title: "Közlemények – Jedlik Info",
   robots: { index: false, follow: false },
 };
 

@@ -1,8 +1,9 @@
-# Órarend — Jedlik timetable
+# Jedlik Info — Jedlik timetable
 
 > Unofficial timetable viewer for the Győri SZC Jedlik Ányos technical school
 > (Győr, Hungary). Every timetable on this site comes live from the school's
-> own Jedlikinfo system. This site does not create timetable data of its own. The JSON endpoints below
+> own Jedlikinfo system. Despite the similar name, this site is not Jedlikinfo
+> itself. This site does not create timetable data of its own. The JSON endpoints below
 > relay Jedlikinfo through a plain GET request. You do not need any headers,
 > a login or an API key.
 

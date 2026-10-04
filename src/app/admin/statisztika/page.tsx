@@ -6,7 +6,7 @@ import { AccessDenied } from "../_components/access-denied";
 import { StatsDashboard } from "./dashboard";
 
 export const metadata: Metadata = {
-  title: "Statisztika – Órarend",
+  title: "Statisztika – Jedlik Info",
   robots: { index: false, follow: false },
 };
 

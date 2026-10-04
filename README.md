@@ -1,7 +1,10 @@
-# Órarend
+# Jedlik Info
 
 A Jedlik heti órarendje teljes képernyőn: bejelentkezés nélkül is használható,
 opcionális iskolai belépéssel.
+
+Nem hivatalos, magánjellegű projekt. A neve hasonlít, de nem azonos az iskola
+saját JedlikInfó portáljával: annak nyilvános órarendadatait jeleníti meg.
 
 A nyilvános órarend API-t olvassa, feloldja az osztály csoportbontásait arra a csoportra, ahová a
 diák tényleg jár, és a hetet teljes képernyős rácsként mutatja — ami egy A4-es
@@ -74,6 +77,7 @@ Nyisd meg: [http://localhost:3000](http://localhost:3000). A `/` átirányít az
 | `bun start` | Az éles build kiszolgálása |
 | `bun run lint` | `biome check` |
 | `bun run format` | `biome format --write` |
+| `bun run brand:icons` | A teljes ikonkészlet újrarajzolása a jelből (`src/lib/brand-mark.ts`) |
 
 ## Honnan jönnek az adatok
 
@@ -312,6 +316,27 @@ változásokról továbbra is a push-értesítés szól időben.
 Redis nélkül a funkció `503`-at ad, és a felületen sem ígér semmit — ugyanaz a
 szabály, mint az értesítéseknél.
 
+## Arculat
+
+A jel a **„ji"** (Jedlik Info) két kisbetűje: egyenes szárak, kerek pontok. A
+betűk az iskola címerének kékjét (`#2D57A4`), az i pontja a címer pirosát
+(`#E61B20`) viseli. A piros a jelben ugyanazt jelenti, mint az appban: a „most"-ot.
+Magyarul a pont pont, a pontos pedig az, aki időben ott van.
+
+- A színek a [jedlik.eu](https://jedlik.eu) 2020-as címeréről vannak
+  mintavételezve. A címerkék az app fő színe (`--primary`) is; a piros a
+  `--brand` párja. A jel szándékosan csak a színeket veszi át, a pajzsot és a
+  képeit nem: az app nem hivatalos, és a jele nem állíthatja magáról, hogy az
+  iskoláé.
+- A jel geometriája egy helyen él: `src/lib/brand-mark.ts`. Ebből rajzol a
+  felület (`components/brand/ji-mark.tsx`), és ebből készül a teljes
+  ikonkészlet: `bun run brand:icons` (favicon, `icon.svg`, `apple-icon`, PWA-
+  és maszkolható ikon, megosztási kép).
+- A `public/brand/` mappában a jel önállóan, világos és sötét alapra, a
+  vízszintes logó és a megosztási kép forrása. A logó és a megosztási kép a
+  „Jedlik Info" szót Geist-körvonalként hordozza; ha a szó változik, ezeket
+  kézzel kell újrarajzolni, a szkript csak raszterizálja őket.
+
 ## Felépítés
 
 ```
@@ -331,9 +356,11 @@ src/
     api/ertesites/ push-feliratkozás + az ütemezett kiküldő (`tick`)
     api/naptar/    naptár-link készítése, visszavonása és maga az `.ics` feed
   components/
+    brand/         a „ji" jel és a név (`JiMark`, `BrandLockup`)
     timetable/     rács, óra-blokkok, most sáv, összevonás-vezérlők
     ui/            Radix-alapú primitívek
   lib/
+    brand-mark.ts       a jel geometriája és a címer színei (egyetlen forrás)
     timetable.ts        API-kliens, típusok, hibafajták
     timetable-merge.ts  ütközések klaszterezése, csoportbontás feloldása
     hall-duty.ts        folyosóügyeleti beosztás, terület szerint csoportosítva
@@ -354,6 +381,8 @@ src/
     calendar-local.ts   a kiadott linkek a készüléken + a frissen tartásuk
     calendar-store.ts   jegyek és az öt hetes ablak (csak szerveren)
     calendar-source.ts  a feed adatforrása: óránként egyszer, alanyonként (szerver)
+scripts/
+  brand-icons.ts        az ikonkészlet újrarajzolása (`bun run brand:icons`)
 ```
 
 ## Ha hozzányúlsz
@@ -369,7 +398,8 @@ src/
 ## Jogi megjegyzés
 
 Nem hivatalos alkalmazás. Nem áll kapcsolatban a sulival vagy a Jedlikinfóval, és
-nem is ők üzemeltetik. Az órarend adatai a forrásukhoz tartoznak; ez az app csak
+nem is ők üzemeltetik. A Jedlik Info név hasonlít az iskola JedlikInfó portáljáéhoz,
+de az app nem az; a címer színeit használja, a címert magát nem. Az órarend adatai a forrásukhoz tartoznak; ez az app csak
 megjeleníti őket.
 
 ## Licenc

@@ -42,15 +42,15 @@ const jakartaSans = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Órarend",
+  title: "Jedlik Info",
   description:
     "A Győri SZC Jedlik Ányos technikum órarendje osztályokra, csoportbontásokra és duális hetekre bontva.",
-  applicationName: "Órarend",
+  applicationName: "Jedlik Info",
   //* Telepítve iOS-en teljes képernyős alkalmazásként fut; a fekete áttetsző
   //* státuszsáv a `viewport-fit=cover`-rel együtt ér valamit.
   appleWebApp: {
     capable: true,
-    title: "Órarend",
+    title: "Jedlik Info",
     statusBarStyle: "black-translucent",
   },
   formatDetection: { telephone: false },

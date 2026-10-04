@@ -189,10 +189,10 @@ export function AddToHomeScreen() {
         >
           {variant === "ios"
             ? "Tedd ki a kezdőképernyőre"
-            : "Telepítsd az Órarendet"}
+            : "Telepítsd a Jedlik Infót"}
         </h2>
         <p id="a2hs-body" className="mt-1 text-pretty text-muted-strong">
-          Az Órarend így teljes képernyőn indul, böngészősáv nélkül — és a
+          A Jedlik Info így teljes képernyőn indul, böngészősáv nélkül — és a
           legutóbb betöltött hetet térerő nélkül is megmutatja.
         </p>
 

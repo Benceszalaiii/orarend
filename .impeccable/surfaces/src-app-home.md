@@ -8,12 +8,12 @@ related_targets: []
 Scope: the whole `/home` landing surface — the scroll film, the cobalt light-box
 band, the closing pair of doors, and the floating view switcher that crosses all
 three grounds. Visitor mode: Persuade. The surface helps phone-first Jedlik
-students trust Órarend and open their timetable.
+students trust Jedlik Info and open their timetable.
 
 ## Audience and job
 
 Students checking their timetable quickly between lessons. They should
-understand what Órarend does differently and know which of the two views to
+understand what Jedlik Info does differently and know which of the two views to
 open. Teachers arrive here too now: the band's last frame is the only place on
 the page that names the second subject.
 

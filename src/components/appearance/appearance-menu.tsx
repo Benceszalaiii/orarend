@@ -207,7 +207,7 @@ function PresetPicker() {
   if (available !== true || !presets) return null;
 
   const rows = [
-    { slug: "", title: "Órarend", description: "A beépített paletta" },
+    { slug: "", title: "Jedlik Info", description: "A beépített paletta" },
     ...presets,
   ];
 
