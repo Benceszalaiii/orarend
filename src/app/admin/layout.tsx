@@ -6,7 +6,7 @@ import { AccessDenied } from "./_components/access-denied";
 import { AdminNav } from "./_components/admin-nav";
 
 export const metadata: Metadata = {
-  title: "Üzemeltetés – Órarend",
+  title: "Üzemeltetés – Jedlik Info",
   robots: { index: false, follow: false },
 };
 

@@ -18,8 +18,8 @@ import "server-only";
 //! //! rendereldik — a lap többi beállítása ettől függetlenül statikus marad.
 //!
 //! MI MARAD ÉRINTETLEN — és miért:
-//! • `--brand`, `--brand-foreground`, `--hero*`, `--ink-on-primary`: a lap
-//!   márkajelei. A piros CSELEKVÉST jelöl (a „most" vonala, a mai nap); ha egy
+//! • `--brand`, `--brand-foreground`, `--hero*`, `--ink-on-primary`,
+//!   `--logo-ink`, `--band`, `--ink-on-band`: a lap márkajelei. A piros CSELEKVÉST jelöl (a „most" vonala, a mai nap); ha egy
 //!   preset felülírná, ugyanaz a jelölés témánként mást jelentene.
 //! • `--font-*`: a betűket a `next/font` tölti (Geist + Lexend + Petit Formal
 //!   Script). Egy preset „Inter, sans-serif"-je olyan fájlra hivatkozna, amit
@@ -96,6 +96,9 @@ const BLOCKED_TOKENS = new Set([
   "brand",
   "brand-foreground",
   "ink-on-primary",
+  "logo-ink",
+  "band",
+  "ink-on-band",
   "hero",
   "hero-foreground",
   "hero-crest-glow",

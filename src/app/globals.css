@@ -10,49 +10,66 @@
   --card-foreground: oklch(0.1884 0.0128 248.5103);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.1884 0.0128 248.5103);
-  --primary: oklch(0.6723 0.1606 244.9955);
+  --primary: oklch(0.4691 0.133 261.33);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.1884 0.0128 248.5103);
   --secondary-foreground: oklch(1 0 0);
   --muted: oklch(0.9222 0.0013 286.3737);
   --muted-foreground: oklch(0.1884 0.0128 248.5103);
-  --accent: oklch(0.9392 0.0166 250.8453);
-  --accent-foreground: oklch(0.6723 0.1606 244.9955);
+  --accent: oklch(0.94 0.02 261.33);
+  --accent-foreground: oklch(0.4691 0.133 261.33);
   --destructive: oklch(0.6188 0.2376 25.7658);
   --destructive-foreground: oklch(1 0 0);
   --border: oklch(0.9317 0.0118 231.6594);
   --input: oklch(0.9046 0.0118 231.6594);
-  --ring: oklch(0.6818 0.1584 243.354);
-  --chart-1: oklch(0.6723 0.1606 244.9955);
+  --ring: oklch(0.56 0.133 261.33);
+  --chart-1: oklch(0.4691 0.133 261.33);
   --chart-2: oklch(0.6907 0.1554 160.3454);
   --chart-3: oklch(0.8214 0.16 82.5337);
   --chart-4: oklch(0.7064 0.1822 151.7125);
   --chart-5: oklch(0.5919 0.2186 10.5826);
   --radius: 1.3rem;
   --spacing: 0.25rem;
+  /*//* A `--brand` piros a Jedlik-címer piros negyede is (#E61B20 a címeren,
+      //* #E41B1F itt — kerekítésnyi különbség). Világos módban egy árnyalattal
+      //* sötétebb, hogy fehér lapon szövegként is megálljon. */
   --brand: oklch(0.565 0.22 27.5);
   --brand-foreground: oklch(1 0 0);
-  /*//! A KOBALT FELÜLET SZÖVEGE SÖTÉT — MÉRVE, NEM ÉRZÉSRE. A `--primary`
-      //! (#1C9CF0) FEHÉRREL mindössze 2,97:1-et ad; a WCAG a törzsszöveghez
-      //! 4,5:1-et, a nagy szöveghez 3:1-et kér. Vagyis egy egész kobalt sávon
-      //! a fehér szöveg megbukik, és 78%-os fehérrel (a szokásos „halványabb
-      //! másodlagos sor") már 2,36:1-nél tart.
-      //! Ez a token az ELLENKEZŐ irányt választja: a kobalt marad, a szöveg
-      //! sötétedik. Teljes erővel 6,2:1, 85%-on 5,0:1 — mindkettő átmegy.
+  /*//! A KÉK FELÜLET SZÖVEGE — MÉRVE, NEM ÉRZÉSRE. 2026-10-04 óta a
+      //! `--primary` a Jedlik-címer kékje (#2D57A4, a jedlik.eu 2020-as
+      //! címeréről mintavételezve), nem a régi kobalt (#1C9CF0).
+      //! A régi kobalton a fehér szöveg csak 2,97:1-et adott, ezért ez a token
+      //! akkor SÖTÉT volt. A címerkék elég sötét ahhoz, hogy a fehér rajta
+      //! 6,97:1 legyen (és a kék maga fehér lapon szintén 6,97:1), tehát
+      //! világos módban a token FEHÉR.
+      //! Sötét módban a `--primary` egy világosabb címerkék (#5784D6: feketén
+      //! 5,68:1, kártyán 4,8:1). Azon a fehér csak 3,7:1 lenne, ezért ott a
+      //! token sötét marad (4,75:1) — és a `--primary-foreground` is.
       //*
-      //! MIÉRT NEM A `--primary-foreground`-OT ÍRJUK ÁT? Mert az a GOMBOK
-      //! szövege az egész alkalmazásban; egy globális csere minden lapot
-      //! átfestene. Ez a token kizárólag azt mondja ki, mi kerül egy kobalt
-      //! FELÜLETRE — a nyitólap sávjára és a kobalt kitöltésű gombokra. */
-  --ink-on-primary: oklch(0.19 0.055 250);
+      //! A KÉT TOKEN EZÉRT MOST EGYÜTT MOZOG. A címerkékkel a gombok szövege
+      //! is átment a WCAG-on (a kobalt gombok fehér felirata 2,97:1 volt);
+      //! ez a csere nem csak átfestés, hanem javítás. */
+  --ink-on-primary: oklch(1 0 0);
+  /*//* A JEL BETŰINEK SZÍNE (`components/brand/ji-mark.tsx`). Világosban a
+      //* címerkék, sötétben a lap előszíne — a jel sötét változata fehér
+      //* betű, piros pont. */
+  --logo-ink: oklch(0.4691 0.133 261.33);
+  /*//! A NYITÓLAP KÉK SÁVJA MINDKÉT TÉMÁBAN UGYANAZ. A sáv mögött a
+      //! fénykamra (`home/_components/light-field.tsx`) csak VILÁGOSÍT, ezért
+      //! a betű csak sötét lehet: világosodó alapon a sötét betű kontrasztja
+      //! nő, a fehéré csökken. A világos téma `--primary`-je (címerkék, fehér
+      //! betűvel) ezt nem bírná, így a sáv a sötét téma kékjét kapja, sötét
+      //! betűvel (4,75:1, és minden megvilágított képponton több). */
+  --band: oklch(0.62 0.133 261.33);
+  --ink-on-band: oklch(0.19 0.055 261.33);
   /*! A HERO-FELÜLET. Ugyanaz a szótár, mint a jedlik-szakkor kezdőlapján: a
      hero nem külön festett sáv, hanem a lap alapja EGY megvilágított jelenettel
      — a címer fénytere. A piros (`--brand`) kizárólag élő és cselekvő
      szerepben szólal meg, sosem dekorációként. */
   --hero: var(--background);
   --hero-foreground: var(--foreground);
-  --hero-crest-glow: oklch(0.72 0.13 258 / 0.32);
-  --hero-crest-aura: oklch(0.8 0.08 258 / 0.26);
+  --hero-crest-glow: oklch(0.72 0.12 261.33 / 0.32);
+  --hero-crest-aura: oklch(0.8 0.08 261.33 / 0.26);
   --font-sans: ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, Menlo, monospace;
 }
@@ -64,26 +81,27 @@
   --card-foreground: oklch(0.8853 0 0);
   --popover: oklch(0 0 0);
   --popover-foreground: oklch(0.9328 0.0025 228.7857);
-  --primary: oklch(0.6692 0.1607 245.011);
-  --primary-foreground: oklch(1 0 0);
+  --primary: oklch(0.62 0.133 261.33);
+  --primary-foreground: oklch(0.19 0.055 261.33);
   --secondary: oklch(0.9622 0.0035 219.5331);
   --secondary-foreground: oklch(0.1884 0.0128 248.5103);
   --muted: oklch(0.209 0 0);
   --muted-foreground: oklch(0.5637 0.0078 247.9662);
-  --accent: oklch(0.1928 0.0331 242.5459);
-  --accent-foreground: oklch(0.6692 0.1607 245.011);
+  --accent: oklch(0.2 0.035 261.33);
+  --accent-foreground: oklch(0.62 0.133 261.33);
   --destructive: oklch(0.6188 0.2376 25.7658);
   --destructive-foreground: oklch(1 0 0);
   --border: oklch(0.2674 0.0047 248.0045);
   --input: oklch(0.302 0.0288 244.8244);
-  --ring: oklch(0.6818 0.1584 243.354);
+  --ring: oklch(0.62 0.133 261.33);
   --brand: oklch(0.5856 0.228 27.56);
   --brand-foreground: oklch(1 0 0);
-  --ink-on-primary: oklch(0.19 0.055 250);
+  --ink-on-primary: oklch(0.19 0.055 261.33);
+  --logo-ink: oklch(0.9328 0.0025 228.7857);
   --hero: var(--background);
   --hero-foreground: var(--foreground);
-  --hero-crest-glow: oklch(0.45 0.16 258 / 0.55);
-  --hero-crest-aura: oklch(0.5 0.15 258 / 0.28);
+  --hero-crest-glow: oklch(0.45 0.13 261.33 / 0.55);
+  --hero-crest-aura: oklch(0.5 0.12 261.33 / 0.28);
 }
 
 @theme inline {
@@ -106,6 +124,7 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-ink-on-primary: var(--ink-on-primary);
+  --color-logo-ink: var(--logo-ink);
   --color-hero: var(--hero);
   --color-hero-foreground: var(--hero-foreground);
   --color-border: var(--border);
@@ -224,7 +243,7 @@
     --muted-foreground: oklch(1 0 0 / 0.7);
     --border: oklch(1 0 0 / 0.18);
     --input: oklch(1 0 0 / 0.24);
-    --ring: oklch(0.78 0.14 244);
+    --ring: oklch(0.78 0.11 261.33);
     color: var(--foreground);
   }
 
@@ -1247,7 +1266,7 @@
     --popover-foreground: oklch(0.2 0.012 248);
     --muted: oklch(0.95 0.002 286);
     --muted-foreground: oklch(0.45 0.008 248);
-    --primary: oklch(0.52 0.16 245);
+    --primary: oklch(0.4691 0.133 261.33);
     --primary-foreground: oklch(1 0 0);
     --border: oklch(0.78 0.012 232);
     --brand: oklch(0.5 0.2 27.5);

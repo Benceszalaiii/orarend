@@ -10,7 +10,8 @@
     "lint": "biome check",
     "format": "biome format --write",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "brand:icons": "bun run scripts/brand-icons.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

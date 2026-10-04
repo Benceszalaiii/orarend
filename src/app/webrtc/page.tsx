@@ -6,7 +6,7 @@ import { WebrtcPage } from "./webrtc-client";
 //! suliban, és az kereséssel nem található meg. Ugyanez az elv, mint a
 //! `/kivetites`-nél.
 export const metadata: Metadata = {
-  title: "Képernyőmegosztás - Órarend",
+  title: "Képernyőmegosztás - Jedlik Info",
   description:
     "Képernyőmegosztás böngészőből, telepítés nélkül: a kép közvetlenül a két gép között megy, a szerver csak a kapcsolatot ismerteti össze.",
   robots: { index: false, follow: false },

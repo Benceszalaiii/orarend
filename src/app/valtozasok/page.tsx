@@ -4,8 +4,8 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
 
 export const metadata: Metadata = {
-  title: "Változások - Órarend",
-  description: "Mi változott az Órarendben, és mikor.",
+  title: "Változások - Jedlik Info",
+  description: "Mi változott a Jedlik Infóban, és mikor.",
 };
 
 //! ---------------------------------------------------------------------------
@@ -35,6 +35,16 @@ type Entry = {
 
 const ENTRIES: readonly Entry[] = [
   {
+    date: "2026-10-04",
+    title: "Új név és jel: Jedlik Info",
+    items: [
+      "Az oldal neve mostantól Jedlik Info. Az új jel a „ji”: a betűk az iskola címerének kékjét viselik, az i pontja a címer pirosát — ugyanazt a pirosat, ami az órarendben a „most”-ot jelöli.",
+      "Az oldal fő színe a címer kékje lett. A kék gombok felirata így világos és sötét témában is jól olvasható.",
+      "A kezdőképernyőre korábban kitett ikont az Android magától lecseréli; iPhone-on ehhez újra ki kell tenni.",
+      "A Jedlik Info továbbra is nem hivatalos, magánjellegű projekt, és nem azonos az iskola JedlikInfó portáljával.",
+    ],
+  },
+  {
     date: "2026-09-10",
     title: "Google-belépés — az iskolai jelszó kivezetése",
     items: [
@@ -50,7 +60,7 @@ const ENTRIES: readonly Entry[] = [
     items: [
       "A lap aljára került egy halvány sor, amiben egy helyen megvan minden, ami nem az órarend: ki készítette, mi változott, mit tárolunk, és hol a forráskód.",
       "A telepítés („tedd ki a kezdőképernyőre”) mostantól bármikor elindítható a láblécből — eddig csak az az egyszeri kártya kínálta, ami elsőre felugrott.",
-      "Az Órarend felvehető a Google keresés kedvenc forrásai közé.",
+      "A Jedlik Info felvehető a Google keresés kedvenc forrásai közé.",
     ],
   },
   {

@@ -7,7 +7,7 @@ import { AccessDenied } from "./_components/access-denied";
 import { type AdminUserRow, UserManager } from "./user-manager";
 
 export const metadata: Metadata = {
-  title: "Felhasználók – Órarend",
+  title: "Felhasználók – Jedlik Info",
   robots: { index: false, follow: false },
 };
 
