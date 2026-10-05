@@ -7,7 +7,7 @@ import { ClubFrame } from "../../szakkorok/_components/club-frame";
 import { ContestForm } from "../_components/contest-form";
 
 export const metadata: Metadata = {
-  title: "Új verseny - Órarend",
+  title: "Új verseny - Jedlik Info",
   robots: { index: false, follow: false },
 };
 

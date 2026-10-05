@@ -8,7 +8,7 @@ import { StatTile } from "../_components/stat-tile";
 import { type AdminContestRow, ContestManager } from "./contest-manager";
 
 export const metadata: Metadata = {
-  title: "Versenyek – Üzemeltetés – Órarend",
+  title: "Versenyek – Üzemeltetés – Jedlik Info",
   robots: { index: false, follow: false },
 };
 

@@ -9,7 +9,7 @@ import { ContestForm } from "../../_components/contest-form";
 import { ResultsEditor } from "./results-editor";
 
 export const metadata: Metadata = {
-  title: "Verseny szerkesztése - Órarend",
+  title: "Verseny szerkesztése - Jedlik Info",
   robots: { index: false, follow: false },
 };
 

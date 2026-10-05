@@ -52,7 +52,7 @@ export async function generateMetadata({
   //! „nincs", a böngészőfül viszont kiírná a szakkör nevét. A `resolveActor`
   //! kérésenként egyszer fut (`cache`), a lap ugyanazt kapja vissza.
   const generic = {
-    title: "Szakkör - Órarend",
+    title: "Szakkör - Jedlik Info",
     robots: { index: false },
   } satisfies Metadata;
   const actor = await resolveActor().catch(() => null);
@@ -60,7 +60,7 @@ export async function generateMetadata({
   const club = await getClubDetail(slug).catch(() => null);
   if (!club || !canSeeClub(actor, club)) return generic;
   return {
-    title: `${club.name} - Órarend`,
+    title: `${club.name} - Jedlik Info`,
     description: `${CLUB_KIND_LABELS[club.kind]} · ${audienceLabel(club)}`,
   };
 }

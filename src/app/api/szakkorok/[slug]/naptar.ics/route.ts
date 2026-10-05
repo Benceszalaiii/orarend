@@ -71,7 +71,7 @@ export async function GET(
 
   const body = buildIcs({
     name: club.name,
-    description: `${club.name} — a Jedlik szakköre az Órarendből. Az időpontokat hetente összevetjük az iskola órarendjével.`,
+    description: `${club.name} — a Jedlik szakköre a Jedlik Infóból. Az időpontokat hetente összevetjük az iskola órarendjével.`,
     events: clubFeedEvents(sessions),
     stamp: Date.now(),
     refreshMinutes: 360,

@@ -22,7 +22,7 @@ const PILL =
   "press inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 export const metadata: Metadata = {
-  title: "Szakkörök - Órarend",
+  title: "Szakkörök - Jedlik Info",
   description:
     "A Jedlik szakkörei, felkészítői és korrepetálásai: mikor, hol, kinek szólnak, és ki tartja őket.",
   alternates: { canonical: "https://jedlik.info/szakkorok" },

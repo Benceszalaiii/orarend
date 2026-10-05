@@ -21,7 +21,7 @@ import { ClubForm } from "../_components/club-form";
 import { ClubFrame } from "../_components/club-frame";
 
 export const metadata: Metadata = {
-  title: "Új szakkör - Órarend",
+  title: "Új szakkör - Jedlik Info",
   robots: { index: false, follow: false },
 };
 

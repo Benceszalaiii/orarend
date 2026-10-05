@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { BoardClock } from "./board-clock";
 
 export const metadata: Metadata = {
-  title: "Folyosói tábla - Órarend",
+  title: "Folyosói tábla - Jedlik Info",
   description:
     "A mai szakkörök termei és a közelgő nevezési határidők — az iskola kijelzőire.",
   robots: { index: false, follow: false },

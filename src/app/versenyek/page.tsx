@@ -14,7 +14,7 @@ import { toContestCard } from "./_components/contest-card";
 import { ContestsBrowser } from "./contests-browser";
 
 export const metadata: Metadata = {
-  title: "Versenyek - Órarend",
+  title: "Versenyek - Jedlik Info",
   description:
     "Versenyek a Jedlikben: kinek szólnak, mikor vannak, és meddig lehet nevezni.",
   alternates: { canonical: "https://jedlik.info/versenyek" },

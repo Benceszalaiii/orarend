@@ -38,7 +38,7 @@ export async function generateMetadata({
   //! piszkozatnál a 404 böngészőfülén sem állhat ott a verseny neve (lásd
   //! ugyanezt a szakkör lapján).
   const generic = {
-    title: "Verseny - Órarend",
+    title: "Verseny - Jedlik Info",
     robots: { index: false },
   } satisfies Metadata;
   const actor = await resolveActor().catch(() => null);
@@ -46,7 +46,7 @@ export async function generateMetadata({
   const c = await getCompetitionDetail(slug).catch(() => null);
   if (!c || !canSeeCompetition(actor, c)) return generic;
   return {
-    title: `${c.name} - Órarend`,
+    title: `${c.name} - Jedlik Info`,
     description: `${CATEGORY_LABELS[c.category]} · ${formatWhen(c.startsAt)}`,
   };
 }

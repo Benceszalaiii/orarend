@@ -24,7 +24,7 @@ export async function GET(
 
   const body = buildIcs({
     name: c.name,
-    description: `${c.name} — verseny a Jedlikben, az Órarendből. A határidő és a fordulók frissülnek, ha a szervező módosítja őket.`,
+    description: `${c.name} — verseny a Jedlikben, a Jedlik Infóból. A határidő és a fordulók frissülnek, ha a szervező módosítja őket.`,
     events: contestFeedEvents(c),
     stamp: Date.now(),
     refreshMinutes: 360,

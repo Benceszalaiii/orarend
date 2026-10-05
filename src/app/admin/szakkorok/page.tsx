@@ -13,7 +13,7 @@ import {
 } from "./club-moderation";
 
 export const metadata: Metadata = {
-  title: "Szakkörök – Üzemeltetés – Órarend",
+  title: "Szakkörök – Üzemeltetés – Jedlik Info",
   robots: { index: false, follow: false },
 };
 

@@ -206,7 +206,7 @@ export function ContestParticipation({
           ? "Szólunk három nappal és egy nappal a nevezési határidő előtt, meg a verseny előtti napon — délután négykor."
           : "Az emlékeztető szól három nappal és egy nappal a határidő előtt, meg a verseny előtti napon."}
         {support === "needs-install" &&
-          " Értesítést iPhone-on csak a kezdőképernyőre kitett Órarend kaphat."}
+          " Értesítést iPhone-on csak a kezdőképernyőre kitett Jedlik Info kaphat."}
       </p>
 
       {error && (

@@ -327,8 +327,8 @@ export default function AdatvedelemPage() {
               </span>
               , aki megnyitja a lapot. A tagságot a fiókodhoz kötve tároljuk.
               Kilépéskor a neved azonnal lekerül; a fiókod törlésével minden
-              tagságod megszűnik. Egy oda nem való jelentkezést az üzemeltető
-              is levehet.
+              tagságod megszűnik. Egy oda nem való jelentkezést az üzemeltető is
+              levehet.
             </p>
             <p>
               <span className="font-medium text-foreground">
@@ -407,8 +407,8 @@ export default function AdatvedelemPage() {
               . A felelős tanár a versenyhez helyezést, díjat és pontszámot
               rögzíthet; ezek akkor válnak nyilvánossá a verseny lapján, amikor
               a versenyt lezajlottnak jelöli. A határidőig vissza lehet lépni —
-              ilyenkor a neved lekerül, és vele a rögzített eredmény is. Egy oda nem
-              való nevezést az üzemeltető is törölhet.
+              ilyenkor a neved lekerül, és vele a rögzített eredmény is. Egy oda
+              nem való nevezést az üzemeltető is törölhet.
             </p>
             <p>
               A versenyek követése és az emlékeztetők ugyanúgy működnek, mint a

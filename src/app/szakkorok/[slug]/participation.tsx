@@ -206,7 +206,7 @@ export function Participation({ slug, loggedIn, isMember, canJoin }: Props) {
           ? `, és szólunk ${LEAD_MINUTES} perccel előtte, ha kiesik az órarendből, és ha új bejegyzés kerül a hírfolyamra.`
           : "."}
         {support === "needs-install" &&
-          " Értesítést iPhone-on csak a kezdőképernyőre kitett Órarend kaphat."}
+          " Értesítést iPhone-on csak a kezdőképernyőre kitett Jedlik Info kaphat."}
       </p>
 
       {error && (
@@ -223,7 +223,7 @@ function notifyError(reason: string): string {
     case "denied":
       return "A böngésző nem engedélyezte az értesítéseket. A lap beállításai közt (a címsor melletti ikon) lehet visszavonni a tiltást.";
     case "no-worker":
-      return "Az engedély megvan, de az Órarend háttérszolgáltatása nem indult el. Tölts újra a lapot, és próbáld újra.";
+      return "Az engedély megvan, de a Jedlik Info háttérszolgáltatása nem indult el. Tölts újra a lapot, és próbáld újra.";
     case "misconfigured":
       return "Az értesítések ezen a kiszolgálón nincsenek beállítva. Ez nem a te böngésződön múlik.";
     case "unsupported":

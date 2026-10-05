@@ -89,11 +89,8 @@ Nyisd meg: [http://localhost:3000](http://localhost:3000). A `/` átirányít az
 | `bun start` | Az éles build kiszolgálása |
 | `bun run lint` | `biome check` |
 | `bun run format` | `biome format --write` |
-<<<<<<< HEAD
 | `bun run db:seed:clubs` | A kezdő szakkörlista betöltése (`--check`: csak ellenőriz) |
-=======
 | `bun run brand:icons` | A teljes ikonkészlet újrarajzolása a jelből (`src/lib/brand-mark.ts`) |
->>>>>>> ffb9fc2 (feat: rebrand as Jedlik Info with the ji mark (JDLK-25))
 
 ## Honnan jönnek az adatok
 
@@ -332,7 +329,6 @@ változásokról továbbra is a push-értesítés szól időben.
 Redis nélkül a funkció `503`-at ad, és a felületen sem ígér semmit — ugyanaz a
 szabály, mint az értesítéseknél.
 
-<<<<<<< HEAD
 ## Szakkörök
 
 A szakkörök **nagy része már benne van a Jedlikinfóban** — a terem és a tanár
@@ -428,7 +424,7 @@ megkérdezik (`canBrowseClubs`), a nyitólap „Frissen a sütőből" sávja, a
 `/valtozasok` és a `sitemap.xml` pedig csak `1` mellett említi a két részt.
 Ha az adatbázis nem válaszol, a két rész saját hibalapot ad újrapróbálással
 (`szakkorok/error.tsx`, `versenyek/error.tsx`), nem a Next alapértelmezettjét.
-=======
+
 ## Arculat
 
 A jel a **„ji"** (Jedlik Info) két kisbetűje: egyenes szárak, kerek pontok. A
@@ -449,7 +445,6 @@ Magyarul a pont pont, a pontos pedig az, aki időben ott van.
   vízszintes logó és a megosztási kép forrása. A logó és a megosztási kép a
   „Jedlik Info" szót Geist-körvonalként hordozza; ha a szó változik, ezeket
   kézzel kell újrarajzolni, a szkript csak raszterizálja őket.
->>>>>>> ffb9fc2 (feat: rebrand as Jedlik Info with the ji mark (JDLK-25))
 
 ## Felépítés
 

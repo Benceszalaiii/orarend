@@ -49,12 +49,6 @@ const CLUB_ITEMS: readonly string[] = clubsLaunched()
 
 const ENTRIES: readonly Entry[] = [
   {
-<<<<<<< HEAD
-    date: "2026-10-03",
-    title: clubsLaunched()
-      ? "Szakkörök, versenyek és tantárgyak"
-      : "Tantárgyak és bontott órák",
-=======
     date: "2026-10-04",
     title: "Új név és jel: Jedlik Info",
     items: [
@@ -65,9 +59,10 @@ const ENTRIES: readonly Entry[] = [
     ],
   },
   {
-    date: "2026-09-10",
-    title: "Google-belépés — az iskolai jelszó kivezetése",
->>>>>>> ffb9fc2 (feat: rebrand as Jedlik Info with the ji mark (JDLK-25))
+    date: "2026-10-03",
+    title: clubsLaunched()
+      ? "Szakkörök, versenyek és tantárgyak"
+      : "Tantárgyak és bontott órák",
     items: [
       ...CLUB_ITEMS,
       "Tantárgyak (/tantargyak): tárgyanként ki tanítja, és melyik osztálynak, linkkel a tanár és az osztály órarendjére. Ékezet nélkül is keres.",
