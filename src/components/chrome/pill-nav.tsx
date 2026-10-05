@@ -10,6 +10,7 @@ import {
   animate,
   type MotionValue,
   motion,
+  motionValue,
   useMotionValue,
   useReducedMotion,
 } from "motion/react";
@@ -29,6 +30,12 @@ import {
   useSyncExternalStore,
 } from "react";
 import { launchFlood, registerPillNav } from "@/components/chrome/flood";
+import {
+  HIDDEN,
+  inkClips,
+  SHOWN,
+  type Span,
+} from "@/components/chrome/ink-clip";
 import {
   type PanelId,
   placeOf,
@@ -225,8 +232,79 @@ function readHandoff(): Handoff | null {
   return performance.now() - lastUnmountAt < HANDOFF_TTL ? handoff : null;
 }
 
-type Remnant = { id: number; l: number; r: number; dir: number; blob: string };
+//! ─── A LESZAKADÓ CSEPP ────────────────────────────────────────────────────
+//! A méretét mozgásértékek hordozzák, nem egy `animate` prop: így a feliratok
+//! tintája tudja, hol takar még (`spill`), és egy lapváltás közben leszerelődő
+//! váltó a félúton járó cseppet is át tudja adni (`carried`).
+type Remnant = {
+  id: number;
+  l: number;
+  r: number;
+  dir: number;
+  blob: string;
+  sx: MotionValue<number>;
+  sy: MotionValue<number>;
+  /** A teljes leszakadásból hátralévő rész (átvett cseppnél kevesebb, mint 1). */
+  rest: number;
+  endsAt: number;
+};
 let remnantSeq = 0;
+const REMNANT = { duration: 0.38, ease: [0.45, 0, 0.7, 0.5] } as const;
+//* Ennél laposabb csepp már nem takarja a betűk magasságát — ott a felirat
+//* újra a tok színével ír.
+const SPILL_MIN = 0.5;
+
+function newRemnant(
+  rm: { l: number; r: number; dir: number; blob: string },
+  from?: { sx: number; sy: number; rest: number },
+): Remnant {
+  return {
+    id: ++remnantSeq,
+    ...rm,
+    sx: motionValue(from?.sx ?? 1),
+    sy: motionValue(from?.sy ?? 1),
+    rest: from?.rest ?? 1,
+    endsAt: Number.POSITIVE_INFINITY,
+  };
+}
+
+//! ─── A MOZGÁS IS ÁTADÓDIK, NEM CSAK A CÉL ─────────────────────────────────
+//! Egy lapváltás néha KÉT újraszerelést jelent: a `loading.tsx` saját
+//! váltóval áll fel, és pár száz ezredmásodperc múlva a kész lap váltója
+//! váltja le. A második a jegyzetből (`handoff`) csak azt látta, hogy a
+//! folyadék MÁR a „Versenyen" áll — és odaugrott, a félúton járó áramlás
+//! helyett. Ezért a mozgás közben leszerelődő váltó a folyadék ÉLŐ helyét,
+//! sebességét és a cseppjeit hagyja hátra; a következő onnan folytatja.
+//*
+//! A React egy véglegesítésben előbb a régi takarítását futtatja, aztán az új
+//! effektjeit, tehát a jegyzet mindig időben ott van — és csak röviden él.
+type Carried = {
+  order: string;
+  l: number;
+  r: number;
+  vl: number;
+  vr: number;
+  at: number;
+  remnants: {
+    l: number;
+    r: number;
+    dir: number;
+    blob: string;
+    sx: number;
+    sy: number;
+    rest: number;
+  }[];
+};
+let carried: Carried | null = null;
+const CARRY_TTL = 250;
+
+function takeCarried(order: string): Carried | null {
+  const c = carried;
+  carried = null;
+  if (!c || c.order !== order || performance.now() - c.at > CARRY_TTL)
+    return null;
+  return c;
+}
 
 type Rect = { l: number; r: number };
 
@@ -249,6 +327,10 @@ type LiquidLayerProps = {
   restExtra: number;
   /** A buborékból kiöntött csepp (lásd `pour.ts`) — az első elhelyezés ebből terül szét. */
   seed?: Pour | null;
+  /** A leszakadó cseppek takarta sáv — a feliratok tintája ezt is kivágja. */
+  spill?: readonly [MotionValue<number>, MotionValue<number>];
+  /** Lapváltáskor a félúton járó mozgást is átadja (lásd `carried`). */
+  carry?: boolean;
 };
 
 function LiquidLayer({
@@ -266,6 +348,8 @@ function LiquidLayer({
   right: sharedRight,
   restExtra,
   seed,
+  spill,
+  carry = false,
 }: LiquidLayerProps) {
   const reduced = useReducedMotion() ?? false;
   const layerRef = useRef<HTMLDivElement>(null);
@@ -384,7 +468,7 @@ function LiquidLayer({
         order.indexOf(activeKey) - order.indexOf(fromKey ?? activeKey),
       );
       setRemnants([
-        { id: ++remnantSeq, ...from, dir, blob: fromBlob ?? blobRef.current },
+        newRemnant({ ...from, dir, blob: fromBlob ?? blobRef.current }),
       ]);
       seed.arrived.then(() => {
         t.holding = false;
@@ -400,6 +484,26 @@ function LiquidLayer({
 
     if (!t.placed) {
       t.placed = true;
+      //* Az előző váltó mozgás közben szerelődött le: onnan folytatja, ahol
+      //* a folyadék ÉPP JÁRT, ugyanazzal a lendülettel.
+      const live = carry && !reduced ? takeCarried(order.join()) : null;
+      if (live) {
+        left.jump(live.l);
+        right.jump(live.r);
+        const shift = (l + r) / 2 - (live.l + live.r) / 2;
+        t.dir = Math.abs(shift) < 1 ? 0 : Math.sign(shift);
+        t.dirUntil = performance.now() + 700;
+        setRemnants(
+          live.remnants.map(({ sx, sy, rest, ...rm }) =>
+            newRemnant(rm, { sx, sy, rest }),
+          ),
+        );
+        const springOf = (lead: boolean) =>
+          t.dir === 0 ? EVEN : t.dir > 0 === lead ? LEAD : TRAIL;
+        animate(left, l, { ...springOf(false), velocity: live.vl });
+        animate(right, r, { ...springOf(true), velocity: live.vr });
+        return;
+      }
       const from =
         fromKey && fromKey !== activeKey && !reduced ? rectOf(fromKey) : null;
       if (!from || !fromKey) {
@@ -414,7 +518,7 @@ function LiquidLayer({
       t.dir = dir;
       t.dirUntil = performance.now() + 700;
       setRemnants([
-        { id: ++remnantSeq, ...from, dir, blob: fromBlob ?? blobRef.current },
+        newRemnant({ ...from, dir, blob: fromBlob ?? blobRef.current }),
       ]);
     } else if (reduced) {
       left.jump(l);
@@ -429,6 +533,7 @@ function LiquidLayer({
     fromKey,
     fromBlob,
     seed,
+    carry,
     hoverKey,
     reduced,
     order,
@@ -452,9 +557,78 @@ function LiquidLayer({
     t.dirUntil = performance.now() + 700;
     setRemnants((prev) => [
       ...prev,
-      { id: ++remnantSeq, l: from.l, r: from.r, dir, blob: blobRef.current },
+      newRemnant({ l: from.l, r: from.r, dir, blob: blobRef.current }),
     ]);
   }, [activeKey, order, reduced]);
+
+  const dropRemnant = useCallback(
+    (id: number) => setRemnants((prev) => prev.filter((x) => x.id !== id)),
+    [],
+  );
+
+  //* A még elég magas cseppek sávja — ezt a feliratok tintája is kivágja.
+  useEffect(() => {
+    if (!spill) return;
+    const [spillL, spillR] = spill;
+    const update = () => {
+      let a = Number.POSITIVE_INFINITY;
+      let b = Number.NEGATIVE_INFINITY;
+      for (const rm of remnants) {
+        if (rm.sy.get() < SPILL_MIN) continue;
+        const w = (rm.r - rm.l) * rm.sx.get();
+        const l = rm.dir > 0 ? rm.r - w : rm.l;
+        a = Math.min(a, l);
+        b = Math.max(b, l + w);
+      }
+      spillL.set(a < b ? a : 0);
+      spillR.set(a < b ? b : 0);
+    };
+    update();
+    const subs = remnants.flatMap((rm) => [
+      rm.sx.on("change", update),
+      rm.sy.on("change", update),
+    ]);
+    return () => {
+      for (const unsub of subs) unsub();
+    };
+  }, [remnants, spill]);
+
+  //* Leszereléskor, ha a folyadék épp úton van, az élő állapotát hátrahagyja
+  //* (lásd `carried`). Csak a leszerelés számít, ezért minden ref-ből olvas.
+  const remnantsRef = useRef(remnants);
+  const orderRef = useRef(order);
+  useLayoutEffect(() => {
+    remnantsRef.current = remnants;
+    orderRef.current = order;
+  }, [remnants, order]);
+  useLayoutEffect(() => {
+    if (!carry) return;
+    return () => {
+      const list = remnantsRef.current;
+      if (!track.current.placed) return;
+      if (!left.isAnimating() && !right.isAnimating() && list.length === 0)
+        return;
+      const now = performance.now();
+      const full = REMNANT.duration * 1000;
+      carried = {
+        order: orderRef.current.join(),
+        l: left.get(),
+        r: right.get(),
+        vl: left.getVelocity(),
+        vr: right.getVelocity(),
+        at: now,
+        remnants: list.map((rm) => ({
+          l: rm.l,
+          r: rm.r,
+          dir: rm.dir,
+          blob: rm.blob,
+          sx: rm.sx.get(),
+          sy: rm.sy.get(),
+          rest: Math.min(1, Math.max(0.1, (rm.endsAt - now) / full)),
+        })),
+      };
+    };
+  }, [carry, left, right]);
 
   const syncRef = useRef(sync);
   useEffect(() => {
@@ -476,31 +650,65 @@ function LiquidLayer({
     return () => ro.disconnect();
   }, [order, itemsRef]);
 
+  //! SAJÁT KOMPOZITOR-RÉTEG (mint a `places-panel.tsx` `LAYER`-je). A Safari a
+  //! szűrt réteget foltokban rajzolta újra, és a mozgó folyadék régi peremét
+  //! nem törölte: a tok tetején és alján vékony fehér csíkok maradtak ott,
+  //! ahonnan a folyadék elindult. Saját rétegen mindig egészében rajzolódik.
   return (
     <div
       ref={layerRef}
       aria-hidden
       className="pointer-events-none absolute inset-0"
-      style={{ filter: `url(#${filterId}) ${shadow}` }}
+      style={{
+        filter: `url(#${filterId}) ${shadow}`,
+        willChange: "transform",
+        transform: "translateZ(0)",
+      }}
     >
       {remnants.map((rm) => (
-        <motion.div
-          key={rm.id}
-          className={cn("absolute top-0 left-0 h-full rounded-full", rm.blob)}
-          style={{ x: rm.l, width: rm.r - rm.l, originX: rm.dir > 0 ? 1 : 0 }}
-          initial={{ scaleX: 1, scaleY: 1 }}
-          animate={{ scaleX: 0.15, scaleY: 0.3 }}
-          transition={{ duration: 0.38, ease: [0.45, 0, 0.7, 0.5] }}
-          onAnimationComplete={() =>
-            setRemnants((prev) => prev.filter((x) => x.id !== rm.id))
-          }
-        />
+        <RemnantDrop key={rm.id} rm={rm} onDone={dropRemnant} />
       ))}
       <motion.div
         className={cn("absolute top-0 left-0 h-full rounded-full", blob)}
         style={{ x: left, width, scaleY }}
       />
     </div>
+  );
+}
+
+function RemnantDrop({
+  rm,
+  onDone,
+}: {
+  rm: Remnant;
+  onDone: (id: number) => void;
+}) {
+  useEffect(() => {
+    const duration = REMNANT.duration * rm.rest;
+    rm.endsAt = performance.now() + duration * 1000;
+    const runs = [
+      animate(rm.sx, 0.15, { ...REMNANT, duration }),
+      animate(rm.sy, 0.3, { ...REMNANT, duration }),
+    ];
+    let alive = true;
+    runs[1].then(() => alive && onDone(rm.id));
+    return () => {
+      alive = false;
+      for (const run of runs) run.stop();
+    };
+  }, [rm, onDone]);
+
+  return (
+    <motion.div
+      className={cn("absolute top-0 left-0 h-full rounded-full", rm.blob)}
+      style={{
+        x: rm.l,
+        width: rm.r - rm.l,
+        originX: rm.dir > 0 ? 1 : 0,
+        scaleX: rm.sx,
+        scaleY: rm.sy,
+      }}
+    />
   );
 }
 
@@ -783,14 +991,16 @@ function RollingWord({
 //! transzformáció-animációk, saját rétegre emelve), a Safari — és néha a
 //! Chrome is — elengedi a keverést, és a felirat nyers fehérként ül a fehér
 //! folyadékon. A vágás nem keverés, hanem geometria: nincs mit elengedni.
-const HIDDEN = "inset(0 100% 0 0)";
-const SHOWN = "none";
-
+//*
+//! A LESZAKADÓ CSEPP IS TAKAR (`spill`). Amíg csak a fő test két éle számított,
+//! a régi cella felirata a csepp alatt fehérrel írt a fehérre, és a betűi
+//! egyenként „leestek" (lásd `ink-clip.ts`).
 function InkLabel({
   label,
   rowRef,
   left,
   right,
+  spill,
   liquid,
   follow,
   className,
@@ -799,6 +1009,7 @@ function InkLabel({
   rowRef: RefObject<HTMLDivElement | null>;
   left: MotionValue<number>;
   right: MotionValue<number>;
+  spill?: readonly [MotionValue<number>, MotionValue<number>];
   liquid: boolean;
   /** Az elemet mozgató értékek (pl. a repülő ikoné) — a vágás ezekkel is újraszámol. */
   follow?: readonly MotionValue<number>[];
@@ -820,25 +1031,15 @@ function InkLabel({
       if (!el || !row) return;
       const x =
         el.getBoundingClientRect().left - row.getBoundingClientRect().left;
-      const w = el.offsetWidth;
-      //* A takart sáv a felirat saját koordinátáiban, [0, w]-re szorítva.
-      const cl = Math.min(w, Math.max(0, left.get() - x));
-      const cr = Math.min(w, Math.max(0, right.get() - x));
-      if (cr - cl < 0.5) {
-        inkClip.set(HIDDEN);
-        baseClip.set(SHOWN);
-        return;
-      }
-      //* Függőlegesen túlnyúlik, hogy az ékezetet és az alsó szárat ne vágja.
-      inkClip.set(`inset(-6px ${w - cr}px -6px ${cl}px)`);
-      baseClip.set(
-        cl <= 0 && cr >= w
-          ? HIDDEN
-          : `polygon(evenodd, -6px -6px, ${w + 6}px -6px, ${w + 6}px calc(100% + 6px), -6px calc(100% + 6px), -6px -6px, ${cl}px -6px, ${cl}px calc(100% + 6px), ${cr}px calc(100% + 6px), ${cr}px -6px, ${cl}px -6px)`,
-      );
+      //* A takart sávok a felirat saját koordinátáiban.
+      const spans: Span[] = [[left.get() - x, right.get() - x]];
+      if (spill) spans.push([spill[0].get() - x, spill[1].get() - x]);
+      const { ink, base } = inkClips(el.offsetWidth, el.offsetHeight, spans);
+      inkClip.set(ink);
+      baseClip.set(base);
     };
     update();
-    const subs = [left, right, ...(follow ?? [])].map((mv) =>
+    const subs = [left, right, ...(spill ?? []), ...(follow ?? [])].map((mv) =>
       mv.on("change", update),
     );
     //* A sor átméreteződése (nyíló-csukódó alany) a feliratot is odébb tolja.
@@ -848,7 +1049,7 @@ function InkLabel({
       for (const unsub of subs) unsub();
       ro.disconnect();
     };
-  }, [liquid, left, right, follow, rowRef, inkClip, baseClip]);
+  }, [liquid, left, right, spill, follow, rowRef, inkClip, baseClip]);
 
   return (
     <span ref={ref} className="relative flex">
@@ -925,6 +1126,9 @@ export function PillNav({
   const press = useMotionValue(1);
   const liquidLeft = useMotionValue(0);
   const liquidRight = useMotionValue(0);
+  const spillLeft = useMotionValue(0);
+  const spillRight = useMotionValue(0);
+  const [spill] = useState(() => [spillLeft, spillRight] as const);
   const navRef = useRef<HTMLElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -1161,156 +1365,156 @@ export function PillNav({
         className,
       )}
     >
-      {/*//! A TOKENEK FORDÍTÓJA (lásd `flood.ts` és `globals.css`). Doboza
-          //! nincs (`contents`), csak a két színt cseréli meg az áradás alatt. */}
-      <div data-pn-ink className="contents">
-        <GooFilter id={filterId} />
-        {activeView && (
-          <div className="pointer-events-none absolute inset-1">
-            <LiquidLayer
-              order={VIEW_KEYS[axis]}
-              activeKey={activeView}
-              fromKey={fromView}
-              hoverKey={hoverView}
-              itemsRef={itemsRef}
-              filterId={filterId}
-              blob="bg-foreground"
-              shadow="drop-shadow(0 2px 4px oklch(0 0 0 / 0.3))"
-              press={press}
-              left={liquidLeft}
-              right={liquidRight}
-              restExtra={6}
-              seed={pour}
-            />
-          </div>
-        )}
-        <div ref={rowRef} className="relative flex items-stretch">
-          {AXES[axis].map(({ id, label, title }, slot) => {
-            const active = id === activeView;
-            const wasActive = fromView ? id === fromView : active;
-            const href = hrefOf(id);
-            //* Egy szakkör adatlapján a cella aktív, de nem ITT vagy: a
-            //* koppintás visszavisz a listára.
-            const here = pathname === href;
-            return (
-              <div
-                key={id}
-                ref={(el) => {
-                  if (el) itemsRef.current.set(id, el);
-                  else itemsRef.current.delete(id);
+      <GooFilter id={filterId} />
+      {activeView && (
+        <div className="pointer-events-none absolute inset-1">
+          <LiquidLayer
+            order={VIEW_KEYS[axis]}
+            activeKey={activeView}
+            fromKey={fromView}
+            hoverKey={hoverView}
+            itemsRef={itemsRef}
+            filterId={filterId}
+            blob="bg-foreground"
+            shadow="drop-shadow(0 2px 4px oklch(0 0 0 / 0.3))"
+            press={press}
+            left={liquidLeft}
+            right={liquidRight}
+            restExtra={6}
+            seed={pour}
+            spill={spill}
+            carry
+          />
+        </div>
+      )}
+      <div ref={rowRef} className="relative flex items-stretch">
+        {AXES[axis].map(({ id, label, title }, slot) => {
+          const active = id === activeView;
+          const wasActive = fromView ? id === fromView : active;
+          const href = hrefOf(id);
+          //* Egy szakkör adatlapján a cella aktív, de nem ITT vagy: a
+          //* koppintás visszavisz a listára.
+          const here = pathname === href;
+          return (
+            <div
+              key={id}
+              ref={(el) => {
+                if (el) itemsRef.current.set(id, el);
+                else itemsRef.current.delete(id);
+              }}
+              data-pn-cell={id}
+              data-active={active || undefined}
+              data-liquid-rest={roles ? undefined : ""}
+              className="relative flex items-center"
+            >
+              <Link
+                href={href}
+                title={title}
+                aria-current={here ? "page" : active ? "true" : undefined}
+                onClick={(e) => {
+                  //! A FOLYADÉK ELÖNTI A LAPOT, ÉS CSAK VÍZ ALATT VÁLT (lásd
+                  //! `flood.ts`). Új lapra nyitás és módosított kattintás
+                  //! marad a böngészőé.
+                  const nav = navRef.current;
+                  const cell = e.currentTarget.parentElement;
+                  if (
+                    here ||
+                    !nav ||
+                    !cell ||
+                    e.button !== 0 ||
+                    e.metaKey ||
+                    e.ctrlKey ||
+                    e.shiftKey ||
+                    e.altKey
+                  )
+                    return;
+                  const href = e.currentTarget.getAttribute("href");
+                  if (
+                    href &&
+                    launchFlood({
+                      nav,
+                      cell,
+                      label,
+                      navigate: () => router.push(href),
+                    })
+                  )
+                    e.preventDefault();
                 }}
-                data-pn-cell={id}
-                data-active={active || undefined}
-                data-liquid-rest={roles ? undefined : ""}
-                className="relative flex items-center"
+                onPointerEnter={(e) =>
+                  e.pointerType === "mouse" && setHoverView(id)
+                }
+                onPointerLeave={() => setHoverView(null)}
+                className={cn(
+                  "group relative flex h-full items-center rounded-full pr-2 pl-3 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3.5",
+                  "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  here && "cursor-default",
+                )}
               >
-                <Link
-                  href={href}
-                  title={title}
-                  aria-current={here ? "page" : active ? "true" : undefined}
-                  onClick={(e) => {
-                    //! A FOLYADÉK ELÖNTI A LAPOT, ÉS CSAK VÍZ ALATT VÁLT (lásd
-                    //! `flood.ts`). Új lapra nyitás és módosított kattintás
-                    //! marad a böngészőé.
-                    const nav = navRef.current;
-                    const cell = e.currentTarget.parentElement;
-                    if (
-                      here ||
-                      !nav ||
-                      !cell ||
-                      e.button !== 0 ||
-                      e.metaKey ||
-                      e.ctrlKey ||
-                      e.shiftKey ||
-                      e.altKey
-                    )
-                      return;
-                    const href = e.currentTarget.getAttribute("href");
-                    if (
-                      href &&
-                      launchFlood({
-                        nav,
-                        cell,
-                        label,
-                        navigate: () => router.push(href),
-                      })
-                    )
-                      e.preventDefault();
-                  }}
-                  onPointerEnter={(e) =>
-                    e.pointerType === "mouse" && setHoverView(id)
-                  }
-                  onPointerLeave={() => setHoverView(null)}
-                  className={cn(
-                    "group relative flex h-full items-center rounded-full pr-2 pl-3 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3.5",
-                    "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
-                    here && "cursor-default",
-                  )}
-                >
-                  <InkLabel
-                    label={
-                      <RollingWord
-                        word={label}
-                        from={fromLabels?.[slot].label ?? null}
-                        delay={slot * 0.06}
-                      />
-                    }
-                    rowRef={rowRef}
-                    left={liquidLeft}
-                    right={liquidRight}
-                    liquid={Boolean(activeView)}
-                    className={cn(
-                      "transition-opacity duration-200 motion-reduce:transition-none",
-                      //! SÖTÉT TOKON A TELJES FEHÉR KIABÁL. A rámutatás ott
-                      //! csak halkan erősödhet; világos tokon a teljes erő marad.
-                      idleInk(active),
-                    )}
-                  />
-                </Link>
-                <motion.div
-                  //! A TENGELY ÁTFORDULÁSAKOR AZ ALANYVÁLTÓ BECSUKÓDIK, NEM
-                  //! ELTŰNIK. Az új váltó ott nyitva kezdi, ahol a régin
-                  //! nyitva állt, és a szakkörök tengelyén összecsukódik.
-                  initial={
-                    fromView || fromLabels
-                      ? {
-                          width: wasActive && rolesWere ? "auto" : 6,
-                          opacity: wasActive && rolesWere ? 1 : 0,
-                        }
-                      : false
-                  }
-                  animate={{
-                    width: active && roles ? "auto" : 6,
-                    opacity: active && roles ? 1 : 0,
-                  }}
-                  transition={
-                    reduced
-                      ? INSTANT
-                      : {
-                          width: COLLAPSE,
-                          opacity:
-                            active && roles
-                              ? { duration: 0.22, delay: 0.14 }
-                              : { duration: 0.1 },
-                        }
-                  }
-                  className="flex h-full items-center [overflow-x:clip]"
-                >
-                  <div data-liquid-extra className="shrink-0 pr-1">
-                    <RoleToggle
-                      role={identity}
-                      fromRole={fromRole}
-                      onToggle={pickIdentity}
-                      filterId={filterId}
-                      hidden={!(active && roles)}
+                <InkLabel
+                  label={
+                    <RollingWord
+                      word={label}
+                      from={fromLabels?.[slot].label ?? null}
+                      delay={slot * 0.06}
                     />
-                  </div>
-                </motion.div>
-              </div>
-            );
-          })}
+                  }
+                  rowRef={rowRef}
+                  left={liquidLeft}
+                  right={liquidRight}
+                  spill={spill}
+                  liquid={Boolean(activeView)}
+                  className={cn(
+                    "transition-opacity duration-200 motion-reduce:transition-none",
+                    //! SÖTÉT TOKON A TELJES FEHÉR KIABÁL. A rámutatás ott
+                    //! csak halkan erősödhet; világos tokon a teljes erő marad.
+                    idleInk(active),
+                  )}
+                />
+              </Link>
+              <motion.div
+                //! A TENGELY ÁTFORDULÁSAKOR AZ ALANYVÁLTÓ BECSUKÓDIK, NEM
+                //! ELTŰNIK. Az új váltó ott nyitva kezdi, ahol a régin
+                //! nyitva állt, és a szakkörök tengelyén összecsukódik.
+                initial={
+                  fromView || fromLabels
+                    ? {
+                        width: wasActive && rolesWere ? "auto" : 6,
+                        opacity: wasActive && rolesWere ? 1 : 0,
+                      }
+                    : false
+                }
+                animate={{
+                  width: active && roles ? "auto" : 6,
+                  opacity: active && roles ? 1 : 0,
+                }}
+                transition={
+                  reduced
+                    ? INSTANT
+                    : {
+                        width: COLLAPSE,
+                        opacity:
+                          active && roles
+                            ? { duration: 0.22, delay: 0.14 }
+                            : { duration: 0.1 },
+                      }
+                }
+                className="flex h-full items-center [overflow-x:clip]"
+              >
+                <div data-liquid-extra className="shrink-0 pr-1">
+                  <RoleToggle
+                    role={identity}
+                    fromRole={fromRole}
+                    onToggle={pickIdentity}
+                    filterId={filterId}
+                    hidden={!(active && roles)}
+                  />
+                </div>
+              </motion.div>
+            </div>
+          );
+        })}
 
-          {/*//! ─── A HELYEK CELLÁJA ─────────────────────────────────────────
+        {/*//! ─── A HELYEK CELLÁJA ─────────────────────────────────────────
             //! Egy gomb, nem négy. Inaktívan egy iránytű: „innen máshová is
             //! mehetsz". Ha egy helyen állsz, a folyadék ide folyik át, az
             //! iránytű helyén a hely SAJÁT ikonja áll, és `sm`-től a neve is —
@@ -1319,108 +1523,109 @@ export function PillNav({
             //! A GOMB NYITVA IS GOMB MARAD. Újra megnyomva becsukja a
             //! buborékot; a folyadék közben nem mozdul, mert a hely, ahol
             //! állsz, nem változott. */}
-          <div
-            ref={(el) => {
-              if (el) itemsRef.current.set("places", el);
-              else itemsRef.current.delete("places");
-            }}
-            data-pn-cell="places"
-            data-active={placesActive || undefined}
-            className="relative flex items-center"
+        <div
+          ref={(el) => {
+            if (el) itemsRef.current.set("places", el);
+            else itemsRef.current.delete("places");
+          }}
+          data-pn-cell="places"
+          data-active={placesActive || undefined}
+          className="relative flex items-center"
+        >
+          <button
+            ref={triggerRef}
+            type="button"
+            aria-expanded={placesOpen}
+            aria-controls={placesOpen ? panelId : undefined}
+            aria-label={
+              cellPlace ? `Helyek — most: ${cellPlace.label}` : "Helyek"
+            }
+            title={placesTitle}
+            onClick={() => setPlacesOpen((v) => !v)}
+            onPointerEnter={(e) =>
+              e.pointerType === "mouse" && setHoverView("places")
+            }
+            onPointerLeave={() => setHoverView(null)}
+            className={cn(
+              "group relative flex h-full cursor-pointer items-center rounded-full pr-1 pl-2.5 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3",
+              "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
+            )}
           >
-            <button
-              ref={triggerRef}
-              type="button"
-              aria-expanded={placesOpen}
-              aria-controls={placesOpen ? panelId : undefined}
-              aria-label={
-                cellPlace ? `Helyek — most: ${cellPlace.label}` : "Helyek"
-              }
-              title={placesTitle}
-              onClick={() => setPlacesOpen((v) => !v)}
-              onPointerEnter={(e) =>
-                e.pointerType === "mouse" && setHoverView("places")
-              }
-              onPointerLeave={() => setHoverView(null)}
-              className={cn(
-                "group relative flex h-full cursor-pointer items-center rounded-full pr-1 pl-2.5 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3",
-                "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
-              )}
+            <motion.span
+              ref={iconRef}
+              className="relative flex"
+              style={{
+                x: flyX,
+                y: flyY,
+                scale: flyScale,
+                opacity: flyOpacity,
+              }}
             >
-              <motion.span
-                ref={iconRef}
-                className="relative flex"
-                style={{
-                  x: flyX,
-                  y: flyY,
-                  scale: flyScale,
-                  opacity: flyOpacity,
-                }}
-              >
-                <InkLabel
-                  label={
-                    <motion.span
-                      key={cellPlace?.id ?? "compass"}
-                      className="flex"
-                      initial={false}
-                      animate={{
-                        rotate: placesOpen && !placesActive ? 135 : 0,
-                      }}
-                      transition={reduced ? INSTANT : ROLL}
-                    >
-                      <PlaceIcon className="size-4" strokeWidth={2.25} />
-                    </motion.span>
-                  }
-                  rowRef={rowRef}
-                  left={liquidLeft}
-                  right={liquidRight}
-                  liquid={Boolean(activeView)}
-                  follow={flyFollow}
-                  className={cn(
-                    "transition-opacity duration-200 motion-reduce:transition-none",
-                    idleInk(placesActive || placesOpen),
-                  )}
-                />
-              </motion.span>
-              <motion.span
-                initial={
-                  fromView
-                    ? {
-                        width: placesWasActive ? "auto" : 6,
-                        opacity: placesWasActive ? 1 : 0,
-                      }
-                    : false
+              <InkLabel
+                label={
+                  <motion.span
+                    key={cellPlace?.id ?? "compass"}
+                    className="flex"
+                    initial={false}
+                    animate={{
+                      rotate: placesOpen && !placesActive ? 135 : 0,
+                    }}
+                    transition={reduced ? INSTANT : ROLL}
+                  >
+                    <PlaceIcon className="size-4" strokeWidth={2.25} />
+                  </motion.span>
                 }
-                animate={{
-                  width: placesActive ? "auto" : 6,
-                  opacity: placesActive ? 1 : 0,
-                }}
-                transition={
-                  reduced
-                    ? INSTANT
-                    : {
-                        width: COLLAPSE,
-                        opacity: placesActive
-                          ? { duration: 0.22, delay: 0.14 }
-                          : { duration: 0.1 },
-                      }
-                }
-                className="flex h-full items-center [overflow-x:clip]"
-              >
-                <span data-liquid-extra className="block w-max min-w-1.5">
-                  <span className="block pr-1.5 pl-1.5 max-sm:hidden">
-                    <InkLabel
-                      label={cellPlace?.label ?? ""}
-                      rowRef={rowRef}
-                      left={liquidLeft}
-                      right={liquidRight}
-                      liquid={placesActive}
-                    />
-                  </span>
+                rowRef={rowRef}
+                left={liquidLeft}
+                right={liquidRight}
+                spill={spill}
+                liquid={Boolean(activeView)}
+                follow={flyFollow}
+                className={cn(
+                  "transition-opacity duration-200 motion-reduce:transition-none",
+                  idleInk(placesActive || placesOpen),
+                )}
+              />
+            </motion.span>
+            <motion.span
+              initial={
+                fromView
+                  ? {
+                      width: placesWasActive ? "auto" : 6,
+                      opacity: placesWasActive ? 1 : 0,
+                    }
+                  : false
+              }
+              animate={{
+                width: placesActive ? "auto" : 6,
+                opacity: placesActive ? 1 : 0,
+              }}
+              transition={
+                reduced
+                  ? INSTANT
+                  : {
+                      width: COLLAPSE,
+                      opacity: placesActive
+                        ? { duration: 0.22, delay: 0.14 }
+                        : { duration: 0.1 },
+                    }
+              }
+              className="flex h-full items-center [overflow-x:clip]"
+            >
+              <span data-liquid-extra className="block w-max min-w-1.5">
+                <span className="block pr-1.5 pl-1.5 max-sm:hidden">
+                  <InkLabel
+                    label={cellPlace?.label ?? ""}
+                    rowRef={rowRef}
+                    left={liquidLeft}
+                    right={liquidRight}
+                    spill={spill}
+                    liquid={placesActive}
+                  />
                 </span>
-              </motion.span>
-            </button>
-          </div>
+              </span>
+            </motion.span>
+          </button>
         </div>
       </div>
 

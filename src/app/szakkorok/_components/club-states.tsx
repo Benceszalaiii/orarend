@@ -3,8 +3,10 @@
 import { ArrowLeft, RotateCw } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
+import { listGroup } from "@/components/ma/week-panels";
 import { Button } from "@/components/ui/button";
 import { clubsLaunched } from "@/lib/club-access";
+import { cn } from "@/lib/utils";
 import { ClubFrame } from "./club-frame";
 
 //* ---------------------------------------------------------------------------
@@ -85,6 +87,8 @@ export function ClubError({
 //! (Az állapotkód a `loading.tsx` miatt így is 200 marad, `noindex`-szel — a
 //! Next a már folyó válasz fejlécét nem írhatja át. A robotnak ez elég, és a
 //! sitemap a bevezetés előtt amúgy sem küldi ide.)
+const BAR = "animate-pulse bg-muted motion-reduce:animate-none";
+
 export function ClubLoading({
   subject,
 }: {
@@ -95,16 +99,34 @@ export function ClubLoading({
     <ClubFrame subject={subject} preview={false}>
       <div aria-busy="true" aria-live="polite">
         <span className="sr-only">{subject} betöltése…</span>
-        <div className="h-8 w-48 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
-        <div className="mt-3 h-4 w-full max-w-xl animate-pulse rounded bg-muted/70 motion-reduce:animate-none" />
-        <div className="mt-8 grid gap-3 sm:grid-cols-2">
-          {[0, 1, 2, 3].map((i) => (
+        <div className="flex items-center justify-between gap-4">
+          <div className={cn(BAR, "h-8 w-40 rounded-md sm:h-9")} />
+          <div className={cn(BAR, "h-9 w-36 rounded-full")} />
+        </div>
+        {/*//* Az eszközsor és a lista alakja — a sorok magassága egyezik a
+            //* valódiéval, így a betöltés után semmi nem ugrik. */}
+        <div className="mt-6 flex flex-wrap gap-3">
+          <div className={cn(BAR, "h-10 w-full rounded-full sm:w-60")} />
+          <div className={cn(BAR, "hidden h-10 w-64 rounded-full sm:block")} />
+        </div>
+        <div className="mt-3 flex gap-1.5">
+          {[14, 18, 24, 20].map((w) => (
             <div
-              key={i}
-              className="h-28 animate-pulse rounded-2xl bg-muted/50 motion-reduce:animate-none"
+              key={w}
+              className={cn(BAR, "h-8 rounded-full")}
+              style={{ width: `${w * 4}px` }}
             />
           ))}
         </div>
+        <div className={cn(BAR, "mt-10 mb-3 h-5 w-44 rounded")} />
+        <ul className={listGroup}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <li key={i} className="flex flex-col gap-2 px-4 py-3.5">
+              <div className={cn(BAR, "h-4 w-3/5 rounded")} />
+              <div className={cn(BAR, "h-3 w-2/5 rounded opacity-70")} />
+            </li>
+          ))}
+        </ul>
       </div>
     </ClubFrame>
   );

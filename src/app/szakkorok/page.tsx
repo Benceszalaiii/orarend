@@ -17,6 +17,10 @@ import { ClubFrame } from "./_components/club-frame";
 import { ClubsBrowser } from "./clubs-browser";
 import { IdeaBoard, type IdeaCard } from "./idea-board";
 
+//* A fejléc gombjainak közös alakja (a lap többi gombjával egy magasság).
+const PILL =
+  "press inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+
 export const metadata: Metadata = {
   title: "Szakkörök - Órarend",
   description:
@@ -67,48 +71,28 @@ export default async function SzakkorokPage() {
 
   return (
     <ClubFrame subject="Szakkörök" preview={!launched}>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="max-w-2xl">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Szakkörök
-          </h1>
-          <p className="mt-2 text-pretty text-sm leading-relaxed text-muted-strong">
-            Szakkörök, felkészítők és korrepetálások — mikor, hol és kinek. Az
-            időpontokat hetente összevetjük az iskola órarendjével; ahol eltér,
-            az iskoláé számít.
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          Szakkörök
+        </h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {/*//! BELÉPÉS NÉLKÜL IS OTT A GOMB. Javasolni bárki javasolhat, csak
+              //! fiókkal — a gomb ilyenkor a belépésen át visz az űrlapra. */}
+          {(create || propose || actor === null) && (
+            <Link
+              href={
+                actor === null
+                  ? `/belepes?tovabb=${encodeURIComponent("/szakkorok/uj")}`
+                  : "/szakkorok/uj"
+              }
+              className={`${PILL} bg-primary text-primary-foreground hover:bg-primary/90`}
+            >
+              <Plus className="size-4" aria-hidden />
+              {create ? "Új szakkör" : "Szakkört javaslok"}
+            </Link>
+          )}
         </div>
-        {/*//! BELÉPÉS NÉLKÜL IS OTT A GOMB. Javasolni bárki javasolhat, csak
-            //! fiókkal — a gomb ilyenkor a belépésen át visz az űrlapra. */}
-        {(create || propose || actor === null) && (
-          <Link
-            href={
-              actor === null
-                ? `/belepes?tovabb=${encodeURIComponent("/szakkorok/uj")}`
-                : "/szakkorok/uj"
-            }
-            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            <Plus className="size-4" aria-hidden />
-            {create ? "Új szakkör" : "Szakkört javaslok"}
-          </Link>
-        )}
       </div>
-      {create && (
-        //* A tanárnak és az adminnak: ők kérik meg az iskolát, hogy a
-        //* folyosói képernyőn ez fusson.
-        <p className="mt-3 text-xs text-muted-strong">
-          Folyosói kijelzőre:{" "}
-          <Link
-            href="/tabla"
-            prefetch={false}
-            className="font-medium text-foreground underline-offset-4 hover:underline"
-          >
-            jedlik.info/tabla
-          </Link>{" "}
-          — a mai szakkörök termei és a nevezési határidők, magától frissül.
-        </p>
-      )}
       <ClubsBrowser
         clubs={clubs}
         accountClass={actor?.className ?? null}

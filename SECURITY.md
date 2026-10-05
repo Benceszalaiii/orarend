@@ -45,6 +45,22 @@ infrastruktúrája, és a szolgáltatásmegtagadás puszta terheléssel.
 - Az ütemezett végpont (`/api/ertesites/tick`) kulcs nélkül 404-et ad, tehát
   a létezése sem derül ki.
 
+## Robotok és AI-asszisztensek
+
+- **Egy névsor, két réteg.** A `robots.txt` (`src/app/robots.ts`) és a kapu
+  (`src/proxy.ts`) ugyanabból a listából dolgozik (`src/lib/ai-bots.ts`):
+  amit kiírunk, azt be is tartatjuk.
+- **A tanító- és keresőrobotok** a lapokon 403-at kapnak; a szöveg a
+  nyilvános JSON-végpontokra mutat.
+- **Az ember indította asszisztensek** (ChatGPT-User, Claude-User,
+  Perplexity-User, MistralAI-User) a lapok HTML-jét sem kapják meg: a kapu
+  307-tel a lap gépi párjára (`/api/orarend`, `/api/termek`,
+  `/api/tantargyak`) vagy a `/llms.txt`-re küldi őket.
+- **Az `/api` minden robotnak nyitva, a naptár-feed (`/api/naptar`) senkinek.**
+  Ami személyes, azt a belépés védi, nem a `User-Agent`.
+- A `User-Agent` alapú válaszok `Vary: User-Agent` és `private, no-store`
+  fejlécet viselnek, hogy köztes gyorsítótár ne adja tovább őket.
+
 ## A felhasználói tartalom
 
 A szakkör-hírfolyam (bejegyzések, hozzászólások), a szakkör-ötletek és a
@@ -66,6 +82,14 @@ szakkör-javaslatok diákok által írt szövegek. A szabályaik:
   névtelen, a tartalom nem (lásd az `/adatvedelem` lapot).
 - **Moderálás törléssel.** A szerző, a szakkör vezető tanára és az admin
   törölhet; a törlés végleges.
+- **Az üzemeltetői pult saját actionjei csak adminnak.** Az
+  `/admin/szakkorok` és `/admin/versenyek` alatti Server Actionök (végleges
+  törlés, újranyitás, tag- és nevezéstörlés, ötlet visszaállítása) első sora a
+  `requireAdmin`, ami a jogot az adatbázisból olvassa, nem a sütiből. A pult a
+  jóváhagyáshoz, lezáráshoz, állapotváltáshoz és a hírfolyam törléséhez a
+  lapok meglévő actionjeit hívja — azok a `club-access.ts` szabályait
+  kérdezik, így ugyanarra nincs két külön írási út. Az ötlet szerzőjét a pult
+  sem kéri le (`/adatvedelem`).
 
 ## Szakkörök és versenyek: a bevezetés előtt és után
 

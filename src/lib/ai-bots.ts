@@ -81,15 +81,20 @@ const AI_SEARCH_CRAWLERS = [
 //! ─── AKIT EGY EMBER INDÍT EL ───────────────────────────────────────────────
 //! FIGYELEM, EZ A LISTA MÁS: ezek nem maguktól járnak: akkor kérik le a lapot,
 //! amikor valaki a chatben megkéri rá az asszisztensét. Mögötte tehát VAN egy
-//! ember, csak nem böngészőn keresztül néz.
-//!
-//! Mégis zárva vannak, két okból. Egy: amit ez a lap tud, az bejelentkezés után
-//! személyre szabott — az asszisztens úgyis csak a nyilvános vázat látná, és
-//! abból építene magabiztos, de üres választ. Kettő: ezek a lekérések ugyanúgy
-//! visszatáplálhatók, mint a többi.
-//!
-//! HA EZ VALAHA TÚL SZIGORÚNAK BIZONYUL, EZ AZ EGY TÖMB TÖRLENDŐ — a másik
-//! kettő nem. Ezért van külön, és nem beleolvasztva a fentiekbe.
+//! ember, csak nem böngészőn keresztül néz — és most, ebben a percben akarja
+//! tudni, mi lesz holnap a harmadik óra.
+//*
+//! EZÉRT NEM ZÁRJUK KI, HANEM ÁTTERELJÜK. Amíg a robots.txt a `/`-t tiltotta
+//! nekik, az asszisztens a nyitólapnál megállt, és azt felelte, hogy „a
+//! jedlik.info blokkol" — az élő JSON-ig, ami pont nekik készült, el sem jutott.
+//! Most a lapokra is beengedi őket a robots.txt, a `proxy.ts` pedig a lap
+//! helyett a lap gépi párjára küldi tovább (`machineUrlFor`): az `/orarend?
+//! class=13A` az `/api/orarend?osztaly=13A`-ra, minden más a `/llms.txt`-re.
+//*
+//! A LAP HTML-JÉT TOVÁBBRA SEM KAPJÁK MEG, és ennek két oka van. Egy: amit a
+//! lap tud, az bejelentkezés után személyre szabott — a nyilvános vázból az
+//! asszisztens magabiztos, de üres választ építene. Kettő: a JSON a kérés
+//! pillanatának adata, nem a lap elavuló másolata.
 const USER_TRIGGERED_AGENTS = [
   "ChatGPT-User",
   "Claude-User",
@@ -111,18 +116,28 @@ const ROBOTS_TXT_ONLY_TOKENS = [
   "Applebot-Extended",
 ] as const;
 
-//! A `proxy.ts` ebből dolgozik: akit ténylegesen elzavarunk a kapuban.
+//! A `proxy.ts` ebből dolgozik: akit a kapuban felismerünk. Az ember indította
+//! asszisztenseket is felismeri — őket nem elzavarja, hanem átirányítja.
 export const BLOCKED_AI_USER_AGENTS: readonly string[] = [
   ...TRAINING_CRAWLERS,
   ...AI_SEARCH_CRAWLERS,
   ...USER_TRIGGERED_AGENTS,
 ];
 
-//! Az `app/robots.ts` ebből dolgozik: a kiírt szabály. Bővebb, mint a fenti —
-//! benne vannak a jelölők is, amiket csak itt lehet megcímezni.
+//! Az `app/robots.ts` ebből dolgozik: akinek a lapok zárva. Bővebb a kapu
+//! tiltólistájánál — benne vannak a jelölők is, amiket csak itt lehet
+//! megcímezni —, az ember indította asszisztensek viszont NINCSENEK benne:
+//! nekik saját blokk jár (`USER_TRIGGERED_ROBOTS_TOKENS`).
 export const DISALLOWED_AI_ROBOTS_TOKENS: readonly string[] = [
-  ...BLOCKED_AI_USER_AGENTS,
+  ...TRAINING_CRAWLERS,
+  ...AI_SEARCH_CRAWLERS,
   ...ROBOTS_TXT_ONLY_TOKENS,
+];
+
+//! Az `app/robots.ts` saját blokkja: a lapok nyitva (a kapu úgyis a gépi
+//! párjukra küld tovább), csak a naptár-feed zárva.
+export const USER_TRIGGERED_ROBOTS_TOKENS: readonly string[] = [
+  ...USER_TRIGGERED_AGENTS,
 ];
 
 //! ─── AMI A GÉPNEK SZÓL ─────────────────────────────────────────────────────
@@ -152,6 +167,9 @@ export function isOpenForAi(pathname: string): boolean {
 
 //! Egyszer számoljuk ki, ne kérésenként.
 const NEEDLES = BLOCKED_AI_USER_AGENTS.map((agent) => agent.toLowerCase());
+const USER_TRIGGERED_NEEDLES = USER_TRIGGERED_AGENTS.map((agent) =>
+  agent.toLowerCase(),
+);
 
 //! RÉSZSZTRING ÉS KISBETŰ — MERT A `User-Agent` NEM NÉVJEGY, HANEM MONDAT.
 //! A GPTBot úgy mutatkozik be, hogy `Mozilla/5.0 AppleWebKit/537.36 (KHTML,
@@ -172,12 +190,53 @@ export function isAiBotUserAgent(
   return NEEDLES.some((needle) => haystack.includes(needle));
 }
 
-//! A KAPU KÉRDÉSE NEM AZ, HOGY ROBOT-E, HANEM HOGY IDE JÖHET-E. Az `/api`-n
-//! (a naptár-feed kivételével) bármelyik AI-robot átmehet, a lapokon egyik sem.
-export function isBlockedAiRequest(
+export function isUserTriggeredAgent(
+  userAgent: string | undefined | null,
+): boolean {
+  if (!userAgent) return false;
+  const haystack = userAgent.toLowerCase();
+  return USER_TRIGGERED_NEEDLES.some((needle) => haystack.includes(needle));
+}
+
+//! ─── A LAP GÉPI PÁRJA ──────────────────────────────────────────────────────
+//! Ugyanazt kérdezi, amit a lap mutatna, csak JSON-ban. Az alany a lap saját
+//! paraméteréből jön (`?class=` / `?teacher=` / `?tantargy=`), mert az
+//! asszisztens jellemzően a felhasználótól kapott, megosztott linket nyitja
+//! meg. Amit nem tudunk párosítani, az a `/llms.txt`-re megy: onnan minden
+//! végpont kész linkként elérhető.
+export function machineUrlFor(
+  pathname: string,
+  searchParams: URLSearchParams,
+): string {
+  const className = searchParams.get("class")?.trim();
+  if (className) return `/api/orarend?osztaly=${encodeURIComponent(className)}`;
+  const teacher = searchParams.get("teacher")?.trim();
+  if (teacher) return `/api/orarend?tanar=${encodeURIComponent(teacher)}`;
+
+  if (pathname === "/orarend" || pathname === "/tanari") return "/api/orarend";
+  if (pathname === "/teremkereso") return "/api/termek";
+  if (pathname === "/tantargyak") {
+    const subject = searchParams.get("tantargy")?.trim();
+    return subject
+      ? `/api/tantargyak?tantargy=${encodeURIComponent(subject)}`
+      : "/api/tantargyak";
+  }
+  return LLM_DOC_PATH;
+}
+
+//! ─── A KAPU DÖNTÉSE ────────────────────────────────────────────────────────
+//! A KÉRDÉS NEM AZ, HOGY ROBOT-E, HANEM HOGY IDE JÖHET-E.
+//! - `pass`: nem AI-robot, vagy az `/api`-ra jön (a naptár-feed kivételével).
+//! - `redirect`: ember indította asszisztens egy lapon — a gépi párjára megy.
+//! - `block`: minden más AI-robot a lapokon, és bárki a naptár-feeden.
+export type AiGate = "pass" | "redirect" | "block";
+
+export function aiGate(
   userAgent: string | undefined | null,
   pathname: string,
-): boolean {
-  if (!userAgent || !isAiBotUserAgent(userAgent)) return false;
-  return !isOpenForAi(pathname);
+): AiGate {
+  if (!userAgent || !isAiBotUserAgent(userAgent)) return "pass";
+  if (isOpenForAi(pathname)) return "pass";
+  if (pathname.startsWith(LLM_OPEN_PREFIX)) return "block";
+  return isUserTriggeredAgent(userAgent) ? "redirect" : "block";
 }

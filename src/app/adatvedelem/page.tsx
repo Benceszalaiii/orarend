@@ -27,7 +27,7 @@ export default function AdatvedelemPage() {
           Adatvédelmi tájékoztató
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Utolsó frissítés: 2026. október 3.
+          Utolsó frissítés: 2026. október 4.
         </p>
 
         <div className="mt-8 flex flex-col gap-8 text-sm leading-relaxed text-muted-strong">
@@ -326,7 +326,8 @@ export default function AdatvedelemPage() {
               </span>
               , aki megnyitja a lapot. A tagságot a fiókodhoz kötve tároljuk.
               Kilépéskor a neved azonnal lekerül; a fiókod törlésével minden
-              tagságod megszűnik.
+              tagságod megszűnik. Egy oda nem való jelentkezést az üzemeltető
+              is levehet.
             </p>
             <p>
               <span className="font-medium text-foreground">
@@ -376,7 +377,9 @@ export default function AdatvedelemPage() {
               <span className="font-medium text-foreground">száma</span>{" "}
               látszik: hogy ki írta fel és ki jelezte, azt senki nem látja. A
               fiókodhoz azért tároljuk, hogy egy témát egyszer jelezhess, és a
-              sajátodat visszavonhasd. A tanárok levehetnek egy témát a lapról.
+              sajátodat visszavonhasd. A tanárok és az üzemeltető levehetnek egy
+              témát a lapról; az üzemeltető vissza is teheti, vagy véglegesen
+              törölheti. Hogy ki írta fel, azt a moderáláshoz sem nézzük meg.
             </p>
             <p>
               <span className="font-medium text-foreground">
@@ -403,7 +406,8 @@ export default function AdatvedelemPage() {
               . A felelős tanár a versenyhez helyezést, díjat és pontszámot
               rögzíthet; ezek akkor válnak nyilvánossá a verseny lapján, amikor
               a versenyt lezajlottnak jelöli. A határidőig vissza lehet lépni —
-              ilyenkor a neved lekerül, és vele a rögzített eredmény is.
+              ilyenkor a neved lekerül, és vele a rögzített eredmény is. Egy oda nem
+              való nevezést az üzemeltető is törölhet.
             </p>
             <p>
               A versenyek követése és az emlékeztetők ugyanúgy működnek, mint a

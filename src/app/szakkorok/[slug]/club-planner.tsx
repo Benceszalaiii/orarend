@@ -122,11 +122,6 @@ export function ClubPlanner({
       <h2 id="planner-heading" className="text-lg font-semibold">
         Időpont- és teremkereső
       </h2>
-      <p className="mt-1 text-pretty text-sm text-muted-strong">
-        A tagok osztályának órarendjéből (a saját csoportjukkal) és a vezetők
-        órarendjéből keresi meg, mikor ér rá a legtöbb tag — két egymást követő
-        hét alapján, hogy az A és a B hét is stimmeljen.
-      </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <fieldset className="flex rounded-full border border-border p-0.5">

@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, MapPin, Users } from "lucide-react";
+import { MapPin, Users } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { EmptyPanel, listGroup } from "@/components/ma/week-panels";
@@ -23,8 +23,14 @@ import {
 import { riverAxis, riverLanes } from "@/lib/contest-river";
 import { loadCachedClass } from "@/lib/timetable";
 import { cn } from "@/lib/utils";
+import { FilterChips } from "../szakkorok/_components/filter-chips";
 import { type ContestCardData, withDates } from "./_components/contest-card";
 import { DeadlineRiver } from "./_components/deadline-river";
+
+//* A szekciócím ugyanaz, mint a szakkörök csoportjaié (`clubs-browser.tsx`).
+const SECTION_TITLE = "text-base font-semibold text-foreground";
+const SECTION_COUNT =
+  "ml-2 text-sm font-normal tabular-nums text-muted-foreground";
 
 //* ---------------------------------------------------------------------------
 //* A VERSENYLISTA
@@ -54,7 +60,7 @@ const LATER_SECTIONS: {
   { status: "started", title: "Elkezdődött" },
   { status: "FINISHED", title: "Lezajlott" },
   { status: "CANCELLED", title: "Elmarad" },
-  { status: "DRAFT", title: "Piszkozataid — a diákok még nem látják" },
+  { status: "DRAFT", title: "Piszkozataid" },
 ];
 
 //* Percenként lép, a szerver pillanatából indulva.
@@ -110,27 +116,18 @@ export function ContestsBrowser({
     );
 
   return (
-    <div className="mt-8">
+    <div className="mt-6">
       {categories.length > 1 && (
-        <fieldset className="mb-6 flex flex-wrap gap-1.5">
-          <legend className="sr-only">Terület</legend>
-          {(["all", ...categories] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={filter === k}
-              onClick={() => setFilter(k)}
-              className={cn(
-                "h-8 rounded-full border px-3 text-xs font-medium transition-colors touch-target focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                filter === k
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border text-muted-strong hover:text-foreground",
-              )}
-            >
-              {k === "all" ? "Mind" : CATEGORY_LABELS[k]}
-            </button>
-          ))}
-        </fieldset>
+        <FilterChips
+          legend="Terület"
+          className="mb-8"
+          options={[
+            { id: "all" as Filter, label: "Mind" },
+            ...categories.map((k) => ({ id: k, label: CATEGORY_LABELS[k] })),
+          ]}
+          value={filter}
+          onChange={setFilter}
+        />
       )}
 
       {contests.length === 0 ? (
@@ -138,16 +135,10 @@ export function ContestsBrowser({
       ) : (
         <div className="flex flex-col gap-10">
           <section aria-labelledby="deadline-heading">
-            <h2
-              id="deadline-heading"
-              className="mb-3 flex flex-wrap items-center gap-x-2 text-sm font-semibold text-muted-strong"
-            >
-              <CalendarClock className="size-4" aria-hidden />
+            <h2 id="deadline-heading" className={cn(SECTION_TITLE, "mb-3")}>
               Nevezési határidők
-              {className && (
-                <span className="font-normal text-muted-foreground">
-                  · előbb, amire {className}-ként nevezhetsz
-                </span>
+              {ordered.length > 0 && (
+                <span className={SECTION_COUNT}>{ordered.length}</span>
               )}
             </h2>
             {ordered.length > 0 ? (
@@ -172,16 +163,21 @@ export function ContestsBrowser({
             //* A lezajlottakból a legfrissebb elöl; a többinél a legközelebbi.
             const rows = status === "FINISHED" ? [...list].reverse() : list;
             return (
-              <section key={status} aria-label={title}>
-                <h2 className="mb-3 text-sm font-semibold text-muted-strong">
+              <section key={status} aria-labelledby={`later-${status}`}>
+                <h2
+                  id={`later-${status}`}
+                  className={cn(SECTION_TITLE, "mb-3")}
+                >
                   {title}
-                  <span className="ml-2 font-normal tabular-nums text-muted-foreground">
-                    {list.length}
-                  </span>
+                  <span className={SECTION_COUNT}>{list.length}</span>
                 </h2>
                 <ul className={listGroup}>
-                  {rows.map((c) => (
-                    <li key={c.slug}>
+                  {rows.map((c, index) => (
+                    <li
+                      key={c.slug}
+                      className="club-rise"
+                      style={{ "--i": index } as React.CSSProperties}
+                    >
                       <ContestRow contest={c} eligible={eligible(c)} />
                     </li>
                   ))}
@@ -217,7 +213,7 @@ function ContestRow({
       prefetch={false}
       style={accentStyle(c.slug)}
       className={cn(
-        "grid gap-x-8 gap-y-1.5 px-4 py-3.5 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none md:grid-cols-[minmax(0,1fr)_auto]",
+        "grid gap-x-8 gap-y-1.5 px-4 py-3.5 transition-colors duration-150 hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-muted/60 motion-reduce:transition-none md:grid-cols-[minmax(0,1fr)_auto]",
         (c.status === "CANCELLED" || !eligible) && "opacity-70",
       )}
     >
@@ -236,7 +232,7 @@ function ContestRow({
             {c.name}
           </span>
         </span>
-        <span className="mt-1 block pl-4 text-xs text-muted-strong">
+        <span className="mt-1 block pl-4 text-xs leading-relaxed text-muted-strong">
           {CATEGORY_LABELS[c.category]} · {audienceLabel(c)}
           {!eligible && " · nem a te évfolyamodnak"}
         </span>

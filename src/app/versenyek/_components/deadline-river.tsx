@@ -90,12 +90,17 @@ export function DeadlineRiver({
       <div className="cr-row cr-axis" aria-hidden>
         <span className="cr-name-col" />
         <div className="cr-track">
-          {axis.weeks.map((w) => (
+          {axis.weeks.map((w, i) => (
             <span
               key={w.day}
               //* Telefonon csak a hónap eleje kap feliratot: a keskeny
               //* tengelyen a „nov. 2" és a „9" különben „nov. 29"-nek olvasódna.
-              className={cn("cr-week-label", !w.month && "cr-week-minor")}
+              //* Ha két hónapnév egymás mellé esne („szept. 28", „okt. 5"),
+              //* telefonon az első hallgat el — különben egymásra csúsznak.
+              className={cn(
+                "cr-week-label",
+                (!w.month || axis.weeks[i + 1]?.month) && "cr-week-minor",
+              )}
               style={{ left: `${pos(w.day) * 100}%` }}
             >
               {w.month ? `${w.month} ${w.label}` : w.label}

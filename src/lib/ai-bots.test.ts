@@ -3,6 +3,8 @@ import {
   BLOCKED_AI_USER_AGENTS,
   DISALLOWED_AI_ROBOTS_TOKENS,
   isAiBotUserAgent,
+  machineUrlFor,
+  USER_TRIGGERED_ROBOTS_TOKENS,
 } from "./ai-bots";
 
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -106,8 +108,21 @@ describe("robots.txt névsor", () => {
   //! nem szóltunk — ez a teszt garantálja, hogy a kiírt szabály sosem marad el
   //! a betartatás mögött.
   test("mindenki benne van, akit a kapuban is elzavarunk", () => {
+    const listed = [
+      ...DISALLOWED_AI_ROBOTS_TOKENS,
+      ...USER_TRIGGERED_ROBOTS_TOKENS,
+    ];
     for (const agent of BLOCKED_AI_USER_AGENTS) {
-      expect(DISALLOWED_AI_ROBOTS_TOKENS).toContain(agent);
+      expect(listed).toContain(agent);
+    }
+  });
+
+  //! AZ ASSZISZTENS NEM KERÜLHET A TILTOTT BLOKKBA IS. Ha két blokkban állna,
+  //! a robot kiszámíthatatlanul az egyiket olvasná — és ha a tiltót, a
+  //! nyitólapnál megállna, pont ahogy a javítás előtt.
+  test("az ember indította asszisztens csak a saját blokkjában van", () => {
+    for (const agent of USER_TRIGGERED_ROBOTS_TOKENS) {
+      expect(DISALLOWED_AI_ROBOTS_TOKENS).not.toContain(agent);
     }
   });
 
@@ -129,5 +144,27 @@ describe("robots.txt névsor", () => {
     expect(new Set(DISALLOWED_AI_ROBOTS_TOKENS).size).toBe(
       DISALLOWED_AI_ROBOTS_TOKENS.length,
     );
+  });
+});
+
+describe("machineUrlFor", () => {
+  const at = (path: string) => {
+    const url = new URL(path, "https://orarend.test");
+    return machineUrlFor(url.pathname, url.searchParams);
+  };
+
+  test.each([
+    ["/orarend?class=13A", "/api/orarend?osztaly=13A"],
+    ["/ma?class=13%20A", "/api/orarend?osztaly=13%20A"],
+    ["/tanari?teacher=AA", "/api/orarend?tanar=AA"],
+    ["/orarend", "/api/orarend"],
+    ["/tanari", "/api/orarend"],
+    ["/teremkereso", "/api/termek"],
+    ["/tantargyak?tantargy=Fizika", "/api/tantargyak?tantargy=Fizika"],
+    ["/tantargyak", "/api/tantargyak"],
+    ["/", "/llms.txt"],
+    ["/ugyelet", "/llms.txt"],
+  ])("%s → %s", (path, target) => {
+    expect(at(path)).toBe(target);
   });
 });

@@ -51,6 +51,9 @@ export async function generateMetadata({
   };
 }
 
+const FACT = "rounded-xl border border-border bg-card p-4";
+const FACT_LABEL = "text-xs font-medium text-muted-strong";
+
 const VERDICT_TEXT = {
   "not-open": "Erre a versenyre most nem lehet nevezni.",
   deadline: "Lejárt a nevezési határidő.",
@@ -110,9 +113,12 @@ export default async function ContestPage({
     <ClubFrame subject="Versenyek" context={c.name} preview={!launched}>
       <Link
         href="/versenyek"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-strong transition-colors hover:text-foreground"
+        className="group inline-flex items-center gap-1.5 rounded-full text-sm text-muted-strong transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        <ArrowLeft className="size-4" aria-hidden />
+        <ArrowLeft
+          className="size-4 transition-transform duration-150 group-hover:-translate-x-0.5 motion-reduce:transition-none"
+          aria-hidden
+        />
         Összes verseny
       </Link>
 
@@ -145,9 +151,12 @@ export default async function ContestPage({
         </h1>
         <p className="mt-2 text-sm text-muted-strong">{audienceLabel(c)}</p>
 
+        {/*//! A TÉNYEK EGY RÁCSBAN: mikor, meddig, ki felel érte, mi készít
+            //! rá. Ami korábban egysoros külön szakasz volt, itt egy cella —
+            //! a lap a tényekkel kezd, a leírás és a nevezők utánuk. */}
         <dl className="mt-6 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-border p-4">
-            <dt className="text-xs text-muted-strong">Mikor</dt>
+          <div className={FACT}>
+            <dt className={FACT_LABEL}>Mikor</dt>
             <dd className="mt-1 font-medium tabular-nums">
               {formatWhen(c.startsAt)}
               {c.endsAt && ` – ${formatWhen(c.endsAt)}`}
@@ -158,16 +167,13 @@ export default async function ContestPage({
             </dd>
           </div>
           <div
-            className={cn(
-              "rounded-xl border p-4",
-              c.status === "OPEN" ? "border-foreground/40" : "border-border",
-            )}
+            className={cn(FACT, c.status === "OPEN" && "border-foreground/40")}
           >
-            <dt className="text-xs text-muted-strong">Nevezési határidő</dt>
+            <dt className={FACT_LABEL}>Nevezési határidő</dt>
             <dd className="mt-1 font-medium tabular-nums">
               {formatWhen(deadline)}
             </dd>
-            <dd className="mt-1 text-sm text-muted-strong">
+            <dd className="mt-1 text-sm tabular-nums text-muted-strong">
               {c.status === "OPEN"
                 ? deadlineLabel(deadline, now)
                 : STATUS_LABELS[c.status]}
@@ -176,6 +182,39 @@ export default async function ContestPage({
                 : ` · ${c.entryCount} nevező`}
             </dd>
           </div>
+          <div className={FACT}>
+            <dt className={FACT_LABEL}>
+              {c.teachers.length > 1 ? "Felelős tanárok" : "Felelős tanár"}
+            </dt>
+            {c.teachers.map((short) => (
+              <dd key={short} className="mt-1 font-medium">
+                {names.get(short) ?? short}
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {short}
+                </span>
+              </dd>
+            ))}
+          </div>
+          {c.clubs.length > 0 && (
+            <div className={FACT}>
+              <dt className={FACT_LABEL}>Felkészítő szakkör</dt>
+              {c.clubs.map((club) => (
+                <dd key={club.slug} className="mt-1">
+                  <Link
+                    href={`/szakkorok/${club.slug}`}
+                    prefetch={false}
+                    className="group inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    {club.name}
+                    <ArrowUpRight
+                      className="club-nudge size-3.5 opacity-70"
+                      aria-hidden
+                    />
+                  </Link>
+                </dd>
+              ))}
+            </div>
+          )}
         </dl>
 
         <div className="mt-6 flex flex-col gap-4">
@@ -212,7 +251,7 @@ export default async function ContestPage({
             A versenyről
           </h2>
           {c.description ? (
-            <p className="mt-2 whitespace-pre-line text-pretty text-[15px] leading-relaxed">
+            <p className="mt-2 max-w-prose whitespace-pre-line text-pretty text-[15px] leading-relaxed">
               {c.description}
             </p>
           ) : (
@@ -225,49 +264,12 @@ export default async function ContestPage({
               href={c.externalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
+              className="group mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
             >
               A verseny hivatalos oldala
-              <ArrowUpRight className="size-3.5" aria-hidden />
+              <ArrowUpRight className="club-nudge size-3.5" aria-hidden />
             </a>
           )}
-        </section>
-
-        {c.clubs.length > 0 && (
-          <section className="mt-10" aria-labelledby="prep-heading">
-            <h2 id="prep-heading" className="text-lg font-semibold">
-              Felkészítő szakkör
-            </h2>
-            <ul className="mt-2 flex flex-col gap-1">
-              {c.clubs.map((club) => (
-                <li key={club.slug}>
-                  <Link
-                    href={`/szakkorok/${club.slug}`}
-                    prefetch={false}
-                    className="font-medium text-primary underline-offset-4 hover:underline"
-                  >
-                    {club.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <section className="mt-10" aria-labelledby="org-heading">
-          <h2 id="org-heading" className="text-lg font-semibold">
-            Felelős tanár
-          </h2>
-          <ul className="mt-2 flex flex-col gap-1 text-[15px]">
-            {c.teachers.map((short) => (
-              <li key={short}>
-                {names.get(short) ?? short}
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {short}
-                </span>
-              </li>
-            ))}
-          </ul>
         </section>
 
         <section className="mt-10" aria-labelledby="entries-heading">

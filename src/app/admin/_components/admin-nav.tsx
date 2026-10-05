@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, Megaphone, Users } from "lucide-react";
+import { BarChart3, Megaphone, Shapes, Trophy, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,8 @@ const TABS = [
   { href: "/admin", label: "Felhasználók", icon: Users },
   { href: "/admin/statisztika", label: "Statisztika", icon: BarChart3 },
   { href: "/admin/kozlemenyek", label: "Közlemények", icon: Megaphone },
+  { href: "/admin/szakkorok", label: "Szakkörök", icon: Shapes },
+  { href: "/admin/versenyek", label: "Versenyek", icon: Trophy },
 ] as const;
 
 export function AdminNav() {

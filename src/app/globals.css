@@ -1602,6 +1602,9 @@
   .cr-lane:hover {
     background-color: color-mix(in oklab, var(--muted) 40%, transparent);
   }
+  .cr-lane:active {
+    background-color: color-mix(in oklab, var(--muted) 60%, transparent);
+  }
   .cr-lane:focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: -2px;
@@ -1761,6 +1764,125 @@
     .cr-event,
     .cr-event-label {
       animation: none;
+    }
+  }
+
+  /*//! ---------------------------------------------------------------------
+      //! A SZAKKÖR- ÉS VERSENYLAPOK MIKRO-MOZGÁSAI
+      //! ---------------------------------------------------------------------
+      //! MIND VISSZAJELZÉS, EGYIK SEM DÍSZ. A lenyomás megmondja, hogy a
+      //! koppintás célba ért; az új sor megmutatja, hogy a lista változott;
+      //! a csoport nyílása megtartja a helyet, ahonnan a szem indult. Csak
+      //! `transform` és `opacity` mozog (a csoport magassága a rács sor-
+      //! méretével — ez az egyetlen kivétel, és rövid). Mozgáscsökkentésnél
+      //! minden azonnali: a tény megmarad, a mozgás nem. */
+  .press {
+    transition-property:
+      transform, background-color, border-color, color, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+  .press:active:not(:disabled) {
+    transform: scale(0.96);
+    transition-duration: 80ms;
+  }
+  /*//* Az új sor fél pillanatra lentebbről érkezik — szűréskor és az első
+      //* megjelenéskor. A lépcső a tizedik sornál megáll: ötven sornál a
+      //* lista vége már nem várhat egy másodpercet. */
+  .club-rise {
+    animation: club-rise 260ms cubic-bezier(0.16, 1, 0.3, 1)
+      calc(min(var(--i, 0), 10) * 22ms) backwards;
+  }
+  @keyframes club-rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  /*//! A CSOPORT NYÍLÁSA A RÁCS SORMÉRETÉVEL: 0fr → 1fr. A tartalom végig a
+      //! DOM-ban marad, zárva `inert` — se a fókusz, se a felolvasó nem jut
+      //! bele, de nyitáskor nincs újrarajzolás. Zárni gyorsabb, mint nyitni. */
+  .club-collapse {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition:
+      grid-template-rows 260ms cubic-bezier(0.2, 0, 0, 1),
+      opacity 200ms ease;
+  }
+  .club-collapse[data-closed] {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition-duration: 180ms, 140ms;
+  }
+  /*//! A `relative` NEM DÍSZ. A sorok `sr-only` feliratai `absolute`-ok; ha a
+      //! burok nem a tartalmazó blokkjuk, az `overflow: hidden` nem vágja le
+      //! őket, és a zárt csoport láthatatlan feliratai a lábléc alá nyújtják
+      //! a lapot — több ezer pixelnyi üres görgetéssel. */
+  .club-collapse > * {
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+    transition: display 180ms allow-discrete;
+  }
+  /*//! ZÁRVA KI IS VESZ A TÖRDELÉSBŐL. Az `overflow: hidden` levágása nem
+      //! minden böngészőben (Safari) elég: a láthatatlan feliratok így is a
+      //! lábléc alá nyújtották a lapot. A `display: none` a záró animáció
+      //! UTÁN kapcsol (`allow-discrete`), nyitáskor azonnal visszajön. */
+  .club-collapse[data-closed] > * {
+    display: none;
+  }
+  /*//* Ami a lapon kinyílik (űrlap, visszajelzés), az a helyén úszik be. */
+  .club-enter {
+    animation: club-enter 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes club-enter {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+  /*//* A jelzés (szív → pipa) egy rövid pattanással vált: a szavazat
+      //* megtörtént, még mielőtt a szerver visszaszólna. A túllendülés a
+      //* kulcskockákban van, a görbe sima lassulás. */
+  .club-pop {
+    animation: club-pop 300ms cubic-bezier(0.25, 1, 0.5, 1);
+  }
+  @keyframes club-pop {
+    0% {
+      transform: scale(0.7);
+    }
+    55% {
+      transform: scale(1.12);
+    }
+  }
+  /*//* Sor-nyíl: egérrel a sor fölött egy lépést előre mozdul. */
+  .club-nudge {
+    transition:
+      transform 180ms cubic-bezier(0.2, 0, 0, 1),
+      opacity 180ms ease;
+  }
+  @media (hover: hover) {
+    .group:hover .club-nudge {
+      transform: translateX(2px);
+      opacity: 1;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .press,
+    .press:active:not(:disabled),
+    .club-nudge,
+    .group:hover .club-nudge {
+      transform: none;
+    }
+    .club-rise,
+    .club-enter,
+    .club-pop {
+      animation: none;
+    }
+    .club-collapse,
+    .club-collapse[data-closed],
+    .club-collapse > * {
+      transition: none;
     }
   }
 
@@ -1932,31 +2054,6 @@
     /* biome-ignore lint/complexity/noImportantStyles: a ragadó fejléc a papíron egyszerűen a lap teteje. */
     position: static !important;
   }
-}
-
-/*//! ---------------------------------------------------------------------------
-    //! AZ ÁRADÁS ALATT A VÁLTÓ MEGFORDUL (lásd `chrome/flood.ts`)
-    //! ---------------------------------------------------------------------------
-    //! A tok a folyadék színét veszi fel, a folyadék és a felirat a tokét — így a
-    //! tok egybeolvad a képernyőt elöntő vízzel, és csak a sötét csepp marad.
-    //! A csere KÉT SZINTEN történik, mert egy elemen belül a két token nem
-    //! hivatkozhat egymásra: a `nav` rögzíti a SAJÁT (akár `.nav-glass`) értékeit,
-    //! a `contents` doboz pedig ezekből fordítva állítja vissza őket.
-    //*
-    //! Rétegen kívül áll, hogy a tok `bg-card` / `bg-background` osztályát verje. */
-[data-pill-nav] {
-  --pn-case: var(--card);
-}
-[data-pill-nav][data-floating] {
-  --pn-case: var(--background);
-}
-html[data-pn-flood] [data-pill-nav] {
-  --pn-fg: var(--foreground);
-  background-color: var(--foreground);
-}
-html[data-pn-flood] [data-pill-nav] [data-pn-ink] {
-  --foreground: var(--pn-case);
-  --background: var(--pn-fg);
 }
 
 /* ─── KÓDCSATOLMÁNYOK A CSEVEGÉSBEN (highlight.js) ──────────────────────────

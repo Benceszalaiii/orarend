@@ -1,4 +1,4 @@
-import { ArrowLeft, LogIn } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, LogIn } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -132,9 +132,12 @@ export default async function ClubPage({
     <ClubFrame subject="Szakkörök" context={club.name} preview={!launched}>
       <Link
         href="/szakkorok"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-strong transition-colors hover:text-foreground"
+        className="group inline-flex items-center gap-1.5 rounded-full text-sm text-muted-strong transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        <ArrowLeft className="size-4" aria-hidden />
+        <ArrowLeft
+          className="size-4 transition-transform duration-150 group-hover:-translate-x-0.5 motion-reduce:transition-none"
+          aria-hidden
+        />
         Összes szakkör
       </Link>
 
@@ -197,7 +200,7 @@ export default async function ClubPage({
               scroll={false}
               aria-current={tab === t.id ? "page" : undefined}
               className={cn(
-                "-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+                "-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors duration-150 touch-target focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:text-foreground",
                 tab === t.id
                   ? "acc-text border-current"
                   : "border-transparent text-muted-strong hover:text-foreground",
@@ -324,17 +327,13 @@ async function StreamTab({
           //! BELÉPÉS NÉLKÜL A HÍRFOLYAM NEM LÁTSZIK (döntés, 2026-10-03): ide
           //! diákok írnak a nevükkel. A tagság és az időpont attól még
           //! mindenkié — azok a bal oszlopban és a „Tagok" fülön ott vannak.
-          <div className="flex flex-col items-start gap-3 rounded-2xl border border-border px-5 py-6">
-            <p className="text-[15px] font-semibold text-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl border border-border bg-card px-5 py-5">
+            <p className="text-pretty text-[15px] font-semibold text-foreground">
               A hírfolyamot a belépett jedlikesek látják.
-            </p>
-            <p className="max-w-md text-pretty text-sm text-muted-strong">
-              Itt írnak a vezetők híreket, és itt kérdeznek a tagok. Lépj be az
-              iskolai fiókoddal, és te is látod.
             </p>
             <Link
               href={`/belepes?tovabb=${encodeURIComponent(`/szakkorok/${club.slug}`)}`}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <LogIn className="size-4" aria-hidden />
               Belépés
@@ -446,7 +445,7 @@ function DetailsTab({
           A szakkörről
         </h2>
         {club.description ? (
-          <p className="mt-2 whitespace-pre-line text-pretty text-[15px] leading-relaxed text-foreground">
+          <p className="mt-2 max-w-prose whitespace-pre-line text-pretty text-[15px] leading-relaxed text-foreground">
             {club.description}
           </p>
         ) : (
@@ -467,9 +466,13 @@ function DetailsTab({
                 <Link
                   href={`/versenyek/${c.slug}`}
                   prefetch={false}
-                  className="font-medium text-primary underline-offset-4 hover:underline"
+                  className="group inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline"
                 >
                   {c.name}
+                  <ArrowUpRight
+                    className="club-nudge size-3.5 opacity-70"
+                    aria-hidden
+                  />
                 </Link>
                 <span className="ml-2 text-sm text-muted-strong">
                   {formatWhen(c.startsAt)}

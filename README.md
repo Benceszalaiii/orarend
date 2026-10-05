@@ -40,6 +40,12 @@ fekvő lapra is kinyomtatható.
   kezd. Egy tárgyon belül osztályonként (alapból) vagy tanáronként nézhető
   (`&nezet=tanar`); ha az órarendben választottál osztályt, az kerül előre, és
   meg is van jelölve — ezt a lap csak a böngészőből olvassa, nem küldi el.
+- **Gépi hozzáférés.** Az órarend, a szabad termek és a tantárgyak egyszerű
+  GET-tel JSON-ban is elérhetők (`/api/orarend`, `/api/termek`,
+  `/api/tantargyak`); a leírás a `/llms.txt`-ben van. A felhasználó nevében
+  dolgozó AI-asszisztens (ChatGPT, Claude, …) a lap helyett annak JSON-párját
+  kapja, így „mi lesz holnap a 13A-nak?" kérdésre élő adatból felel. A
+  tanító- és keresőrobotokat a lapok továbbra is kizárják.
 - **Nyomtatás.** `@page { size: A4 landscape }`, saját világos palettával, ami
   megtartja a tantárgyak színeit: a szín itt információ, nem dekoráció.
 - **Megnevezett hibák.** Az órarend adatai nem a mieink, ezért minden hibafajtának
@@ -340,6 +346,16 @@ tanítás*, *nem ellenőrizhető* (`lib/club-schedule.ts`).
   (`webcal://`).
 - Szakkört **tanár** hoz létre; **diák javasolhat**, és a felkért tanár hagyja
   jóvá (`lib/club-access.ts`).
+- **Üzemeltetői pult** (`/admin/szakkorok`, `/admin/versenyek`): minden
+  szakkör és verseny egy listában, a javaslatokkal, piszkozatokkal és
+  megszűntekkel együtt. Javaslat jóváhagyása a felkért tanár helyett,
+  lezárás és újranyitás, végleges törlés; tagok és nevezők listája,
+  jelentkezés/nevezés törlése; versenyállapot váltása. A pult jelzi, ami
+  lépésre vár (régen megerősített, csak tanár szerinti időpont; lejárt
+  határidejű, még nyitott verseny; lezajlott verseny eredmény nélkül). A
+  moderálási sávban az ötletek (elrejtés, visszaállítás, törlés — a szerző
+  neve nélkül) és a hírfolyamok legutóbbi bejegyzései és hozzászólásai
+  (törlés) állnak (`lib/admin-content.ts`).
 - **A szakkör lapja** a Google Classroom kurzusainak mintájára: színes borító,
   fülek (*Hírfolyam* · *Tagok* · *Részletek*, `?lap=`), bal oldalt a heti
   alkalmak és a jelentkezés. A **hírfolyamra** a tagok és a vezetők írnak
@@ -423,7 +439,8 @@ src/
     valtozasok/    változások listája
     belepes/       opcionális iskolai belépés
     adatvedelem/   adatvédelmi tájékoztató
-    admin/         üzemeltetői pult (isAdmin): felhasználók, statisztika, közlemények
+    admin/         üzemeltetői pult (isAdmin): felhasználók, statisztika, közlemények,
+                   szakkörök, versenyek
     api/auth/      bejelentkezés és passkey-végpontok
     api/beallitasok/ beállítás-szinkron végpontok
     api/hasznalat/ osztályszintű használati számláló

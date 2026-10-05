@@ -1,7 +1,8 @@
 "use client";
 
-import { ArrowUpRight, Download } from "lucide-react";
+import { ArrowUpRight, Download, Star } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { IosInstallSteps } from "@/components/pwa/add-to-home-screen";
 import {
   Popover,
@@ -27,13 +28,39 @@ import { cn } from "@/lib/utils";
 //! keresünk, mindegyik útban lesz valahol. Egy lábléc egyszer kerül útba: a
 //! lap alján, ahol már úgyis vége a tartalomnak.
 //*
-//! A SORREND A HASZNÁLAT SORRENDJE, nem a fontosságé. Elöl a CSELEKVÉS
-//! (telepítés) — arra rá lehet koppintani, és tesz valamit. Utána a három
-//! OLVASNIVALÓ (változások, adatvédelem, forráskód), amiket elolvasnak, és
-//! nem térnek vissza rájuk.
+//! A SORREND A HASZNÁLAT SORRENDJE, nem a fontosságé. Elöl a két CSELEKVÉS
+//! (telepítés, Google-forrás) — ezekre rá lehet koppintani, és tesznek valamit.
+//! Utánuk a három OLVASNIVALÓ (változások, adatvédelem, forráskód), amiket
+//! elolvasnak, és nem térnek vissza rájuk.
 
 const REPO_URL = "https://github.com/Benceszalaiii/orarend";
 const DEVELOPER = "Szalai Bence";
+
+//! A GOOGLE ÁTVISZ MINKET A SAJÁT FELÜLETÉRE — A SAJÁT SZKRIPTJE NÉLKÜL.
+//! A Google ad egy kész, beágyazható gombot (`news.google.com/swg/js`), de
+//! azzal minden lapbetöltéskor lefutna egy harmadik fél kódja azoknál is, akik
+//! soha rá nem koppintanak — egy olyan lapon, ami az `/adatvedelem`-ben azt
+//! állítja magáról, hogy a látogatottságmérésen kívül nem tölt be idegen
+//! kódot. A Google saját dokumentációja ezért ad egy „deeplink" változatot is:
+//! ugyanaz a cél, de csak akkor, ha a felhasználó tényleg elindul oda.
+//* https://developers.google.com/search/docs/appearance/preferred-sources
+const PREFERRED_SOURCES = "https://www.google.com/preferences/source?q=";
+
+//! A SAJÁT CÍMÜNKET NEM ÍRJUK BE KÉTSZER. A Google-nak a lap DOMAINJÉT kell
+//! átadni; ez az egyetlen adat a láblécben, ami nem a kódból, hanem a
+//! telepítésből következik. Ha van beállítva kanonikus cím
+//! (`NEXT_PUBLIC_SITE_HOST`), az az igazság forrása — előnézeti telepítéseken
+//! ugyanis a böngésző címe nem az éles domain. Ha nincs, a böngészőtől
+//! kérdezzük meg, mert egy rossz domain rosszabb, mint egy hiányzó gomb.
+const CONFIGURED_HOST = process.env.NEXT_PUBLIC_SITE_HOST ?? "";
+
+function useSiteHost(): string {
+  const [host, setHost] = useState(CONFIGURED_HOST);
+  useEffect(() => {
+    if (!CONFIGURED_HOST) setHost(window.location.hostname);
+  }, []);
+  return host;
+}
 
 //* A lábléc szövegmérete és színe egy helyen: a sorok között így nincs
 //* rangsor — mind ugyanaz a lábjegyzet.
@@ -80,6 +107,29 @@ function InstallItem() {
   );
 }
 
+//! MIT KÉRÜNK ÉS MIT NEM. Ez a hivatkozás nem állít be semmit — a Google saját
+//! beállítólapjára visz, ahol a felhasználó maga dönt. Ezért nem „Kövess
+//! minket", hanem az, ami történni fog: átmegy egy másik lapra. A külső nyíl
+//! ugyanezt mondja el annak, aki nem olvassa a szöveget.
+function PreferredSourceItem() {
+  const host = useSiteHost();
+  if (!host) return null;
+
+  return (
+    <a
+      href={`${PREFERRED_SOURCES}${encodeURIComponent(host)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={ITEM}
+      title="A Jedlik Info hozzáadása a Google keresés kedvenc forrásaihoz"
+    >
+      <Star className="size-3.5" aria-hidden />
+      Google kedvenc forrás
+      <ArrowUpRight className="size-3 opacity-60" aria-hidden />
+    </a>
+  );
+}
+
 //! A HIVATKOZÁSOK KÉT HELYEN KELLENEK, EGY HELYEN ÁLLNAK. A `/orarend` teljes
 //! képernyős rácsa alá nem kerülhet lábléc (az a lap szándékosan nem gördül),
 //! ezért ott a jelmagyarázat-buborék veszi át ugyanezt a listát — lásd
@@ -95,6 +145,7 @@ export function SiteFooterLinks({ className }: { className?: string }) {
       )}
     >
       <InstallItem />
+      <PreferredSourceItem />
       <Link href="/valtozasok" className={ITEM}>
         Változások
       </Link>

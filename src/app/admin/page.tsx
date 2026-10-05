@@ -4,6 +4,7 @@ import { loadClassList } from "@/lib/known-class";
 import prisma from "@/lib/prisma";
 import { loadTeacherDirectory } from "@/lib/teacher-directory";
 import { AccessDenied } from "./_components/access-denied";
+import { StatTile } from "./_components/stat-tile";
 import { type AdminUserRow, UserManager } from "./user-manager";
 
 export const metadata: Metadata = {
@@ -87,12 +88,12 @@ export default async function AdminUsersPage() {
   return (
     <main className="mt-6">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Tile label="Összes fiók" value={summary.total} />
-        <Tile label="Tanár" value={summary.teachers} />
-        <Tile label="Diák osztállyal" value={summary.students} />
-        <Tile label="Üzemeltető" value={summary.admins} />
-        <Tile label="Aktív (7 nap)" value={summary.active7} />
-        <Tile label="Új (30 nap)" value={summary.new30} />
+        <StatTile label="Összes fiók" value={summary.total} />
+        <StatTile label="Tanár" value={summary.teachers} />
+        <StatTile label="Diák osztállyal" value={summary.students} />
+        <StatTile label="Üzemeltető" value={summary.admins} />
+        <StatTile label="Aktív (7 nap)" value={summary.active7} />
+        <StatTile label="Új (30 nap)" value={summary.new30} />
       </div>
 
       <UserManager
@@ -107,16 +108,5 @@ export default async function AdminUsersPage() {
         classes={classes}
       />
     </main>
-  );
-}
-
-function Tile({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-bold tracking-tight text-foreground tabular-nums">
-        {value.toLocaleString("hu-HU")}
-      </p>
-    </div>
   );
 }

@@ -50,6 +50,7 @@ import {
 import { type FitWeeks, useClubFitWeeks } from "@/lib/use-club-fit";
 import { cn } from "@/lib/utils";
 import type { ClubCardData } from "./_components/club-card";
+import { FilterChips } from "./_components/filter-chips";
 import {
   SlotVerdict,
   SOURCE_LABEL,
@@ -245,27 +246,46 @@ export function ClubsBrowser({
             }
           />
         )}
-        <label className="relative block sm:w-64">
-          <span className="sr-only">Keresés</span>
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Név, tanár vagy terem"
-            className="h-10 w-full rounded-full border border-input bg-background pr-3 pl-9 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          />
-        </label>
+        <div className="relative sm:w-64">
+          <label>
+            <span className="sr-only">Keresés</span>
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              //* Esc: előbb a szöveget törli, a fókusz a mezőben marad.
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && query) {
+                  e.preventDefault();
+                  setQuery("");
+                }
+              }}
+              placeholder="Név, tanár vagy terem"
+              className="h-10 w-full rounded-full border border-input bg-background pr-10 pl-9 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-search-cancel-button]:appearance-none"
+            />
+          </label>
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="press club-enter absolute top-1/2 right-1.5 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-strong hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <X className="size-3.5" aria-hidden />
+              <span className="sr-only">Keresés törlése</span>
+            </button>
+          )}
+        </div>
         {timeWindow && (
           //* A térképen kijelölt idő itt is ott áll: aki a lista közepén
           //* jár, annak is látszik, miért ennyi a sor — és innen is elenged.
           <button
             type="button"
             onClick={() => setTimeWindow(null)}
-            className="inline-flex h-8 w-fit shrink-0 items-center gap-1.5 rounded-full border border-primary/60 bg-primary/10 pr-2 pl-3 text-xs font-medium whitespace-nowrap text-foreground tabular-nums transition-colors touch-target hover:bg-primary/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
+            className="press club-enter inline-flex h-8 w-fit shrink-0 items-center gap-1.5 rounded-full border border-primary/60 bg-primary/10 pr-2 pl-3 text-xs font-medium whitespace-nowrap text-foreground tabular-nums touch-target hover:bg-primary/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <Clock className="size-3.5 text-primary" aria-hidden />
             {windowLabel(timeWindow)}
@@ -273,26 +293,21 @@ export function ClubsBrowser({
             <span className="sr-only">: az időablak törlése</span>
           </button>
         )}
-        <fieldset className="-mx-4 flex min-w-0 gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
-          <legend className="sr-only">Fajta</legend>
-          {(["all", ...kinds] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={kind === k}
-              onClick={() => setKind(k)}
-              className={cn(
-                "h-8 shrink-0 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-colors touch-target focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                kind === k
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border text-muted-strong hover:text-foreground",
-              )}
-            >
-              {k === "all" ? "Mind" : CLUB_KIND_LABELS[k]}
-            </button>
-          ))}
-        </fieldset>
+        <FilterChips
+          legend="Fajta"
+          options={[
+            { id: "all" as KindFilter, label: "Mind" },
+            ...kinds.map((k) => ({ id: k, label: CLUB_KIND_LABELS[k] })),
+          ]}
+          value={kind}
+          onChange={setKind}
+        />
       </div>
+
+      {/*//* A szűrés eredménye a felolvasónak is: a lista csendben változna. */}
+      <p className="sr-only" aria-live="polite">
+        {searching ? `${matches.length} szakkör` : ""}
+      </p>
 
       {matches.length === 0 ? (
         <EmptyPanel>
@@ -324,7 +339,7 @@ export function ClubsBrowser({
           )}
         </EmptyPanel>
       ) : (
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-10">
           {groups.map((group, index) => (
             <ClubGroup
               //* A kulcs a nyitott-csukott alapállapotot is visszaállítja, ha a
@@ -504,7 +519,7 @@ function FitWeek({
       <DialogTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-10 w-full min-w-0 shrink-0 items-center gap-2 rounded-full border border-primary/40 bg-primary/[0.07] pr-2.5 pl-3 text-sm text-foreground transition-colors touch-target hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none sm:w-auto"
+          className="group press inline-flex h-10 w-full min-w-0 shrink-0 items-center gap-2 rounded-full border border-primary/40 bg-primary/[0.07] pr-2.5 pl-3 text-sm text-foreground touch-target hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto"
         >
           <CalendarCheck className="size-4 shrink-0 text-primary" aria-hidden />
           {className !== null && (
@@ -521,7 +536,7 @@ function FitWeek({
             {label}
           </span>
           <ChevronRight
-            className="ml-auto size-4 shrink-0 text-muted-strong"
+            className="club-nudge ml-auto size-4 shrink-0 text-muted-strong"
             aria-hidden
           />
         </button>
@@ -550,7 +565,7 @@ function FitWeek({
           <DialogClose asChild>
             <button
               type="button"
-              className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="press inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               {timeWindow ? "Mutasd a listában" : "Kész"}
             </button>
@@ -797,7 +812,7 @@ function ClubGroup({
           aria-expanded={open}
           aria-controls={listId}
           onClick={() => setOpen((v) => !v)}
-          className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-sm text-muted-strong transition-colors touch-target hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          className="press -mr-2 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-sm text-muted-strong touch-target hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
         >
           {open ? "Elrejtem" : "Mutasd"}
           <ChevronDown
@@ -809,20 +824,33 @@ function ClubGroup({
           />
         </button>
       </div>
-      {open && (
-        <ul id={listId} className={listGroup}>
-          {group.clubs.map((club) => (
-            <li key={club.slug}>
-              <ClubRow
-                club={club}
-                fit={fits?.get(club.slug) ?? null}
-                highlighted={highlight === club.slug}
-                onHover={onRowHover}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
+      {/*//* Zárva is a DOM-ban marad (`inert`): a nyitás így animálható, és
+          //* a felolvasó meg a Tab ugyanúgy nem jut bele, mint eddig. */}
+      <div
+        id={listId}
+        className="club-collapse"
+        data-closed={open ? undefined : ""}
+        inert={!open}
+      >
+        <div>
+          <ul className={listGroup}>
+            {group.clubs.map((club, index) => (
+              <li
+                key={club.slug}
+                className="club-rise"
+                style={{ "--i": index } as React.CSSProperties}
+              >
+                <ClubRow
+                  club={club}
+                  fit={fits?.get(club.slug) ?? null}
+                  highlighted={highlight === club.slug}
+                  onHover={onRowHover}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
       {/*//* A jelmagyarázat az első csoport UTÁN: a sorok telefonon is a
           //* képernyő alján kezdődjenek, a jelek magyarázata ráér alattuk. */}
       {legend && <SourceLegend />}
@@ -856,7 +884,7 @@ const ClubRow = memo(function ClubRow({
       onPointerEnter={(e) => e.pointerType === "mouse" && onHover(club.slug)}
       onPointerLeave={(e) => e.pointerType === "mouse" && onHover(null)}
       className={cn(
-        "grid gap-x-8 gap-y-2.5 px-4 py-3.5 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none md:grid-cols-[minmax(0,1fr)_minmax(0,27rem)]",
+        "grid gap-x-8 gap-y-2.5 px-4 py-3.5 transition-colors duration-150 hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-muted/60 motion-reduce:transition-none md:grid-cols-[minmax(0,1fr)_minmax(0,27rem)]",
         highlighted && "bg-muted/40",
       )}
     >

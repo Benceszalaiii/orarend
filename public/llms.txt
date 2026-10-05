@@ -15,18 +15,27 @@ and returns JSON.
 The timetable changes during the week. Fetch it again each time you answer
 instead of reusing an earlier answer. Responses are cached for up to 5 minutes.
 
+AI assistants acting for a user (ChatGPT-User, Claude-User, Perplexity-User,
+MistralAI-User) are allowed by robots.txt. If you open one of the human pages,
+you are redirected to its JSON counterpart (e.g. `/orarend?class=13A` →
+`/api/orarend?osztaly=13A`) or to this file. The site is not blocking you: use
+the JSON endpoints below.
+
 ## Timetable API
 
 - [Classes and teachers](https://jedlik.info/api/orarend): `GET /api/orarend`
   with no parameters. Returns `{ classes: [{ short, name, url }], teachers: [{ short, name, url }] }`.
-  Each `url` is the ready-made link to that class's or teacher's week. If your
-  fetch tool can only open links it has already seen, open this list first
-  and follow the `url` you need instead of building the address yourself.
+  Each `url` is the ready-made link to that class's or teacher's current week,
+  and `nextWeekUrl` to next week. If your fetch tool can only open links it
+  has already seen, open this list first and follow the link you need instead
+  of building the address yourself.
 - [A class's week](https://jedlik.info/api/orarend?osztaly=13C): `GET /api/orarend?osztaly=<class>`.
   The class code is case- and punctuation-insensitive (`13C`, `13.c` and `13 C` all work).
 - [A teacher's week](https://jedlik.info/api/orarend?tanar=AA): `GET /api/orarend?tanar=<teacher short code or name>`.
 - Other weeks: add `&het=YYYY-MM-DD`, using any date in the week you want. The
-  default is the current week. Example:
+  default is the current week (Monday to Sunday). On a Saturday or Sunday,
+  "tomorrow" or "Monday" is already next week: use `nextWeekUrl`. Every week
+  response also carries `previousWeekUrl` and `nextWeekUrl`. Example:
   `https://jedlik.info/api/orarend?osztaly=13C&het=2026-10-05`.
 - [Free rooms right now](https://jedlik.info/api/termek): `GET /api/termek`,
   optionally `?nap=YYYY-MM-DD&ido=HH:MM` (Budapest time). Returns `free`,
@@ -47,6 +56,7 @@ Pass exactly one of `osztaly` or `tanar`, not both.
   kind: "class" | "teacher",
   subject: { short, name },
   weekStart: "YYYY-MM-DD",            // Monday
+  previousWeekUrl, nextWeekUrl,       // ready links to the neighbouring weeks
   days: [{ name, dateKey, week, dayOfWeek, teaching, notes, bells }],
   periods: [{ number, start: "HH:MM", end: "HH:MM" }],
   lessons: [{

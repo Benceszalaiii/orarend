@@ -16,7 +16,8 @@ import { cn } from "@/lib/utils";
 //!
 //! AZ ELŐNÉZET JELÖLŐJE ITT ÁLL. Aki a bevezetés előtt ide eljut, az a szerver
 //! szerint tanár vagy admin (különben 404-et kapott volna) — nála a rács is
-//! kérje le a szakköröket (lásd `lib/club-events.ts`).
+//! kérje le a szakköröket (lásd `lib/club-events.ts`). Látható szalagot nem
+//! teszünk ki: a lap ugyanúgy néz ki, mint a bevezetés után.
 export function ClubFrame({
   subject,
   context,
@@ -41,12 +42,6 @@ export function ClubFrame({
         </div>
       </div>
       <div className="relative z-10 mx-auto w-full max-w-5xl grow px-4 pt-6 pb-12 sm:px-6">
-        {preview && (
-          <p className="mb-6 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-strong">
-            Előnézet: a diákok még nem látják ezt a lapot. Tanárként és
-            üzemeltetőként azért látod, hogy fel tudd tölteni.
-          </p>
-        )}
         {children}
       </div>
       <SiteFooter />
