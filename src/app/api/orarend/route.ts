@@ -1,5 +1,6 @@
 import { jsonUtf8 } from "@/lib/json-response";
 import {
+  addDays,
   fetchTimetableClasses,
   fetchTimetableTeachers,
   getTimetableWeek,
@@ -68,14 +69,30 @@ function badRequest(message: string) {
 //! KÉSZ LINK MINDEN ALANYHOZ. A chatbotok letöltője (Claude, ChatGPT) jellemzően
 //! csak olyan címet nyit meg, amit már leírva látott — egy maga összerakott
 //! `?osztaly=9A`-t nem. Ha a listában ott a teljes cím, azt követni tudja.
+//*
+//! A JÖVŐ HETE IS KÉSZ LINK. Vasárnap a „holnap" már a következő hét: ha csak
+//! az aktuális hét címe állna itt, az asszisztens a múlt hetet olvasná fel, a
+//! `&het=` paramétert pedig — mert maga rakná össze — nem tudná megnyitni.
+function weekUrl(
+  origin: string,
+  param: "osztaly" | "tanar",
+  short: string,
+  weekStart?: string,
+) {
+  const base = `${origin}/api/orarend?${param}=${encodeURIComponent(short)}`;
+  return weekStart ? `${base}&het=${weekStart}` : base;
+}
+
 function withUrl(
   origin: string,
   param: "osztaly" | "tanar",
   subjects: TimetableSubject[],
 ) {
+  const nextWeek = addDays(mondayOf(), 7);
   return subjects.map((s) => ({
     ...s,
-    url: `${origin}/api/orarend?${param}=${encodeURIComponent(s.short)}`,
+    url: weekUrl(origin, param, s.short),
+    nextWeekUrl: weekUrl(origin, param, s.short, nextWeek),
   }));
 }
 
@@ -135,6 +152,10 @@ export async function GET(request: Request) {
     );
   }
 
+  //* A szomszédos hetek kész linkként: a lapozáshoz se kelljen címet építeni.
+  const param = result.kind === "class" ? "osztaly" : "tanar";
+  const short = result.subject?.short ?? subject;
+
   //* A perceket órára is kiírjuk: a géppel olvasó kliensnek ne kelljen
   //* visszaszámolnia, mikor kezdődik a harmadik óra.
   return jsonUtf8(
@@ -142,6 +163,18 @@ export async function GET(request: Request) {
       kind: result.kind,
       subject: result.subject,
       weekStart: result.weekStart,
+      previousWeekUrl: weekUrl(
+        url.origin,
+        param,
+        short,
+        addDays(result.weekStart, -7),
+      ),
+      nextWeekUrl: weekUrl(
+        url.origin,
+        param,
+        short,
+        addDays(result.weekStart, 7),
+      ),
       days: result.days,
       periods: result.periods.map((p) => ({
         ...p,

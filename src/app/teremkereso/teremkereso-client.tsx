@@ -2,6 +2,7 @@
 
 import { DoorOpen, Monitor, Search, TriangleAlert } from "lucide-react";
 import { animate, useMotionValue } from "motion/react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CrestField,
@@ -21,6 +22,7 @@ import {
 } from "@/components/timetable/shared";
 import { useClock, useVisibilityEpoch } from "@/components/timetable/use-clock";
 import { MorphingInfinity } from "@/components/ui/morphing-infinity";
+import { isComputerRoom } from "@/lib/computer-rooms";
 import type { FreeRoomsAnswer, RoomStatus } from "@/lib/free-rooms";
 import { cn } from "@/lib/utils";
 
@@ -510,12 +512,24 @@ function BusyPanel({
               <span className="w-14 shrink-0 truncate font-medium text-foreground">
                 {room.short}
               </span>
-              <span className="min-w-0 flex-1 truncate text-muted-strong">
-                {room.booking?.subject}
-                {room.booking?.classShort
-                  ? ` · ${room.booking.classShort}`
-                  : ""}
-              </span>
+              {room.club ? (
+                //* Szakkör: a Jedlikinfo címe helyett a szakkör neve, a lapjára
+                //* mutatva — ez a teremkereső és a szakkörök közti híd.
+                <Link
+                  href={`/szakkorok/${room.club.slug}`}
+                  prefetch={false}
+                  className="min-w-0 flex-1 truncate font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
+                >
+                  {room.club.name}
+                </Link>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-muted-strong">
+                  {room.booking?.subject}
+                  {room.booking?.classShort
+                    ? ` · ${room.booking.classShort}`
+                    : ""}
+                </span>
+              )}
               {room.booking && (
                 <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                   {minLabel(room.booking.endMin)}
@@ -601,40 +615,6 @@ function byRoomOrder(a: RoomStatus, b: RoomStatus): number {
     //* Számérzékeny összehasonlítás, hogy a `22` a `102` ELÉ kerüljön.
     a.short.localeCompare(b.short, "hu", { numeric: true })
   );
-}
-
-//! ─── A GÉPTERMEK LISTÁJA KÉZZEL ÁLL, MERT A FORRÁS NEM TUDJA ──────────────
-//! A Jedlikinfo a termekről csak a jelüket és a nevüket mondja meg — azt nem,
-//! hogy van-e bennük gép. Ez a halmaz tehát ISKOLAI TUDÁS, nem levezetés: ha
-//! egy terem gépet kap vagy elveszíti, ITT kell átírni, más nem fogja észrevenni.
-const COMPUTER_ROOMS: ReadonlySet<string> = new Set(
-  [
-    "102",
-    "103",
-    "202",
-    "203",
-    "302",
-    "303",
-    "B1",
-    "B2",
-    "B3",
-    "B4",
-    "B5",
-    "B6",
-    "B7",
-    "B8",
-    "115",
-    "116",
-    "117",
-    "118",
-    "25",
-    "plc",
-    "41",
-  ].map((short) => short.toLocaleLowerCase("hu")),
-);
-
-function isComputerRoom(short: string): boolean {
-  return COMPUTER_ROOMS.has(short.trim().toLocaleLowerCase("hu"));
 }
 
 //* Jelre és névre egyaránt szűrünk: a „labor" ugyanúgy találjon, mint a „102".

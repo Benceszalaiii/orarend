@@ -4,12 +4,14 @@ import {
   ArrowUpRight,
   Clock3,
   EyeOff,
+  Info,
   MapPin,
   Sparkles,
   Undo2,
   User,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,24 +20,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { accentStyle } from "@/lib/accent";
-import type { TimetableSubjectKind } from "@/lib/timetable";
+import { SESSION_STATUS_BADGE, SESSION_STATUS_TEXT } from "@/lib/club-schedule";
+import type { CalendarEvent, TimetableSubjectKind } from "@/lib/timetable";
 import { groupLabel, type LessonRun } from "@/lib/timetable-merge";
 import { cn } from "@/lib/utils";
 import { LessonExtrasSection } from "./lesson-extras";
 import { durationLabel, rangeLabel } from "./shared";
 
-export type CalendarEvent = {
-  id: string;
-  title: string;
-  dayOfWeek: number;
-  startMin: number;
-  endMin: number;
-  room: string;
-  szakkorName: string;
-  szakkorSlug: string;
-  kozossegi: boolean;
-  cancelled: boolean;
-};
+//* Egy helyen definiálva (`lib/timetable.ts`), itt csak továbbadjuk.
+export type { CalendarEvent };
 
 //* ---------------------------------------------------------------------------
 //* Részletlap — a kártya kinagyítva
@@ -415,13 +408,18 @@ function EventBody({
     <>
       <SheetHead
         seed={event.szakkorSlug}
-        strong
+        strong={!event.suggested}
         title={event.title}
         sub={`${dayLabel} · ${rangeLabel(event.startMin, event.endMin)}`}
       >
+        {event.suggested && !event.cancelled && (
+          <span className="rounded-full border border-dashed border-foreground/30 px-2 py-0.5 text-[11px] font-semibold text-foreground/75">
+            Javaslat
+          </span>
+        )}
         {event.cancelled && (
           <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-semibold text-destructive">
-            Elmarad
+            {event.status ? SESSION_STATUS_BADGE[event.status] : "Elmarad"}
           </span>
         )}
       </SheetHead>
@@ -437,9 +435,23 @@ function EventBody({
         <Row icon={Clock3} label="Időtartam">
           {durationLabel(event.endMin - event.startMin)}
         </Row>
-        <Row icon={Users} label="Szakkör">
-          {event.szakkorName}
-        </Row>
+        {event.szakkorName !== event.title && (
+          <Row icon={Users} label="Szakkör">
+            {event.szakkorName}
+          </Row>
+        )}
+        {event.suggested && (
+          <Row icon={Sparkles} label="Miért látod">
+            Neked is szóló szakkör, és ebben a sávban nincs órád. Ha
+            rendszeresen látni akarod, kövesd a szakkör lapján. A javaslatokat a
+            rács Beállítások lapján kapcsolhatod ki.
+          </Row>
+        )}
+        {event.status && (
+          <Row icon={Info} label="Honnan tudjuk">
+            {SESSION_STATUS_TEXT[event.status]}
+          </Row>
+        )}
         {event.kozossegi && !event.cancelled && (
           <Row icon={Sparkles} label="Közösségi">
             Ezért az alkalomért közösségi óra jár.
@@ -448,10 +460,16 @@ function EventBody({
       </div>
 
       <SheetFoot onClose={onClose}>
-        <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-xs font-medium text-primary-foreground">
-          Szakkör megnyitása
-          <ArrowUpRight className="size-3.5" aria-hidden />
-        </span>
+        {event.status && (
+          <Link
+            href={`/szakkorok/${event.szakkorSlug}`}
+            prefetch={false}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            Szakkör megnyitása
+            <ArrowUpRight className="size-3.5" aria-hidden />
+          </Link>
+        )}
       </SheetFoot>
     </>
   );

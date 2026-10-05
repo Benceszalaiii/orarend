@@ -5,6 +5,7 @@ import {
   uninstallBrowser,
 } from "@/test/browser";
 import { loadPalette, loadTheme } from "./appearance";
+import { loadFollowedClubs } from "./club-follow";
 import { loadDualSchedule } from "./dual-schedule";
 import { loadIdentity } from "./identity";
 import { loadLastView } from "./last-view";
@@ -65,6 +66,8 @@ describe("böngészőben", () => {
       merge: { "10B": [{ clusterKey: "k", chosen: "c" }] },
       dual: { "10B": { A: [1], B: [] } },
       hiddenMenu: ["duty", "rooms"],
+      clubs: ["dron-szakkor"],
+      contests: ["osztv-informatika"],
     };
     applyLocalPrefs(prefs);
     expect(loadCachedClass()).toBe("10B");
@@ -78,6 +81,7 @@ describe("böngészőben", () => {
     ]);
     expect(loadDualSchedule("10B")).toEqual({ A: [1], B: [] });
     expect(loadHiddenMenu()).toEqual(["duty", "rooms"]);
+    expect(loadFollowedClubs()).toEqual(["dron-szakkor"]);
     expect(b.document.documentElement.dataset.palette).toBe("nyar");
     expect(b.document.documentElement.dataset.theme).toBe("light");
     //* Oda-vissza: amit alkalmaztunk, azt gyűjtjük be.

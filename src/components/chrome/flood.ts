@@ -6,13 +6,13 @@
 //! Amíg a lap víz alatt van, az útvonal vált; a folyadék aztán az ÚJ lap
 //! váltójának aktív cellájába apad vissza — pontosan oda, ahol a folyadék áll.
 //*
-//! A VÁLTÓ AZ ÁRADÁSBAN IS LÁTSZIK, FORDÍTOTT SZÍNNEL. Az áradás rétege egy
-//! kivágást hagy a váltó alakján, a váltó pedig közben megfordítja a két
-//! tokenjét (`html[data-pn-flood]`, lásd `globals.css`): a tok a folyadék
-//! színét veszi fel, a folyadék a tokét. A tok így egybeolvad az áradással,
-//! és csak a sötét csepp meg a felirat marad belőle — a váltó a betöltés alatt
-//! is megmondja, hová tartasz. Mivel mindkét szín a váltó SAJÁT tokenje, ez a
-//! világos és a sötét témában, meg a `.nav-glass` zárt színvilágában is áll.
+//! A VÁLTÓ IS VÍZ ALÁ KERÜL, MINDEN MÁSSAL EGYÜTT. Az áradás az egész lapot
+//! fedi, kivágás nélkül. Korábban a víz lyukat hagyott a váltó alakján, a váltó
+//! pedig megfordította a színeit — de a lyukban a váltó saját folyadéka is
+//! tovább mozgott, és két egymással birkózó animáció látszott: Safariban a
+//! fordított tok és a csepp szétcsúszott, és a váltó fölött nyíló menük (pl.
+//! az „Áradó lapváltás" kapcsolója) alá is belógott. A váltó úgy tér vissza,
+//! ahogy elment: a víz az aktív cellájába apad, és a váltó egyszerűen ott van.
 //*
 //! NEM A VÁLTÓ FÁJÁBAN ÉL. A koppintás lapot vált, a régi váltó leszerelődik;
 //! a réteg `body`-ra kerül, és a friss váltó a `registerPillNav`-val jelzi,
@@ -29,7 +29,8 @@ import { loadFlood } from "@/lib/flood-pref";
 type Capsule = { cx: number; cy: number; s: number; R: number };
 
 const EXPAND = 440;
-const HOLE_OPEN = 260;
+//* Ennyit legalább áll a víz, miután elöntötte a lapot.
+const SETTLE = 260;
 const RECEDE = 620;
 //* Ennyi ideig legalább látszik a betöltőképernyő — különben csak villan.
 const MIN_HOLD = 180;
@@ -50,15 +51,6 @@ const capsuleOf = (r: DOMRect): Capsule => ({
   cy: r.top + r.height / 2,
   s: Math.max(0, r.width / 2 - r.height / 2),
   R: r.height / 2,
-});
-
-//! A KIVÁGÁS EGY HAJSZÁLLAL KISEBB A VÁLTÓNÁL. Két élsimított perem egymáson
-//! — a vízé és a toké — a kettő között átengedi a sötét lapot: egy szürke
-//! gyűrű ülne a váltó körül. A víz így a tok peremére fut rá; a színük egy.
-const SEAM = 1.5;
-const shrink = (c: Capsule, d = SEAM): Capsule => ({
-  ...c,
-  R: Math.max(0, c.R - d),
 });
 
 const mixCapsule = (a: Capsule, b: Capsule, t: number): Capsule => ({
@@ -95,13 +87,6 @@ function wavyPath(c: Capsule, wobble: number, time: number, n = 72): string {
     d += ` Q ${p[0].toFixed(1)} ${p[1].toFixed(1)} ${mid(p, pts[(i + 1) % n])}`;
   }
   return `${d} Z`;
-}
-
-//* A kivágás pontos kapszula, ívekkel — ennek nem kell hullámoznia.
-function capsulePath({ cx, cy, s, R }: Capsule): string {
-  if (R < 0.5) return "";
-  const f = (v: number) => v.toFixed(1);
-  return ` M ${f(cx - s)} ${f(cy - R)} H ${f(cx + s)} A ${f(R)} ${f(R)} 0 0 1 ${f(cx + s)} ${f(cy + R)} H ${f(cx - s)} A ${f(R)} ${f(R)} 0 0 1 ${f(cx - s)} ${f(cy - R)} Z`;
 }
 
 //! ─── A VÁLTÓK NYILVÁNTARTÁSA ──────────────────────────────────────────────
@@ -176,12 +161,11 @@ export function launchFlood({
   }
   flood?.kill();
 
-  const doc = document.documentElement;
   const css = getComputedStyle(nav);
   //* A váltó SAJÁT tokenjei: a `.nav-glass` a nyitólapon felülírja őket.
   const water = css.getPropertyValue("--foreground").trim() || "white";
-  //* A betöltőképernyő felirata a tok színével ír — ugyanaz a csere, mint a
-  //* váltón: a folyadék a tok színét kapja.
+  //* A betöltőképernyő felirata a tok színével ír a folyadékon — ahogy a
+  //* váltó felirata is a csepp fölött.
   const ink = css.backgroundColor || "black";
 
   const from = (origin ?? activeCell(nav))?.getBoundingClientRect();
@@ -207,9 +191,8 @@ export function launchFlood({
     inset: "0",
     zIndex: "80",
     background: water,
-    //! A RÉTEG ELNYELI A KOPPINTÁST, A KIVÁGÁS NEM. A `clip-path` a
-    //! találatvizsgálatot is vágja: a váltó a lyukon át kezelhető marad, a
-    //! víz alatti lap viszont nem kap véletlen koppintást.
+    //! A RÉTEG ELNYELI A KOPPINTÁST: a víz alatti lap nem kap véletlen
+    //! koppintást, amíg a következő lap felállni készül.
     pointerEvents: "auto",
     touchAction: "none",
     clipPath: `path("${wavyPath(start, 0, 0)}")`,
@@ -239,19 +222,11 @@ export function launchFlood({
   let navigated = 0;
   let pending: (() => void) | null = navigate;
   let raf = 0;
-  let inverted = false;
   let done = false;
 
   const cover = (cx: number, cy: number) =>
     Math.hypot(Math.max(cx, innerWidth - cx), Math.max(cy, innerHeight - cy)) +
     48;
-
-  const invert = (on: boolean) => {
-    if (on === inverted) return;
-    inverted = on;
-    if (on) doc.dataset.pnFlood = "";
-    else delete doc.dataset.pnFlood;
-  };
 
   const go = () => {
     const fn = pending;
@@ -265,7 +240,6 @@ export function launchFlood({
     if (done) return;
     done = true;
     cancelAnimationFrame(raf);
-    invert(false);
     layer.remove();
     removeEventListener("pagehide", kill);
     if (flood === record) flood = null;
@@ -275,7 +249,6 @@ export function launchFlood({
     const time = (now - t0) / 1000;
     let outer: Capsule;
     let wobble = 0;
-    let hole: Capsule | null = null;
 
     if (phase === "expand") {
       const u = clamp01((now - t0) / EXPAND);
@@ -303,7 +276,6 @@ export function launchFlood({
       if (u >= 1) {
         phase = "hold";
         holdAt = now;
-        invert(true);
         go();
       }
     } else if (phase === "hold") {
@@ -314,23 +286,12 @@ export function launchFlood({
         R: cover(toCap.cx, toCap.cy),
       };
       const entry = latestNav();
-      if (entry) {
-        const navCap = shrink(capsuleOf(entry.el.getBoundingClientRect()));
-        const cellEl = activeCell(entry.el);
-        const seed = cellEl
-          ? { ...capsuleOf(cellEl.getBoundingClientRect()), s: 0, R: 0 }
-          : { ...navCap, s: 0, R: 0 };
-        hole = mixCapsule(seed, navCap, easeOut((now - holdAt) / HOLE_OPEN));
-      }
       const since = now - holdAt;
       word.style.opacity = String(easeOut(since / 220));
       word.style.transform = `translate(-50%, calc(-50% + ${(1 - easeOut(since / 320)) * 10}px))`;
 
       const mounted = entry && navigated > 0 && entry.at >= navigated;
-      if (
-        (mounted && since > Math.max(MIN_HOLD, HOLE_OPEN)) ||
-        since > MAX_HOLD
-      ) {
+      if ((mounted && since > Math.max(MIN_HOLD, SETTLE)) || since > MAX_HOLD) {
         phase = "recede";
         recedeAt = now;
       }
@@ -351,15 +312,6 @@ export function launchFlood({
         R: cover(target.cx, target.cy),
       };
 
-      //! ELŐBB A KIVÁGÁS ZÁRUL, AZTÁN APAD A VÍZ. A sötét csepp és a felirat
-      //! a folyadék közepébe húzódik; a váltó csak ezután, már víz alatt
-      //! fordul vissza — a színcsere sosem látszik.
-      const close = clamp01(u / 0.24);
-      if (navRect && close < 1) {
-        const seed = { ...target, s: 0, R: 0 };
-        hole = mixCapsule(shrink(capsuleOf(navRect)), seed, easeInOut(close));
-      } else invert(false);
-
       outer = mixCapsule(big, target, easeInOut(u));
       wobble = 0.06 * Math.sin(u * Math.PI);
       word.style.opacity = String(1 - easeOut(u / 0.22));
@@ -374,8 +326,7 @@ export function launchFlood({
       }
     }
 
-    const rule = hole ? "evenodd, " : "";
-    layer.style.clipPath = `path(${rule}"${wavyPath(outer, wobble, time)}${hole ? capsulePath(hole) : ""}")`;
+    layer.style.clipPath = `path("${wavyPath(outer, wobble, time)}")`;
     raf = requestAnimationFrame(tick);
   };
   raf = requestAnimationFrame(tick);
@@ -392,7 +343,7 @@ export function launchFlood({
       pending = fn;
       if (phase === "hold") {
         //* Új cél víz alatt: az apadás az ÚJ lap váltójára vár.
-        holdAt = performance.now() - HOLE_OPEN;
+        holdAt = performance.now() - SETTLE;
         go();
       }
     },

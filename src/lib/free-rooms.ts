@@ -82,7 +82,10 @@ export type RoomBooking = {
   classShort: string;
   /** A tanár neve — üres, ha a forrás nem mond tanárt. */
   teacher: string;
-  /** A tanár jele (`LM`) — ezzel nyílik meg a tanári órarend. */
+  //! A TANÁR JELE (`BNM`) — ezzel nyílik meg a tanári órarend, és ezzel
+  //! illeszkedik a szakkör a kártyára (`ClubSlot.teachers`). A név erre
+  //! alkalmatlan: a Jedlikinfo két „Horváth Norbert"-et is ismer, csak a jelük
+  //! különbözik.
   teacherShort: string;
   /** `"A"`, `"B"` vagy `"AB"`, ahogy a forrás adja. */
   week: string;
@@ -125,6 +128,10 @@ export type RoomStatus = {
   //! kezdődő óra alatt a terem technikailag üres, de nincs értelme bemenni.
   //! `null` = aznap már nincs több foglalás.
   freeUntil: number | null;
+  //* Ha a foglalás egy szakköré, annak neve és címe — a teremkereső a nevét
+  //* írja ki a Jedlikinfo gyakran semmitmondó címe („Tehetséggondozó
+  //* szakkör") helyett. A `/api/termek` tölti ki; a tiszta számítás nem tud róla.
+  club?: { slug: string; name: string } | null;
 };
 
 export type FreeRoomsAnswer = {

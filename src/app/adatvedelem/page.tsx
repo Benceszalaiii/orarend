@@ -291,6 +291,135 @@ export default function AdatvedelemPage() {
             //! NEM az iskoláé: egy nem hivatalos lap, ami iskolai jelszót kér,
             //! pontosan az a minta, amire gyanakodni kell. Ha ezt elhallgatnánk
             //! vagy szépítenénk, a gyanakvó diáknak lenne igaza. */}
+          {/*//! A SZAKKÖRÖKBEN VAN AZ OLDAL EGYETLEN NYILVÁNOS, SZEMÉLYHEZ KÖTÖTT
+              //! ADATA: a tagság. Ezt a diáknak tudnia kell, MIELŐTT jelentkezik
+              //! — ezért áll itt külön, nevesítve, és nem a belépés alatt. A
+              //! követés és az értesítés viszont névtelen, és ezt is ki kell
+              //! mondani, hogy ne tűnjön a kettő egynek. */}
+          <section className="flex flex-col gap-2">
+            <h2 className="text-base font-semibold text-foreground">
+              Szakkörök és versenyek (opcionális)
+            </h2>
+            <p>
+              A szakkörök listája, időpontjai és termei bárki számára láthatók,
+              belépés nélkül is. Az időpontokat az iskola nyilvános órarendjével
+              vetjük össze.
+            </p>
+            <p>
+              <span className="font-medium text-foreground">Követés.</span> Ha
+              követsz egy szakkört, az csak a böngésződben mentődik (
+              <span className="font-medium text-foreground">
+                orarend:club-follow:v1
+              </span>
+              ), belépve pedig a többi beállításoddal együtt a fiókodhoz is. A
+              követett szakkörök címe az órarend lekérésekor a kérésben utazik,
+              hogy a rácson megjelenjenek — azonosító nélkül, nem tároljuk, és
+              nem köthető hozzád.
+            </p>
+            <p>
+              <span className="font-medium text-foreground">
+                Jelentkezés — ez nyilvános.
+              </span>{" "}
+              Ha belépve jelentkezel egy szakkörre, a neved és az osztályod
+              megjelenik a szakkör lapján a tagok között, és ezt{" "}
+              <span className="font-medium text-foreground">
+                bárki láthatja
+              </span>
+              , aki megnyitja a lapot. A tagságot a fiókodhoz kötve tároljuk.
+              Kilépéskor a neved azonnal lekerül; a fiókod törlésével minden
+              tagságod megszűnik. Egy oda nem való jelentkezést az üzemeltető is
+              levehet.
+            </p>
+            <p>
+              <span className="font-medium text-foreground">
+                Hírfolyam — bejegyzések és hozzászólások.
+              </span>{" "}
+              Minden szakkör lapján van egy hírfolyam, ahová a szakkör tagjai és
+              vezetői bejegyzést és hozzászólást írhatnak. Amit oda írsz, azt a
+              neveddel és az osztályoddal együtt{" "}
+              <span className="font-medium text-foreground">
+                minden belépett felhasználó láthatja
+              </span>{" "}
+              — belépés nélkül senki, és a keresők sem. A szöveget és az idejét
+              a fiókodhoz kötve tároljuk, amíg ki nem törlöd. A saját
+              bejegyzésedet és hozzászólásodat bármikor törölheted; a szakkör
+              vezető tanára és az üzemeltető is törölheti. A törlés végleges, a
+              bejegyzéssel a hozzászólásai is eltűnnek. A fiókod törlésével
+              minden bejegyzésed és hozzászólásod megszűnik.
+            </p>
+            <p>
+              <span className="font-medium text-foreground">
+                Értesítés egy szakkörről
+              </span>{" "}
+              ugyanazzal a névtelen feliratkozással megy, mint az órák
+              értesítése (lásd fentebb): a feliratkozás mellett csak a követett
+              szakkörök címe tárolódik, a fiókodhoz nem kötjük. Ha a hírfolyamra
+              új bejegyzés kerül, erről is szólunk — de az értesítésben csak a
+              szakkör neve áll, a bejegyzés szövege és a szerzője nem: azt a lap
+              mutatja, belépés után. Bejegyzéskor a böngésződ a saját
+              feliratkozása címét is elküldheti, hogy a saját bejegyzésedről ne
+              kapj értesítést; ezt csak erre használjuk, nem tároljuk.
+            </p>
+            <p>
+              <span className="font-medium text-foreground">
+                Szakkör létrehozása és javaslása.
+              </span>{" "}
+              A szakkörnél a vezető tanár iskolai jelét tároljuk. Ha diákként
+              javasolsz egy szakkört, azt is eltároljuk, hogy tőled jött — a
+              javaslatot a jóváhagyásig csak te és a felkért tanár látjátok, és
+              a javasló neve később sem jelenik meg a szakkör lapján.
+            </p>
+            <p>
+              <span className="font-medium text-foreground">
+                „Mire lenne igény?” — témák és jelzések.
+              </span>{" "}
+              Belépve felírhatsz egy szakkör-témát, vagy jelezheted, hogy egy
+              téma téged is érdekel. A lapon csak a téma és a jelzések{" "}
+              <span className="font-medium text-foreground">száma</span>{" "}
+              látszik: hogy ki írta fel és ki jelezte, azt senki nem látja. A
+              fiókodhoz azért tároljuk, hogy egy témát egyszer jelezhess, és a
+              sajátodat visszavonhasd. A tanárok és az üzemeltető levehetnek egy
+              témát a lapról; az üzemeltető vissza is teheti, vagy véglegesen
+              törölheti. Hogy ki írta fel, azt a moderáláshoz sem nézzük meg.
+            </p>
+            <p>
+              <span className="font-medium text-foreground">
+                „Neked is jó időpontban” és a beleférő szakkörök.
+              </span>{" "}
+              Hogy egy szakkör belefér-e az órarendedbe, azt a böngésződ
+              számolja ki a nála mentett órarendből — a szerverre nem megy fel,
+              mikor van szabad időd. A rács javaslatainak kapcsolója is csak a
+              böngészőben mentődik (
+              <span className="font-medium text-foreground">
+                orarend:club-suggest:v1
+              </span>
+              ).
+            </p>
+            <p>
+              <span className="font-medium text-foreground">
+                Nevezés egy versenyre — ez is nyilvános.
+              </span>{" "}
+              Belépve nevezhetsz; a neved és az osztályod a verseny lapján a
+              nevezők között{" "}
+              <span className="font-medium text-foreground">
+                bárki számára látszik
+              </span>
+              . A felelős tanár a versenyhez helyezést, díjat és pontszámot
+              rögzíthet; ezek akkor válnak nyilvánossá a verseny lapján, amikor
+              a versenyt lezajlottnak jelöli. A határidőig vissza lehet lépni —
+              ilyenkor a neved lekerül, és vele a rögzített eredmény is. Egy oda
+              nem való nevezést az üzemeltető is törölhet.
+            </p>
+            <p>
+              A versenyek követése és az emlékeztetők ugyanúgy működnek, mint a
+              szakköröknél (
+              <span className="font-medium text-foreground">
+                orarend:contest-follow:v1
+              </span>
+              ): névtelenül, a fiókodhoz nem kötve.
+            </p>
+          </section>
+
           <section className="flex flex-col gap-2">
             <h2 className="text-base font-semibold text-foreground">
               Belépés az iskolai fiókkal (opcionális)
@@ -512,6 +641,21 @@ export default function AdatvedelemPage() {
               </span>{" "}
               szakaszt. Minden helyben tárolt adat bármikor törölhető a böngésző
               adatainak törlésével.
+            </p>
+            {/*//! NEM MINDEN BEÁLLÍTÁS KÖVETI A FIÓKOT. A fenti mondat szerint a
+                //! belépett diák beállításai a fiókjához is mentődnek — a
+                //! rajzolási kapcsolók viszont szándékosan készülékhez kötöttek
+                //! (`fill-split-pref.ts`), ezt ki kell mondani. */}
+            <p>
+              A rács megjelenését állító kapcsoló, a{" "}
+              <span className="font-medium text-foreground">
+                bontott órák kitöltése
+              </span>{" "}
+              (
+              <span className="font-medium text-foreground">
+                orarend:fill-split:v1
+              </span>
+              ) belépve sem kerül a fiókodba: csak ezen az eszközön él.
             </p>
             {/*//! AZ ÓRÁHOZ KÖTÖTT LINKEK ÉS KIVETÍTŐ-CÍMEK KÉT HELYEN ÉLHETNEK
                 //! (`lesson-extras-store.ts`), és a költözésük a belépéskor

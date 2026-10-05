@@ -1,11 +1,15 @@
 import {
   BookOpen,
+  CalendarDays,
   Cast,
   DoorOpen,
   House,
   type LucideIcon,
   ShieldCheck,
+  Trophy,
+  Users,
 } from "lucide-react";
+import { clubsLaunched } from "@/lib/club-access";
 import type { MenuItemId } from "@/lib/menu-items";
 
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -23,11 +27,15 @@ import type { MenuItemId } from "@/lib/menu-items";
 
 export type PlaceId = Extract<
   MenuItemId,
-  "duty" | "rooms" | "subjects" | "screens" | "home"
+  "duty" | "rooms" | "clubs" | "contests" | "subjects" | "screens" | "home"
 >;
 
+//* A buborék sorainak jele: a helyek, és a szakkörök tengelyén a visszaút az
+//* órarendhez (lásd `timetablePlace`).
+export type PanelId = PlaceId | "timetable";
+
 export type Place = {
-  id: PlaceId;
+  id: PanelId;
   href: string;
   label: string;
   hint: string;
@@ -38,7 +46,7 @@ export type Place = {
 
 //* A sorrend a buborék sorrendje: előbb az iskola lapjai, a nyitólap utoljára,
 //* elválasztva — ahhoz nyúlnak a legritkábban.
-export const PLACES: readonly Place[] = [
+export const PLACES: readonly (Place & { id: PlaceId })[] = [
   {
     id: "duty",
     href: "/ugyelet",
@@ -54,6 +62,24 @@ export const PLACES: readonly Place[] = [
     hint: "Melyik terem üres most",
     Icon: DoorOpen,
     hotkey: "k",
+  },
+  //* Kinek látszik, azt a `placesFor` dönti el — a lista maga mindig teljes,
+  //* hogy az útvonal felől (`placeOf`) a bevezetés előtt is ismert legyen.
+  {
+    id: "clubs",
+    href: "/szakkorok",
+    label: "Szakkörök",
+    hint: "Mikor, hol, kinek",
+    Icon: Users,
+    hotkey: "z",
+  },
+  {
+    id: "contests",
+    href: "/versenyek",
+    label: "Versenyek",
+    hint: "Meddig lehet nevezni",
+    Icon: Trophy,
+    hotkey: "y",
   },
   {
     id: "subjects",
@@ -81,8 +107,34 @@ export const PLACES: readonly Place[] = [
   },
 ];
 
+const CLUB_PLACES: ReadonlySet<PanelId> = new Set(["clubs", "contests"]);
+
+//! A SZAKKÖRÖK A BEVEZETÉS ELŐTT IS OTT VANNAK — ANNAK, AKI MEG IS NYITHATJA.
+//! A lapok a `canBrowseClubs` szerint a tanárnak és az adminnak a kapcsoló
+//! (`clubsLaunched`) előtt is nyílnak, mert ők töltik fel őket. A buborék
+//! ugyanezt a szabályt követi: a diák addig nem lát zsákutcát, a tanár viszont
+//! nem címsorból gépeli be az utat.
+export function placesFor(clubs: boolean): readonly Place[] {
+  if (clubs || clubsLaunched()) return PLACES;
+  return PLACES.filter((p) => !CLUB_PLACES.has(p.id));
+}
+
 export function placeOf(pathname: string): Place | null {
   return PLACES.find((p) => p.href === pathname) ?? null;
+}
+
+//! A VISSZAÚT AZ ÓRARENDHEZ. A szakkörök tengelyén a váltó két cellája
+//! „Szakkör" és „Verseny" (lásd `pill-nav.tsx`) — a „Hét" és a „Ma" onnan a
+//! buborékból érhető el, a legutóbb nézett alakjában.
+export function timetablePlace(href: string, week: boolean): Place {
+  return {
+    id: "timetable",
+    href,
+    label: "Órarend",
+    hint: week ? "Vissza a heti rácshoz" : "Vissza a mai naphoz",
+    Icon: CalendarDays,
+    hotkey: "o",
+  };
 }
 
 //! ─── A REPÜLŐ IKON ────────────────────────────────────────────────────────
@@ -93,7 +145,7 @@ export function placeOf(pathname: string): Place | null {
 //! saját cellájába. Rövid ideig érvényes: egy késve betöltő lapon a repülés már
 //! nem a koppintás folytatása, hanem egy váratlan mozgás.
 type Flight = {
-  id: PlaceId;
+  id: PanelId;
   x: number;
   y: number;
   size: number;
@@ -102,7 +154,7 @@ type Flight = {
 let flight: Flight | null = null;
 const FLIGHT_TTL = 1400;
 
-export function launchFlight(id: PlaceId, el: Element | null) {
+export function launchFlight(id: PanelId, el: Element | null) {
   if (!el) return;
   const r = el.getBoundingClientRect();
   flight = {
@@ -114,7 +166,7 @@ export function launchFlight(id: PlaceId, el: Element | null) {
   };
 }
 
-export function readFlight(id: PlaceId | undefined): Flight | null {
+export function readFlight(id: PanelId | undefined): Flight | null {
   if (typeof window === "undefined" || !flight || flight.id !== id) return null;
   return performance.now() - flight.at < FLIGHT_TTL ? flight : null;
 }

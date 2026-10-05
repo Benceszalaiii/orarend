@@ -20,7 +20,7 @@ export const API_BASE =
 //! 2026-09-23). A böngészőben ezeket nem mi állítjuk (tiltott fejlécek), a
 //! SZERVEREN viszont semmi nem küldi őket helyettünk — enélkül a teremkereső
 //! 71 kérése mind elbukik, és a `/api/termek` 503-at ad.
-const JEDLIK_SITE = "https://jedlikinfo.jedlik.eu";
+export const JEDLIK_SITE = "https://jedlikinfo.jedlik.eu";
 
 export const JEDLIK_POST_HEADERS: Record<string, string> =
   typeof window === "undefined"

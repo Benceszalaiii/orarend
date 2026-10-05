@@ -7,6 +7,12 @@ import {
   savePalette,
   saveTheme,
 } from "./appearance";
+import {
+  loadFollowedClubs,
+  loadFollowedContests,
+  saveFollowedClubs,
+  saveFollowedContests,
+} from "./club-follow";
 import { loadAllDualSchedules, saveDualSchedule } from "./dual-schedule";
 import { loadIdentity, saveIdentity } from "./identity";
 import { loadLastView, saveLastView } from "./last-view";
@@ -57,6 +63,8 @@ export function collectLocalPrefs(): SyncedPrefs {
     merge: loadAllLocalPreferences(),
     dual: loadAllDualSchedules(),
     hiddenMenu: loadHiddenMenu(),
+    clubs: loadFollowedClubs(),
+    contests: loadFollowedContests(),
   });
 }
 
@@ -105,6 +113,9 @@ export function applyLocalPrefs(prefs: SyncedPrefs): void {
   //* A `saveHiddenMenu` maga jelez (`notifyPrefsChanged`), tehát a lap a
   //* szinkron pillanatában áll át: nem kell hozzá újratöltés.
   if (prefs.hiddenMenu !== null) saveHiddenMenu(prefs.hiddenMenu);
+  //* Ugyanaz a szabály: az üres lista is érték.
+  if (prefs.clubs !== null) saveFollowedClubs(prefs.clubs);
+  if (prefs.contests !== null) saveFollowedContests(prefs.contests);
 }
 
 //! ─── AZ ÖSSZEFÉSÜLÉS ───────────────────────────────────────────────────────
@@ -151,6 +162,9 @@ export function mergePrefs(
     //! „visszakapcsoltam" művelet a másik készülék régi listájából mindig
     //! visszaszivárogna. A lista egészében egy döntés; a frissebb oldalé nyer.
     hiddenMenu: winner.hiddenMenu ?? loser.hiddenMenu,
+    //* A követett szakkörök ugyanígy EGY döntés — lásd `club-follow.ts`.
+    clubs: winner.clubs ?? loser.clubs,
+    contests: winner.contests ?? loser.contests,
   };
 }
 

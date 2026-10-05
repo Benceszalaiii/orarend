@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
+import { clubsLaunched } from "@/lib/club-access";
 
 export const metadata: Metadata = {
   title: "Változások - Jedlik Info",
@@ -33,6 +34,19 @@ type Entry = {
   items: readonly string[];
 };
 
+//! A SZAKKÖRÖK ÉS A VERSENYEK CSAK A BEVEZETÉS UTÁN KERÜLNEK A NAPLÓBA. Előtte a
+//! diáknak 404 a lapjuk (lásd `clubsLaunched`) — a napló ne hirdessen olyat,
+//! amit a látogató nem nyithat meg. Ugyanaz a kapcsoló, mint a nyitólap
+//! szalagjáé (`home/_components/latest.tsx`).
+const CLUB_ITEMS: readonly string[] = clubsLaunched()
+  ? [
+      "Szakkörök (/szakkorok): mikor, hol és kinek szólnak. A lista megmondja, melyik fér bele a hetedbe, és ha ütközik, melyik órával; a követett szakkör az órarendedben is megjelenik.",
+      "A szakkör lapján hírfolyam: a tagok és a vezető tanár bejegyzést és hozzászólást írhat. Olvasni belépve lehet.",
+      "Szakkört tanár indít; diákként javasolhatsz egyet, vagy felírhatod, mire lenne igény.",
+      "Versenyek (/versenyek): elöl áll, meddig lehet még nevezni. Nevezni fiókkal lehet, a határidőig vissza is léphetsz, és ha kéred, push-értesítés emlékeztet a határidő előtt.",
+    ]
+  : [];
+
 const ENTRIES: readonly Entry[] = [
   {
     date: "2026-10-04",
@@ -45,13 +59,33 @@ const ENTRIES: readonly Entry[] = [
     ],
   },
   {
-    date: "2026-09-10",
-    title: "Google-belépés — az iskolai jelszó kivezetése",
+    date: "2026-10-03",
+    title: clubsLaunched()
+      ? "Szakkörök, versenyek és tantárgyak"
+      : "Tantárgyak és bontott órák",
     items: [
+      ...CLUB_ITEMS,
+      "Tantárgyak (/tantargyak): tárgyanként ki tanítja, és melyik osztálynak, linkkel a tanár és az osztály órarendjére. Ékezet nélkül is keres.",
+      "Új kapcsoló a Beállításokban — Bontott órák kitöltése: ha a másik csoportnak abban a sávban nincs órája, a csak egy csoportnak szóló óra a teljes oszlopot kitölti.",
+    ],
+  },
+  {
+    date: "2026-09-10",
+    title: "Google-belépés, teremkereső és naptár",
+    items: [
+      "Teremkereső (/teremkereso): melyik terem üres most, óránkénti bontásban, és meddig marad az.",
+      "Az órarend felvehető a telefonod naptárába. Pontosan azok az órák kerülnek bele, amiket a rácson látsz; a linket egy kattintással vissza lehet vonni.",
       "Belépni mostantól az iskolai Google-fiókoddal (@jedlik.eu vagy @students.jedlik.eu) is lehet — jelszó begépelése nélkül.",
       "Iskolai jelszóval új fiók már nem hozható létre. Ha még sosem léptél be, a Google-gombot használd; a korábban létrehozott fiókok egyelőre változatlanul be tudnak lépni vele.",
       "Aki eddig iskolai jelszóval lépett be, a fiókgombon (vagy a /belepes lapon) tudja összekötni a fiókját a Google-fiókjával — érdemes minél előbb megtenni, hogy a beállításai (és a gyors belépés, ha van) ne vesszenek el, mire az iskolai jelszavas belépés is teljesen megszűnik.",
       "A korábban beállított gyors belépés (ujjlenyomat) változatlanul működik.",
+    ],
+  },
+  {
+    date: "2026-09-09",
+    title: "Ügyelet",
+    items: [
+      "Folyosóügyelet egy képernyőn (/ugyelet): ki ügyel most és hol, mikor jön a következő szünet, és kié a napi vezetői ügyelet.",
     ],
   },
   {

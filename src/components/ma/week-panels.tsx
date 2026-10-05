@@ -1,10 +1,13 @@
 "use client";
 
 import { AlertTriangle, Briefcase, ChevronDown, Merge } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { minLabel, rangeLabel } from "@/components/timetable/shared";
 import { accentStyle } from "@/lib/accent";
-import { TIMETABLE_SOURCE } from "@/lib/timetable";
+import { SESSION_STATUS_SHORT } from "@/lib/club-schedule";
+import { WEEKDAY_NAMES } from "@/lib/clubs";
+import { type CalendarEvent, TIMETABLE_SOURCE } from "@/lib/timetable";
 import { cn } from "@/lib/utils";
 import { hoursLabel, type SubjectRow, type WeekModel } from "./week";
 
@@ -489,5 +492,76 @@ function SplitRow({
         </div>
       )}
     </li>
+  );
+}
+
+//! A HÉT SZAKKÖREI. Csak a követettek — tanárnál azok is, amiket ő vezet (lásd
+//! `/api/szakkorok/orarend`). A halvány javaslat nem a diák szakköre, ide nem
+//! kerül. Ha nincs ilyen, a panel nem jelenik meg: egy üres „Szakkörök"
+//! szekció minden szakkört nem követő diáknál csak zaj volna.
+//!
+//! A SOR A SZAKKÖR LAPJÁRA VISZ, nem a napra. A napot a rács és a napsáv már
+//! mutatja; ami innen hiányzik, az a szakkör maga — ki tartja, kinek szól.
+export function ClubsThisWeek({
+  events,
+  className,
+}: {
+  events: readonly CalendarEvent[];
+  className?: string;
+}) {
+  const clubs = events.filter((e) => e.status !== undefined && !e.suggested);
+  if (clubs.length === 0) return null;
+  return (
+    <Section
+      id="clubs-heading"
+      title="Szakkörök a héten"
+      aside={String(clubs.length)}
+      className={className}
+    >
+      <ul className={listGroup}>
+        {clubs.map((e) => (
+          <li key={e.id} style={accentStyle(e.szakkorSlug)}>
+            <Link
+              href={`/szakkorok/${e.szakkorSlug}`}
+              prefetch={false}
+              className={rowBase}
+            >
+              <span
+                className="acc-dot size-2 shrink-0 rounded-full"
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1">
+                <span
+                  className={cn(
+                    "block truncate font-medium text-foreground",
+                    e.cancelled && "line-through decoration-destructive/60",
+                  )}
+                >
+                  {e.title}
+                </span>
+                <span className="mt-0.5 flex items-center gap-2 text-xs text-muted-strong">
+                  <span>{WEEKDAY_NAMES[e.dayOfWeek]}</span>
+                  <span aria-hidden>·</span>
+                  <span className="tabular-nums">
+                    {rangeLabel(e.startMin, e.endMin)}
+                  </span>
+                  {e.status && e.status !== "confirmed" && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span>{SESSION_STATUS_SHORT[e.status]}</span>
+                    </>
+                  )}
+                </span>
+              </span>
+              {e.room && (
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                  {e.room}
+                </span>
+              )}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Section>
   );
 }

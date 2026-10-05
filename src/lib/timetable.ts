@@ -1094,6 +1094,13 @@ export type CalendarEvent = {
   szakkorSlug: string;
   kozossegi: boolean;
   cancelled: boolean;
+  //* Szakkör-alkalomnál: mennyire igaz az időpont a Jedlikinfo szerint (lásd
+  //* `club-schedule.ts`). Hiányzik = nem szakkörből jött (a nyitólap
+  //* bemutató rácsa ezt a típust a saját óráira is használja).
+  status?: ClubSessionStatus;
+  //* Javasolt (az osztálynak szóló vagy mindenkinek nyitott) szakkör a diák
+  //* szabad sávjában (lásd `club-suggest-pref.ts`). A rács halványan, szaggatott kerettel rajzolja.
+  suggested?: boolean;
 };
 
 export type TimetableView = TimetableWeek & {
@@ -1102,6 +1109,9 @@ export type TimetableView = TimetableWeek & {
   persistence: "local";
 };
 
+import { fetchClubEvents } from "./club-events";
+import { keepFittingSuggestions } from "./club-fit";
+import type { ClubSessionStatus } from "./club-schedule";
 import type { MergePreference } from "./timetable-merge";
 import { loadLocalPreferences } from "./timetable-merge";
 
@@ -1114,17 +1124,33 @@ export async function buildTimetableView(input: {
 }): Promise<TimetableView> {
   const kind = input.kind ?? "class";
   const wanted = input.classOverride?.trim() || input.userClass;
+  //! A SZAKKÖRÖK PÁRHUZAMOSAN JÖNNEK, NEM UTÁNA. A diák két óra közti szünetben
+  //! nyitja meg a lapot; egy második, egymás utáni kérés minden megnyitásra
+  //! rárakna egy kört. Az alany jelét a kért alakból vesszük — ha a Jedlikinfo
+  //! mást old fel belőle (`13c` → `13C` rendben van, de egy elírásból más
+  //! osztály lesz), az eredményt eldobjuk, nem egy idegen osztály szakköreit
+  //! rajzoljuk ki.
+  const clubs = fetchClubEvents(
+    kind,
+    wanted?.toLocaleUpperCase("hu") ?? "",
+    mondayOf(input.weekStart),
+  );
   const week = await getTimetableWeek({
     kind,
     class: kind === "class" ? wanted : null,
     teacher: kind === "teacher" ? wanted : null,
     weekStart: input.weekStart,
   });
+  const clubEvents = await clubs;
   //* Az összevonási döntések ALANYONKÉNT külön állnak — a tanár döntései nem
   //* keveredhetnek egy azonos nevű osztályéval (lásd `subjectStoreKey`).
   const storeKey = week.subject
     ? subjectStoreKey(kind, week.subject.short)
     : "";
   const prefs = storeKey ? loadLocalPreferences(storeKey) : [];
-  return { ...week, events: [], prefs, persistence: "local" };
+  const events =
+    week.ok && week.subject?.short === clubEvents.short
+      ? keepFittingSuggestions(clubEvents.events, week, prefs)
+      : [];
+  return { ...week, events, prefs, persistence: "local" };
 }

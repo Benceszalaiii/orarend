@@ -475,7 +475,8 @@
   .acc-dot,
   .acc-text,
   .acc-break,
-  .acc-glow {
+  .acc-glow,
+  .acc-banner {
     --acc-h: var(--h-ciklus, 210);
     --acc-c: var(--c-ciklus, 1);
     --acc-l: var(--l-ciklus, 0);
@@ -487,7 +488,8 @@
       .acc-dot,
       .acc-text,
       .acc-break,
-      .acc-glow
+      .acc-glow,
+      .acc-banner
     ) {
     --acc-h: var(--h-prizma, 210);
     --acc-c: var(--c-prizma, 1);
@@ -500,7 +502,8 @@
       .acc-dot,
       .acc-text,
       .acc-break,
-      .acc-glow
+      .acc-glow,
+      .acc-banner
     ) {
     --acc-h: var(--h-nyugodt, 210);
     --acc-c: var(--c-nyugodt, 1);
@@ -513,7 +516,8 @@
       .acc-dot,
       .acc-text,
       .acc-break,
-      .acc-glow
+      .acc-glow,
+      .acc-banner
     ) {
     --acc-h: var(--h-alkony, 210);
     --acc-c: var(--c-alkony, 1);
@@ -526,7 +530,8 @@
       .acc-dot,
       .acc-text,
       .acc-break,
-      .acc-glow
+      .acc-glow,
+      .acc-banner
     ) {
     --acc-h: var(--h-nyar, 210);
     --acc-c: var(--c-nyar, 1);
@@ -550,6 +555,29 @@
     border-color: oklch(
       calc(0.5 + var(--acc-l, 0)) calc(0.062 * var(--acc-c, 1)) var(--acc-h)
     );
+  }
+  /*//! A SZAKKÖR BORÍTÓJA — a Classroom kurzusainak színes fejléce. Fehér
+      //! szöveg ül rajta, ezért a világosság mindkét témában ALACSONY marad
+      //! (≤ 0.5): így a felirat palettától és színtől függetlenül olvasható. */
+  .acc-banner {
+    color: #fff;
+    background-color: oklch(
+      calc(0.42 + var(--acc-l, 0) / 2) calc(0.12 * var(--acc-c, 1)) var(--acc-h)
+    );
+    background-image:
+      radial-gradient(
+        120% 160% at 100% 0%,
+        oklch(0.62 calc(0.15 * var(--acc-c, 1)) var(--acc-h) / 0.75),
+        transparent 60%
+      ),
+      linear-gradient(
+        135deg,
+        oklch(
+          calc(0.46 + var(--acc-l, 0) / 2) calc(0.13 * var(--acc-c, 1))
+            var(--acc-h)
+        ),
+        oklch(0.3 calc(0.1 * var(--acc-c, 1)) calc(var(--acc-h) + 30))
+      );
   }
   .acc-tint-strong {
     background-color: oklch(0.935 calc(0.056 * var(--acc-c, 1)) var(--acc-h));
@@ -838,6 +866,13 @@
   ::view-transition-group(subj-select) {
     animation-duration: 340ms;
     animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  /*//! A két érintett sor a csík FÖLÖTT (`subject-morph.ts`) — különben a
+      //! csík tónusa az egész átúszás alatt letakarná a szövegüket. */
+  ::view-transition-group(subj-row-from),
+  ::view-transition-group(subj-row-to) {
+    animation-duration: 220ms;
+    z-index: 3;
   }
   ::view-transition-old(root),
   ::view-transition-new(root) {
@@ -1197,6 +1232,694 @@
     }
   }
 
+  /*//! ---------------------------------------------------------------------
+      //! A HÉT-TÉRKÉP (`/szakkorok`, `_components/week-map.tsx`)
+      //! ---------------------------------------------------------------------
+      //! ÖT OSZLOP, EGY KOORDINÁTA-RENDSZER. A fejléc és a test ugyanazt a
+      //! rácsot kapja (`.wm-grid`), így a nap neve pontosan az oszlopa fölött
+      //! áll; a test maga is egy ötoszlopos rács, amin a kijelölés több napon
+      //! át is kihúzható. Minden hely százalék: a perc a magasság egy része,
+      //! a sáv a csomó szélességének egy része — a térkép bármilyen
+      //! szélességen ugyanaz a kép.
+      //*
+      //! A MOZGÁS EGYETLEN HULLÁM. A jel a `--d` késleltetéssel kapja meg az
+      //! ítéletét és a helyét (hétfőtől péntekig, reggeltől délutánig); a
+      //! kiemelés és a halványítás viszont késleltetés NÉLKÜL vált — az egér
+      //! alatt semmi nem várakozhat. */
+  .wm-grid {
+    --wm-gap: 0.25rem;
+    display: grid;
+    grid-template-columns: 2.25rem repeat(5, minmax(0, 1fr));
+    column-gap: var(--wm-gap);
+  }
+  @media (min-width: 40rem) {
+    .wm-grid {
+      --wm-gap: 0.5rem;
+    }
+  }
+  .wm-body {
+    position: relative;
+    grid-column: span 5 / span 5;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-rows: 100%;
+    column-gap: var(--wm-gap);
+    height: 12.5rem;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  @media (min-width: 40rem) {
+    .wm-body {
+      height: 14rem;
+    }
+  }
+  @media (pointer: fine) {
+    .wm-body {
+      cursor: crosshair;
+    }
+  }
+  .wm-hour {
+    position: absolute;
+    inset-inline: 0;
+    height: 1px;
+    background: color-mix(in oklab, var(--foreground) 4%, transparent);
+    pointer-events: none;
+  }
+  .wm-hour-even {
+    background: color-mix(in oklab, var(--foreground) 8%, transparent);
+  }
+  .wm-column {
+    position: relative;
+    grid-row: 1;
+    min-width: 0;
+    border-radius: 0.5rem;
+    background: color-mix(in oklab, var(--foreground) 2.5%, transparent);
+  }
+  /*//* A duális nap csíkos: az órák ott nem a tieid. Ha csak az egyik
+      //* héten duális, halványabb — a másik héten attól még iskolában vagy. */
+  .wm-dual {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background-image: repeating-linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--foreground) 14%, transparent) 0 1px,
+      transparent 1px 7px
+    );
+    pointer-events: none;
+  }
+  .wm-dual[data-half] {
+    opacity: 0.55;
+  }
+  /*//! AZ ÓRÁK A RÁCS SZÍNEIVEL. Az elem `acc-tint` is (lásd `week-map.tsx`):
+      //! a háttér és a keret a tantárgy színe, ugyanabból a palettából, mint
+      //! a rácson — itt csak a hely és a mozgás dől el. Fentről lefelé nő ki,
+      //! ahogy a nap is telik; osztályváltáskor nem nő újra, hanem ÁTALAKUL:
+      //! a helye, a magassága és a színe csúszik át a másik hét órájába. */
+  .wm-lesson {
+    --w: calc((100% - (var(--n, 1) - 1) * 2px) / var(--n, 1));
+    position: absolute;
+    left: calc(var(--l, 0) * (var(--w) + 2px));
+    width: var(--w);
+    border-radius: 0.3125rem;
+    transform-origin: top center;
+    pointer-events: none;
+    transition:
+      top 620ms cubic-bezier(0.16, 1, 0.3, 1),
+      height 620ms cubic-bezier(0.16, 1, 0.3, 1),
+      left 560ms cubic-bezier(0.16, 1, 0.3, 1),
+      width 560ms cubic-bezier(0.16, 1, 0.3, 1),
+      background-color 520ms ease var(--d, 0ms),
+      border-color 520ms ease var(--d, 0ms),
+      transform 820ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms),
+      opacity 300ms ease;
+  }
+  @starting-style {
+    .wm-lesson {
+      transform: scaleY(0);
+    }
+  }
+  /*//* Duális napon az órák a rácson is ott vannak, de te nem: halványan. */
+  .wm-lesson[data-dual] {
+    opacity: 0.3;
+  }
+  .wm-break {
+    position: absolute;
+    inset-inline: 0;
+    min-height: 3px;
+    transform: translateY(-0.5px);
+  }
+  /*//* Az ütköző óra, amit a súgó épp megnevez. */
+  .wm-lesson[data-hot] {
+    outline: 1.5px solid var(--foreground);
+    outline-offset: 1px;
+  }
+  /*//* A csomó gombja legalább 24 px magas célpont, akkor is, ha a 7:10-es
+      //* sor csak 12 px-es csík — a nyúlvány láthatatlan. */
+  .wm-cluster {
+    position: absolute;
+    inset-inline: 0;
+    z-index: 2;
+    display: block;
+    border-radius: 0.3125rem;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+  }
+  .wm-cluster::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 50%;
+    height: max(100%, 1.5rem);
+    transform: translateY(-50%);
+  }
+  @media (hover: hover) {
+    .wm-cluster:hover {
+      background-color: color-mix(in oklab, var(--foreground) 7%, transparent);
+    }
+  }
+  .wm-cluster:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  /*//! A JEL ÉLE SÖTÉT GYŰRŰ: a szakkör az órák FÖLÖTT áll, és egy színes
+      //! órára tűzve is el kell válnia tőle — a gyűrű a lap alapjának színe,
+      //! nem árnyék. */
+  .wm-mark {
+    --w: calc((100% - 4px - (var(--n) - 1) * 2px) / var(--n));
+    --wm-ink: color-mix(in oklab, var(--foreground) 34%, transparent);
+    position: absolute;
+    left: calc(2px + var(--l) * (var(--w) + 2px));
+    width: var(--w);
+    min-height: 3px;
+    border-radius: 3px;
+    background-color: transparent;
+    box-shadow:
+      inset 0 0 0 1px var(--wm-ink),
+      0 0 0 1.5px oklch(0 0 0 / 0.72);
+    animation: wm-mark-in 520ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms)
+      backwards;
+    transition:
+      left 560ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms),
+      width 560ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms),
+      background-color 420ms ease var(--d, 0ms),
+      box-shadow 420ms ease var(--d, 0ms),
+      opacity 200ms ease;
+  }
+  @keyframes wm-mark-in {
+    from {
+      opacity: 0;
+      transform: translateY(-5px) scaleY(0.6);
+    }
+  }
+  /*//! AZ ÍTÉLET SZÍNE, ugyanaz, mint a sávon: kék, ha belefér; szürke, ha
+      //! ütközik (nem piros — nem hiba, csak most nem neked szól); csíkos, ha
+      //! nem tudjuk. Ítélet előtt csak a körvonal áll: van ott valami, de még
+      //! nem mértük a hetedhez. */
+  .wm-mark[data-v="fits"] {
+    --wm-ink: var(--primary);
+    background-color: var(--primary);
+  }
+  /*//* Az ütközés tömör, tompa szürke: egy színes órán is olvasható, de
+      //* halkabb, mint a kék. */
+  /*//! AZ ÜTKÖZÉS NEM TAKARJA EL AZ ÓRÁT. Teljes szélességben egy szürke
+      //! téglalap lenne a színes órák között — egy szürke ÓRÁNAK látszana, és
+      //! épp azt rejtené el, amivel ütközik. Ezért a sávja jobb felére húzódik:
+      //! tű, ami beleszúr az órába, és mellette látszik az óra színe. */
+  .wm-mark[data-v="clash"],
+  .wm-mark[data-v="dual"] {
+    --wm-ink: transparent;
+    left: calc(2px + var(--l) * (var(--w) + 2px) + var(--w) * 0.5);
+    width: calc(var(--w) * 0.5);
+    background-color: color-mix(in oklab, var(--foreground) 52%, var(--card));
+  }
+  .wm-mark[data-v="unknown"] {
+    --wm-ink: transparent;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--foreground) 50%, transparent) 0 2px,
+      transparent 2px 4px
+    );
+  }
+  .wm-mark[data-dim] {
+    opacity: 0.16;
+  }
+  .wm-body[data-spot] .wm-mark:not([data-hot]) {
+    opacity: 0.3;
+  }
+  .wm-body[data-spot] .wm-mark[data-dim]:not([data-hot]) {
+    opacity: 0.1;
+  }
+  .wm-mark[data-hot] {
+    z-index: 1;
+    outline: 1.5px solid var(--foreground);
+    outline-offset: 1px;
+  }
+  /*//* A kijelölés kerete a napok rácsára illeszkedik: az első oszlop és az
+      //* oszlopok száma jön be, a szélességet a rés ismeretében számoljuk. */
+  .wm-window {
+    --cw: calc((100% - 4 * var(--wm-gap)) / 5);
+    position: absolute;
+    z-index: 1;
+    left: calc(var(--c0) * (var(--cw) + var(--wm-gap)) - 3px);
+    width: calc(var(--cn) * var(--cw) + (var(--cn) - 1) * var(--wm-gap) + 6px);
+    border-radius: 0.5rem;
+    background: color-mix(in oklab, var(--primary) 9%, transparent);
+    box-shadow: inset 0 0 0 1px
+      color-mix(in oklab, var(--primary) 72%, transparent);
+    pointer-events: none;
+    transition:
+      top 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      height 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      left 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      width 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .wm-window[data-live] {
+    background: color-mix(in oklab, var(--primary) 13%, transparent);
+    box-shadow: inset 0 0 0 1px var(--primary);
+    transition: none;
+  }
+  .wm-window-label {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 6px);
+    white-space: nowrap;
+    border-radius: 9999px;
+    background: var(--primary);
+    color: var(--ink-on-primary);
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 8px 18px -10px oklch(0 0 0 / 0.9);
+  }
+  .wm-now {
+    position: absolute;
+    inset-inline: -2px;
+    z-index: 3;
+    height: 0;
+    border-top: 1.5px solid var(--brand);
+    pointer-events: none;
+  }
+  .wm-now::before {
+    content: "";
+    position: absolute;
+    left: -3px;
+    top: -3.75px;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--brand);
+  }
+  .wm-tip {
+    position: absolute;
+    z-index: 30;
+    width: max-content;
+    max-width: 15rem;
+    translate: -50% calc(-100% - 10px);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--popover);
+    padding: 0.5rem 0.75rem 0.5625rem;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    box-shadow:
+      0 18px 36px -18px oklch(0 0 0 / 0.95),
+      0 2px 8px -2px oklch(0 0 0 / 0.6);
+    pointer-events: none;
+    animation: wm-tip-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .wm-tip[data-below] {
+    translate: -50% 10px;
+  }
+  @keyframes wm-tip-in {
+    from {
+      opacity: 0;
+      scale: 0.96;
+    }
+  }
+  .wm-hint-coarse {
+    display: none;
+  }
+  @media (pointer: coarse) {
+    .wm-hint-fine {
+      display: none;
+    }
+    .wm-hint-coarse {
+      display: inline;
+    }
+  }
+  /*//! ---------------------------------------------------------------------
+      //! A HATÁRIDŐ-FOLYAM (`/versenyek`, `_components/deadline-river.tsx`)
+      //! ---------------------------------------------------------------------
+      //! A TENGELY ÉS A SOROK UGYANAZT A KÉT OSZLOPOT KAPJÁK: bal oldalt a
+      //! verseny, jobbra az idő. Telefonon az idő a név alá kerül, teljes
+      //! szélességben — a hetek ott is ugyanott vannak, mert a tengely és a
+      //! sor ugyanakkora belső margóval fut. A hétfők vonalai a sor hátterében
+      //! futnak, a most piros vonala a sorok között is folytatódik. */
+  .cr-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0.625rem;
+  }
+  @media (min-width: 48rem) {
+    .cr-row {
+      grid-template-columns: 16rem minmax(0, 1fr);
+      column-gap: 1.5rem;
+      align-items: center;
+    }
+  }
+  .cr-axis {
+    padding-inline: 1rem;
+    margin-bottom: 0.375rem;
+  }
+  .cr-axis .cr-name-col {
+    display: none;
+  }
+  @media (min-width: 48rem) {
+    .cr-axis .cr-name-col {
+      display: block;
+    }
+  }
+  .cr-axis .cr-track {
+    height: 2rem;
+  }
+  /*//! A HÉTFŐK ÉS A MOST VONALA A TELJES SORON ÁT FUT, nem csak az idősáv
+      //! magasságában — különben a sorok között szakadna, és a tengely
+      //! darabokra esne. A sor tudja, hol kezdődik benne az idő oszlopa. */
+  .cr-lane {
+    --tx: 1rem;
+    --tw: calc(100% - 2rem);
+    position: relative;
+    padding: 0.875rem 1rem;
+    background-image: repeating-linear-gradient(
+      to right,
+      color-mix(in oklab, var(--foreground) 7%, transparent) 0 1px,
+      transparent 1px calc(var(--tw) / var(--weeks, 4))
+    );
+    background-size: var(--tw) 100%;
+    background-position: var(--tx) 0;
+    background-repeat: no-repeat;
+    transition: background-color 150ms ease;
+  }
+  @media (min-width: 48rem) {
+    .cr-lane {
+      --tx: 18.5rem;
+      --tw: calc(100% - 19.5rem);
+    }
+  }
+  .cr-lane::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    left: calc(var(--tx) + var(--tw) * var(--nowf, 0));
+    width: 1.5px;
+    margin-left: -0.75px;
+    background: var(--brand);
+    pointer-events: none;
+  }
+  .cr-lane:hover {
+    background-color: color-mix(in oklab, var(--muted) 40%, transparent);
+  }
+  .cr-lane:active {
+    background-color: color-mix(in oklab, var(--muted) 60%, transparent);
+  }
+  .cr-lane:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+  .cr-lane-dim {
+    opacity: 0.6;
+  }
+  /*//* Telefonon a név a sáv FÖLÖTT áll, teljes szélességben: a hétfők és a
+      //* most vonala nem futhat át a szövegen — a név saját alapot kap. */
+  @media (max-width: 47.99rem) {
+    .cr-lane .cr-name-col {
+      position: relative;
+      z-index: 1;
+      margin: -0.875rem -1rem 0;
+      padding: 0.875rem 1rem 0.25rem;
+      background: var(--card);
+      transition: background-color 150ms ease;
+    }
+    .cr-lane:hover .cr-name-col {
+      background: color-mix(in oklab, var(--muted) 40%, var(--card));
+    }
+  }
+  .cr-track {
+    position: relative;
+    display: block;
+    height: 2.75rem;
+  }
+  .cr-fuse {
+    position: absolute;
+    top: calc(50% - 2px);
+    height: 4px;
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--foreground) 82%, transparent);
+    transform-origin: left center;
+    animation: cr-grow 900ms cubic-bezier(0.16, 1, 0.3, 1)
+      calc(var(--i, 0) * 70ms) backwards;
+  }
+  .cr-fuse-soon {
+    background: var(--brand);
+  }
+  .cr-link {
+    position: absolute;
+    top: calc(50% - 1px);
+    height: 0;
+    border-top: 2px dotted
+      color-mix(in oklab, var(--foreground) 32%, transparent);
+    animation: cr-fade 400ms ease calc(var(--i, 0) * 70ms + 450ms) backwards;
+  }
+  .cr-flag {
+    position: absolute;
+    top: calc(50% - 7px);
+    width: 2px;
+    height: 14px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: var(--foreground);
+    animation: cr-fade 300ms ease calc(var(--i, 0) * 70ms + 420ms) backwards;
+  }
+  .cr-flag-soon {
+    background: var(--brand);
+  }
+  .cr-status,
+  .cr-date,
+  .cr-event-label,
+  .cr-event-beyond,
+  .cr-week-label,
+  .cr-now-label {
+    position: absolute;
+    white-space: nowrap;
+    font-size: 11px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .cr-status {
+    top: 0;
+    translate: 6px 0;
+    font-weight: 600;
+    color: color-mix(in oklab, var(--foreground) 70%, transparent);
+  }
+  .cr-status-soon {
+    color: var(--foreground);
+  }
+  .cr-status-closed {
+    font-weight: 500;
+  }
+  .cr-date {
+    bottom: 0;
+    translate: -50% 0;
+    color: color-mix(in oklab, var(--foreground) 70%, transparent);
+    animation: cr-fade 300ms ease calc(var(--i, 0) * 70ms + 420ms) backwards;
+  }
+  .cr-event {
+    position: absolute;
+    top: calc(50% - 5px);
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    border-radius: 9999px;
+    box-shadow: 0 0 0 3px var(--card);
+    animation: cr-fade 300ms ease calc(var(--i, 0) * 70ms + 650ms) backwards;
+  }
+  .cr-event-label {
+    top: calc(50% - 5.5px);
+    translate: 10px 0;
+    color: var(--foreground);
+    font-weight: 500;
+    animation: cr-fade 300ms ease calc(var(--i, 0) * 70ms + 650ms) backwards;
+  }
+  .cr-event-label[data-flip] {
+    translate: calc(-100% - 10px) 0;
+    padding-inline: 3px;
+    background: var(--card);
+  }
+  .cr-event-beyond {
+    right: 0;
+    top: calc(50% - 6px);
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding-left: 4px;
+    background: var(--card);
+    color: var(--foreground);
+    font-weight: 500;
+  }
+  .cr-week-label {
+    bottom: 0;
+    translate: 4px 0;
+    color: var(--muted-foreground);
+  }
+  @media (max-width: 47.99rem) {
+    .cr-week-minor {
+      display: none;
+    }
+  }
+  .cr-now-label {
+    left: var(--now);
+    top: 0;
+    translate: -50% 0;
+    color: var(--brand);
+    font-weight: 700;
+  }
+  @keyframes cr-grow {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  @keyframes cr-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cr-fuse,
+    .cr-link,
+    .cr-flag,
+    .cr-date,
+    .cr-event,
+    .cr-event-label {
+      animation: none;
+    }
+  }
+
+  /*//! ---------------------------------------------------------------------
+      //! A SZAKKÖR- ÉS VERSENYLAPOK MIKRO-MOZGÁSAI
+      //! ---------------------------------------------------------------------
+      //! MIND VISSZAJELZÉS, EGYIK SEM DÍSZ. A lenyomás megmondja, hogy a
+      //! koppintás célba ért; az új sor megmutatja, hogy a lista változott;
+      //! a csoport nyílása megtartja a helyet, ahonnan a szem indult. Csak
+      //! `transform` és `opacity` mozog (a csoport magassága a rács sor-
+      //! méretével — ez az egyetlen kivétel, és rövid). Mozgáscsökkentésnél
+      //! minden azonnali: a tény megmarad, a mozgás nem. */
+  .press {
+    transition-property:
+      transform, background-color, border-color, color, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+  .press:active:not(:disabled) {
+    transform: scale(0.96);
+    transition-duration: 80ms;
+  }
+  /*//* Az új sor fél pillanatra lentebbről érkezik — szűréskor és az első
+      //* megjelenéskor. A lépcső a tizedik sornál megáll: ötven sornál a
+      //* lista vége már nem várhat egy másodpercet. */
+  .club-rise {
+    animation: club-rise 260ms cubic-bezier(0.16, 1, 0.3, 1)
+      calc(min(var(--i, 0), 10) * 22ms) backwards;
+  }
+  @keyframes club-rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  /*//! A CSOPORT NYÍLÁSA A RÁCS SORMÉRETÉVEL: 0fr → 1fr. A tartalom végig a
+      //! DOM-ban marad, zárva `inert` — se a fókusz, se a felolvasó nem jut
+      //! bele, de nyitáskor nincs újrarajzolás. Zárni gyorsabb, mint nyitni. */
+  .club-collapse {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition:
+      grid-template-rows 260ms cubic-bezier(0.2, 0, 0, 1),
+      opacity 200ms ease;
+  }
+  .club-collapse[data-closed] {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition-duration: 180ms, 140ms;
+  }
+  /*//! A `relative` NEM DÍSZ. A sorok `sr-only` feliratai `absolute`-ok; ha a
+      //! burok nem a tartalmazó blokkjuk, az `overflow: hidden` nem vágja le
+      //! őket, és a zárt csoport láthatatlan feliratai a lábléc alá nyújtják
+      //! a lapot — több ezer pixelnyi üres görgetéssel. */
+  .club-collapse > * {
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+    transition: display 180ms allow-discrete;
+  }
+  /*//! ZÁRVA KI IS VESZ A TÖRDELÉSBŐL. Az `overflow: hidden` levágása nem
+      //! minden böngészőben (Safari) elég: a láthatatlan feliratok így is a
+      //! lábléc alá nyújtották a lapot. A `display: none` a záró animáció
+      //! UTÁN kapcsol (`allow-discrete`), nyitáskor azonnal visszajön. */
+  .club-collapse[data-closed] > * {
+    display: none;
+  }
+  /*//* Ami a lapon kinyílik (űrlap, visszajelzés), az a helyén úszik be. */
+  .club-enter {
+    animation: club-enter 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes club-enter {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+  /*//* A jelzés (szív → pipa) egy rövid pattanással vált: a szavazat
+      //* megtörtént, még mielőtt a szerver visszaszólna. A túllendülés a
+      //* kulcskockákban van, a görbe sima lassulás. */
+  .club-pop {
+    animation: club-pop 300ms cubic-bezier(0.25, 1, 0.5, 1);
+  }
+  @keyframes club-pop {
+    0% {
+      transform: scale(0.7);
+    }
+    55% {
+      transform: scale(1.12);
+    }
+  }
+  /*//* Sor-nyíl: egérrel a sor fölött egy lépést előre mozdul. */
+  .club-nudge {
+    transition:
+      transform 180ms cubic-bezier(0.2, 0, 0, 1),
+      opacity 180ms ease;
+  }
+  @media (hover: hover) {
+    .group:hover .club-nudge {
+      transform: translateX(2px);
+      opacity: 1;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .press,
+    .press:active:not(:disabled),
+    .club-nudge,
+    .group:hover .club-nudge {
+      transform: none;
+    }
+    .club-rise,
+    .club-enter,
+    .club-pop {
+      animation: none;
+    }
+    .club-collapse,
+    .club-collapse[data-closed],
+    .club-collapse > * {
+      transition: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wm-lesson,
+    .wm-mark,
+    .wm-window,
+    .wm-tip {
+      animation: none;
+      transition: none;
+    }
+    @starting-style {
+      .wm-lesson {
+        transform: none;
+      }
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .animate-tt-drain {
       animation: none;
@@ -1350,31 +2073,6 @@
     /* biome-ignore lint/complexity/noImportantStyles: a ragadó fejléc a papíron egyszerűen a lap teteje. */
     position: static !important;
   }
-}
-
-/*//! ---------------------------------------------------------------------------
-    //! AZ ÁRADÁS ALATT A VÁLTÓ MEGFORDUL (lásd `chrome/flood.ts`)
-    //! ---------------------------------------------------------------------------
-    //! A tok a folyadék színét veszi fel, a folyadék és a felirat a tokét — így a
-    //! tok egybeolvad a képernyőt elöntő vízzel, és csak a sötét csepp marad.
-    //! A csere KÉT SZINTEN történik, mert egy elemen belül a két token nem
-    //! hivatkozhat egymásra: a `nav` rögzíti a SAJÁT (akár `.nav-glass`) értékeit,
-    //! a `contents` doboz pedig ezekből fordítva állítja vissza őket.
-    //*
-    //! Rétegen kívül áll, hogy a tok `bg-card` / `bg-background` osztályát verje. */
-[data-pill-nav] {
-  --pn-case: var(--card);
-}
-[data-pill-nav][data-floating] {
-  --pn-case: var(--background);
-}
-html[data-pn-flood] [data-pill-nav] {
-  --pn-fg: var(--foreground);
-  background-color: var(--foreground);
-}
-html[data-pn-flood] [data-pill-nav] [data-pn-ink] {
-  --foreground: var(--pn-case);
-  --background: var(--pn-fg);
 }
 
 /* ─── KÓDCSATOLMÁNYOK A CSEVEGÉSBEN (highlight.js) ──────────────────────────

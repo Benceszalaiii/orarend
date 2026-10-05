@@ -87,8 +87,21 @@ describe("sanitizePrefs", () => {
       },
       dual: { "12A": { A: [1], B: [] } },
       hiddenMenu: ["duty"],
+      clubs: ["dron-szakkor", "lego-szakkor"],
+      contests: ["osztv-informatika"],
     };
     expect(sanitizePrefs(full)).toEqual(full as never);
+  });
+
+  //! A slug zárt alakú: a szerver szabad szöveget itt sem tárolhat.
+  test("a követett szakkörök: alak, sorrend, duplikátum", () => {
+    expect(
+      sanitizePrefs({
+        clubs: ["lego-szakkor", "<b>", "dron-szakkor", "lego-szakkor", 7],
+      }).clubs,
+    ).toEqual(["dron-szakkor", "lego-szakkor"]);
+    expect(sanitizePrefs({ clubs: [] }).clubs).toEqual([]);
+    expect(sanitizePrefs({}).clubs).toBeNull();
   });
 
   test("minden érvénytelen mezőt eldob", () => {

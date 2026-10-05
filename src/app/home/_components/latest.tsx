@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { clubsLaunched } from "@/lib/club-access";
 import { LightField } from "./light-field";
 
 //! ─── A KOBALT SÁV: EGY VILÁGÍTÓASZTAL, NEM EGY LISTA ───────────────────────
@@ -15,7 +16,7 @@ import { LightField } from "./light-field";
 //! egy lapos márkaszín volt — a lap EGYETLEN helye, ami nem az órarendből
 //! készült. A `light-field.tsx` ezt cseréli le: a sáv mögött a `week.ts`
 //! VALÓDI hete világít, a saját tantárgyszíneivel, lassan hullámzó üvegen át.
-//! A négy tétel innentől nem szöveg egy színen, hanem NÉGY DIA egy világító
+//! A tételek innentől nem szövegek egy színen, hanem DIÁK egy világító
 //! asztalon: a szalag metaforája ugyanaz maradt, csak lett alatta lámpa.
 //*
 //! ÉS EZÉRT SÖTÉT RAJTA A BETŰ. A sáv a `--band` kékjén áll (a címerkék
@@ -33,40 +34,93 @@ import { LightField } from "./light-field";
 //! egy néma, fél szabályt hagyó hiba. A `STRIP_CSS` ezért megjegyzés nélküli,
 //! az indoklás pedig itt fent áll, ugyanabban a sorrendben, mint a szabályok.
 
-const highlights = [
+type Highlight = {
+  title: string;
+  //* A sín felirata. A kockacím lehet hosszabb; a sín egy oszlopa 48rem-en
+  //* nagyjából 110 képpont, abba egy szó fér.
+  short: string;
+  description: string;
+};
+
+//! ─── MI KERÜL A SZALAGRA ───────────────────────────────────────────────────
+//! A SÁV CÍME „FRISSEN A SÜTŐBŐL", TEHÁT A LEGÚJABB, AMI MÁR MŰKÖDIK — nem a
+//! lap teljes tudása (az a README *Mit tud* listája), és nem egy ígéret. Az
+//! offline elérés, a szinkron és az értesítés szeptember eleje óta él; a
+//! `/valtozasok` napló megőrzi őket, a szalagról az újabbaknak adták át a
+//! helyet. Amit itt kimondunk, az mind mérhető a kódban:
+//*   • Szakkörök — `lib/club-fit.ts` (belefér-e a hetedbe), a követett
+//*     szakkör a rácson (`/api/szakkorok/orarend`).
+//*   • Versenyek — a határidő-folyam (`deadline-river.tsx`), a nevezés és a
+//*     névtelen push-emlékeztető (`lib/contest-push.ts`).
+//*   • Tantárgyak — `/tantargyak`, a teremkereső sepréséből.
+//*   • Teremkereső és ügyelet — `/teremkereso`, `/ugyelet`.
+//*   • Naptár — a `webcal://` feed ugyanazt a `resolveDay`-t futtatja, mint a
+//*     rács, tehát valóban „amit a rácson látsz".
+//*   • Tanári nézet — `lib/identity.ts`, `teacher-week.ts` (lyukasórák).
+//*
+//! A SZAKKÖRÖK ÉS A VERSENYEK CSAK A BEVEZETÉS UTÁN KERÜLNEK IDE (lásd
+//! `clubsLaunched`). Előtte a diáknak 404 a lapjuk — egy nyitólap, ami olyat
+//! hirdet, amit a látogató nem nyithat meg, rosszabb a hallgatásnál. Ilyenkor
+//! a tanári nézet tölti ki a negyedik helyet, ahogy eddig is. A kapcsoló
+//! build-időben ég be, tehát a kiszolgáló és a böngésző ugyanazt a listát
+//! rajzolja — nincs hidratálási eltérés.
+const CLUB_HIGHLIGHTS: readonly Highlight[] = [
   {
-    title: "Offline elérés",
+    title: "Szakkörök",
+    short: "Szakkörök",
     description:
-      "A legutóbb betöltött hetet hálózat nélkül is meg tudod nyitni.",
+      "Mikor, hol és kinek: a lista megmondja, melyik szakkör fér bele a hetedbe, a követett szakkör pedig az órarendedben is megjelenik.",
   },
   {
-    title: "Szinkronizálás",
+    title: "Versenyek",
+    short: "Versenyek",
     description:
-      "A Jedlik AD-fiókoddal a csoportbontásaid és beállításaid több eszközön is követhetnek.",
-  },
-  {
-    title: "Értesítések",
-    description:
-      "Szólunk, ha tanóra kezdődik vagy az iskola módosít az órarenden.",
-  },
-  //! A NEGYEDIK TÉTEL NEM EGY ÚJ GOMB, HANEM EGY MÁSIK ALANY. Az első három
-  //! ugyanannak a diáknak ad többet; ez a lap addig nem létező kérdésére felel:
-  //! kié az órarend (lásd `lib/identity.ts`). Amit ígér, az mind megvan és mind
-  //! mérhető a kódban: a `/tanari` a tanár hete, a `/ma` tanári alanyon a
-  //! tanár napja, az „Osztályaim" panel a heti terhelés osztályonként, a
-  //! lyukasórákat pedig a `teacher-week.ts` számolja ki. Többet ne ígérjünk.
-  {
-    title: "Tanári nézet",
-    description:
-      "Tanárként a saját heted nyílik meg: melyik osztály, melyik terem, és mikor van lyukasórád.",
+      "Elöl áll, meddig lehet még nevezni. A nevezés egy gombnyomás, és ha kéred, szólunk, mielőtt lejár a határidő.",
   },
 ];
 
+const SCHOOL_HIGHLIGHTS: readonly Highlight[] = [
+  {
+    title: "Tantárgyak",
+    short: "Tantárgyak",
+    description:
+      "Tárgyanként: ki tanítja, és melyik osztálynak — egy koppintással a tanár vagy az osztály órarendjére.",
+  },
+  {
+    title: "Teremkereső és ügyelet",
+    short: "Teremkereső",
+    description:
+      "Melyik terem üres most, és ki ügyel a folyosón — az iskola, nem csak a saját órád.",
+  },
+  {
+    title: "Órarend a naptáradban",
+    short: "Naptár",
+    description:
+      "Feliratkozol, és a telefonod naptárában pontosan azok az órák jelennek meg, amiket a rácson látsz.",
+  },
+];
+
+//! A TANÁRI NÉZET NEM EGY ÚJ GOMB, HANEM EGY MÁSIK ALANY: kié az órarend (lásd
+//! `lib/identity.ts`). A `/tanari` a tanár hete, a `/ma` tanári alanyon a
+//! tanár napja, a lyukasórákat a `teacher-week.ts` számolja. Többet ne ígérjünk.
+const TEACHER_HIGHLIGHT: Highlight = {
+  title: "Tanári nézet",
+  short: "Tanári nézet",
+  description:
+    "Tanárként a saját heted nyílik meg: melyik osztály, melyik terem, és mikor van lyukasórád.",
+};
+
+const highlights: readonly Highlight[] = clubsLaunched()
+  ? [...CLUB_HIGHLIGHTS, ...SCHOOL_HIGHLIGHTS]
+  : [...SCHOOL_HIGHLIGHTS, TEACHER_HIGHLIGHT];
+
 const LAST = highlights.length - 1;
 
-//* Kockaváltásonként ennyi görgetés jut. A negyedik tétellel a szakasz
-//* háromszor vált — 75svh-nál a sáv már elnyelte volna a lapot, ezért lett 64.
-const STEP_SVH = 64;
+//* Kockaváltásonként ennyi görgetés jut. Négy tételnél a szakasz háromszor
+//* vált — 75svh-nál a sáv már elnyelte volna a lapot, ezért lett 64. Öt
+//* tételnél négy váltás jön; 56svh-val a teljes út (324svh) alig hosszabb a
+//* négytételes 292-nél, és egy kocka még mindig kényelmesen elolvasható.
+const STEP_SVH = LAST > 3 ? 56 : 64;
 
 //! A SZALAG MINDKÉT VÉGÉN MEGÁLL. A görgetési út első és utolsó 12%-a nem
 //! mozgat: az első kocka olvasható marad, amikor a sáv kitűzi magát, az utolsó
@@ -191,8 +245,8 @@ function useStrip() {
 //!    a szöveg megkíván, a tömb pedig együtt áll a képernyő közepén.
 //!
 //! 4. A KITŰZÖTT SZALAG. A szakasz magas, a színpad rátapad a képernyő
-//!    tetejére, és a görgetés a szalagot húzza — nem a lapot. A három
-//!    kockaváltásra 64svh jut egyenként (lásd `STEP_SVH`).
+//!    tetejére, és a görgetés a szalagot húzza — nem a lapot. Minden
+//!    kockaváltásra ugyanannyi görgetés jut (lásd `STEP_SVH`).
 //!
 //! 4b. A MEZŐ ÉS A SZÍNPAD EGYSZERRE ENGED EL, ÉS EZT A NEGATÍV MARGÓ HELYE
 //!    DÖNTI EL. A mező és a színpad ugyanazt a 100svh-t tölti ki egymás fölött,
@@ -244,12 +298,13 @@ function useStrip() {
 //!    kocka cserébe végig teljes erővel, élesen áll: 6,2:1 a címen, 5,0:1 a
 //!    leíráson. Fokozott kontraszt mellett mindkettő kikapcsol.
 //!
-//! 10. A SÍN AZT MÉRI, AMIT A SZALAG MUTAT. Négy egyenlő oszlop, mindegyik
-//!    KÖZEPÉN egy pötty — a fej ezért pontosan az állomásra fut be, nem mellé.
-//!    A FELIRAT VISZONT CSAK 48rem FÖLÖTT ÁLL KI: négy állomás egy 375 képpontos
-//!    kijelzőn 84 képpontos oszlopokat ad, amiben a „Szinkronizálás" szó közepén
-//!    törik el. A pötty ott is méri, hol tartunk, a nevet pedig a fölötte álló,
-//!    hatalmas kockacím mondja ki.
+//! 10. A SÍN AZT MÉRI, AMIT A SZALAG MUTAT. Tételenként egy egyenlő oszlop,
+//!    mindegyik KÖZEPÉN egy pötty — a fej ezért pontosan az állomásra fut be,
+//!    nem mellé. A FELIRAT VISZONT CSAK 48rem FÖLÖTT ÁLL KI: öt állomás egy 375
+//!    képpontos kijelzőn 67 képpontos oszlopokat ad, amiben egy „Teremkereső"
+//!    is a közepén törne el. A pötty ott is méri, hol tartunk, a nevet pedig a
+//!    fölötte álló, hatalmas kockacím mondja ki. A sín a rövid nevet (`short`)
+//!    írja ki, nem a kockacímet.
 //!
 //! 11. AHOL A KITŰZÉS NEM SZABAD VAGY NEM FÉR. Csökkentett mozgás mellett a
 //!    szalag nem lassabb, hanem NINCS: a görgetéshez kötött vízszintes mozgás
@@ -592,7 +647,7 @@ export default function Latest() {
                 </li>
               ))}
               {/*//* A szalag vége: nem üres kobalt, hanem levegő az utolsó dia
-                  //* után — annyi, hogy a maszk alá beérjen, és a negyedik tábla
+                  //* után — annyi, hogy a maszk alá beérjen, és az utolsó tábla
                   //* jobb éle is látszódjon, mielőtt a szakasz elenged. */}
               <li className="latest-endcap" aria-hidden />
             </ol>
@@ -614,7 +669,7 @@ export default function Latest() {
                   style={{ "--i": i } as React.CSSProperties}
                 >
                   <span className="latest-dot" />
-                  <span className="latest-station-label">{item.title}</span>
+                  <span className="latest-station-label">{item.short}</span>
                 </span>
               ))}
             </div>

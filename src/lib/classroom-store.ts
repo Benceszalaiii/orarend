@@ -43,7 +43,7 @@ export async function requireTeacher(): Promise<TeacherActor | null> {
 //!   • AD-belépésnél nincs `teacherName`; a megjelenített nevet vetjük össze a
 //!     listával, ugyanazzal a szigorú (többértelműségre `null`-t adó)
 //!     illesztéssel, ami a Google-fiókoknak tanári jogot ad.
-async function resolveTeacherShort(user: {
+export async function resolveTeacherShort(user: {
   teacherName: string | null;
   name: string;
 }): Promise<string | null> {

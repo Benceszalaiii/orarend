@@ -1,4 +1,7 @@
-import { freeRoomsAt } from "@/lib/free-rooms";
+import { canBrowseClubs, clubsLaunched } from "@/lib/club-access";
+import { clubOfBooking } from "@/lib/club-schedule";
+import { loadScheduleClubs, resolveActor } from "@/lib/club-store";
+import { type FreeRoomsAnswer, freeRoomsAt } from "@/lib/free-rooms";
 import {
   isServableDate,
   loadWeekOccupancy,
@@ -86,7 +89,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const answer = freeRoomsAt(occupancy, dateKey, minute);
+  const answer = await withClubNames(freeRoomsAt(occupancy, dateKey, minute));
 
   return jsonUtf8({
     ...answer,
@@ -98,4 +101,32 @@ export async function GET(request: Request) {
       Math.floor((Date.now() - answer.fetchedAt) / 60_000),
     ),
   });
+}
+
+//! A FOGLALT TEREM SZAKKÖRE. A Jedlikinfo a szakkört osztály nélküli kártyaként
+//! tartja, sokszor csak „Tehetséggondozó szakkör" címmel — ebből a diák nem tudja
+//! meg, MI zajlik a 402-ben. Ha a foglalás egy ismert szakköré, a nevét adjuk.
+//! A bevezetés előtt csak annak, aki a szakköröket már láthatja; hiba esetén a
+//! válasz a szakkörnevek nélkül megy ki, nem sehogy.
+async function withClubNames(
+  answer: FreeRoomsAnswer,
+): Promise<FreeRoomsAnswer> {
+  try {
+    if (!clubsLaunched() && !canBrowseClubs(await resolveActor(), false)) {
+      return answer;
+    }
+    const clubs = await loadScheduleClubs();
+    if (clubs.length === 0) return answer;
+    return {
+      ...answer,
+      busy: answer.busy.map((room) => ({
+        ...room,
+        club: room.booking
+          ? clubOfBooking(room.booking, room.short, clubs)
+          : null,
+      })),
+    };
+  } catch {
+    return answer;
+  }
 }

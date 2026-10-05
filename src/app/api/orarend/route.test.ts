@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { addDays, mondayOf } from "@/lib/timetable";
 import { GET } from "./route";
 
 //! A KÖZVETÍTŐ LÉNYEGE A FEJLÉC. A Jedlikinfo `Origin` és `Referer` nélkül
@@ -104,6 +105,12 @@ describe("/api/orarend", () => {
     const data = await res.json();
     expect(data.subject).toEqual({ short: "13C", name: "13.C" });
     expect(data.weekStart).toBe("2026-09-28");
+    expect(data.previousWeekUrl).toBe(
+      "https://orarend.test/api/orarend?osztaly=13C&het=2026-09-21",
+    );
+    expect(data.nextWeekUrl).toBe(
+      "https://orarend.test/api/orarend?osztaly=13C&het=2026-10-05",
+    );
     expect(data.periods[0]).toMatchObject({ start: "08:00", end: "08:45" });
     expect(data.lessons[0]).toMatchObject({
       subject: "Matematika",
@@ -119,19 +126,27 @@ describe("/api/orarend", () => {
     expect(res.status).toBe(200);
     const cards = calls.find((c) => c.url.endsWith("/timetable/cards"));
     expect(JSON.parse(String(cards?.init?.body)).teacher).toBe("AA");
+    expect((await res.json()).nextWeekUrl).toBe(
+      "https://orarend.test/api/orarend?tanar=AA&het=2026-10-05",
+    );
   });
 
   test("alany nélkül az osztályok és a tanárok listája", async () => {
     const res = await get("");
     expect(res.status).toBe(200);
+    const next = addDays(mondayOf(), 7);
+    const link = (q: string) => ({
+      url: `https://orarend.test/api/orarend?${q}`,
+      nextWeekUrl: `https://orarend.test/api/orarend?${q}&het=${next}`,
+    });
     expect(await res.json()).toEqual({
       classes: [
-        { ...CLASSES[0], url: "https://orarend.test/api/orarend?osztaly=13C" },
-        { ...CLASSES[1], url: "https://orarend.test/api/orarend?osztaly=09A" },
+        { ...CLASSES[0], ...link("osztaly=13C") },
+        { ...CLASSES[1], ...link("osztaly=09A") },
       ],
       teachers: [
-        { ...TEACHERS[0], url: "https://orarend.test/api/orarend?tanar=AA" },
-        { ...TEACHERS[1], url: "https://orarend.test/api/orarend?tanar=BB" },
+        { ...TEACHERS[0], ...link("tanar=AA") },
+        { ...TEACHERS[1], ...link("tanar=BB") },
       ],
     });
   });

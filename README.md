@@ -19,6 +19,12 @@ fekvő lapra is kinyomtatható.
   ütköző kártyák azonosság szerint csoportokba kerülnek, a diák kiválasztja a
   sajátját, és a választás osztályonként megmarad — onnantól a rács az *ő*
   órarendje, nem az osztályé.
+- **Bontott órák kitöltése.** A csak egy csoportnak szóló óra alapból fél
+  oszlopot kap, hogy látszódjon: az osztály fele nem ül ott. Ha a másik
+  csoportnak abban a sávban nincs órája (pl. egy 13C-s héten szinte mindig), a
+  Beállítások *Bontott órák kitöltése* kapcsolójával az óra a teljes oszlopot
+  kitölti; ahol két csoport órája ténylegesen egymásra esik, ott a két fél
+  megmarad. Készülékhez kötött beállítás.
 - **Most sáv.** Aktuális óra, szünet vagy *Mára vége*, visszaszámlálóval a
   következő váltásig.
 - **Értesítések.** 10 perccel az óra kezdése előtt, és ha megváltozik az órarend.
@@ -37,6 +43,12 @@ fekvő lapra is kinyomtatható.
   kezd. Egy tárgyon belül osztályonként (alapból) vagy tanáronként nézhető
   (`&nezet=tanar`); ha az órarendben választottál osztályt, az kerül előre, és
   meg is van jelölve — ezt a lap csak a böngészőből olvassa, nem küldi el.
+- **Gépi hozzáférés.** Az órarend, a szabad termek és a tantárgyak egyszerű
+  GET-tel JSON-ban is elérhetők (`/api/orarend`, `/api/termek`,
+  `/api/tantargyak`); a leírás a `/llms.txt`-ben van. A felhasználó nevében
+  dolgozó AI-asszisztens (ChatGPT, Claude, …) a lap helyett annak JSON-párját
+  kapja, így „mi lesz holnap a 13A-nak?" kérdésre élő adatból felel. A
+  tanító- és keresőrobotokat a lapok továbbra is kizárják.
 - **Nyomtatás.** `@page { size: A4 landscape }`, saját világos palettával, ami
   megtartja a tantárgyak színeit: a szín itt információ, nem dekoráció.
 - **Megnevezett hibák.** Az órarend adatai nem a mieink, ezért minden hibafajtának
@@ -77,6 +89,7 @@ Nyisd meg: [http://localhost:3000](http://localhost:3000). A `/` átirányít az
 | `bun start` | Az éles build kiszolgálása |
 | `bun run lint` | `biome check` |
 | `bun run format` | `biome format --write` |
+| `bun run db:seed:clubs` | A kezdő szakkörlista betöltése (`--check`: csak ellenőriz) |
 | `bun run brand:icons` | A teljes ikonkészlet újrarajzolása a jelből (`src/lib/brand-mark.ts`) |
 
 ## Honnan jönnek az adatok
@@ -316,6 +329,102 @@ változásokról továbbra is a push-értesítés szól időben.
 Redis nélkül a funkció `503`-at ad, és a felületen sem ígér semmit — ugyanaz a
 szabály, mint az értesítéseknél.
 
+## Szakkörök
+
+A szakkörök **nagy része már benne van a Jedlikinfóban** — a terem és a tanár
+órarendjében, **osztály nélküli** kártyaként (sokszor csak „Tehetséggondozó
+szakkör" címmel). Egy osztály nélküli kártya viszont egyik osztály
+órarendjében sem jelenik meg, ezért a diákok nem látják. Az app a szakkör
+kilétét (név, leírás, kinek szól, ki vezeti) a saját adatbázisában tartja, az
+időpontját pedig hetente összeveti a Jedlikinfóval, és kimondja, mennyire
+tudja: *az órarendben*, *a tanár szerint*, *nincs az órarendben*, *nincs
+tanítás*, *nem ellenőrizhető* (`lib/club-schedule.ts`).
+
+- **Az órarendi rácson** a szakkör választható: alapból csak a **követett**
+  szakkörök jelennek meg (belépés nélkül is), tanárnál a saját szakkörei. Az
+  osztálynak szóló szakkör sem kerül rá magától — azt a javaslatok mutatják.
+- **A teremkereső** a foglalt termet a szakkör nevével mutatja.
+- **Követés** (fiók nélkül, a böngészőben; belépve szinkronizálva),
+  **jelentkezés** (fiókkal — a tagság nyilvános), **értesítés** (névtelen
+  push: 10 perccel előtte, és ha kiesik az órarendből), **naptár**
+  (`webcal://`).
+- Szakkört **tanár** hoz létre; **diák javasolhat**, és a felkért tanár hagyja
+  jóvá (`lib/club-access.ts`).
+- **Üzemeltetői pult** (`/admin/szakkorok`, `/admin/versenyek`): minden
+  szakkör és verseny egy listában, a javaslatokkal, piszkozatokkal és
+  megszűntekkel együtt. Javaslat jóváhagyása a felkért tanár helyett,
+  lezárás és újranyitás, végleges törlés; tagok és nevezők listája,
+  jelentkezés/nevezés törlése; versenyállapot váltása. A pult jelzi, ami
+  lépésre vár (régen megerősített, csak tanár szerinti időpont; lejárt
+  határidejű, még nyitott verseny; lezajlott verseny eredmény nélkül). A
+  moderálási sávban az ötletek (elrejtés, visszaállítás, törlés — a szerző
+  neve nélkül) és a hírfolyamok legutóbbi bejegyzései és hozzászólásai
+  (törlés) állnak (`lib/admin-content.ts`).
+- **A szakkör lapja** a Google Classroom kurzusainak mintájára: színes borító,
+  fülek (*Hírfolyam* · *Tagok* · *Részletek*, `?lap=`), bal oldalt a heti
+  alkalmak és a jelentkezés. A **hírfolyamra** a tagok és a vezetők írnak
+  bejegyzést és hozzászólást; olvasni csak belépve lehet. A szerző, a vezető
+  és az admin töröl. Új bejegyzésről push megy a szakkörről értesítést kérő
+  készülékekre — csak a szakkör nevével, szöveg és szerző nélkül
+  (`lib/club-board.ts`, `szakkorok/[slug]/board-actions.ts`).
+
+### Felfedezés
+
+- **„Neked is jó időpontban"** — a szakkörlista a böngészőben menti heteiből
+  (A és B hét is, ha megvan) megmondja, melyik szakkör fér bele a diák
+  órarendjébe, az elrejtett csoportok nélkül; a kártya az ütköző órát is
+  megnevezi (`lib/club-fit.ts`). A lista tetején egyetlen gomb áll
+  („13C · 10 fér bele a hetedbe"); a hét-térkép ablakban nyílik, és csak azt
+  mutatja, amire a diák eljuthat. A lista azt rendezi előre, kinek szól a
+  szakkör (az osztálynak/évfolyamnak, a szakmának, mindenkinek); a
+  más évfolyamoké és szakmáké összecsukva a végén. Hogy belefér-e, az
+  csoporton belül rendez, és a sor végén áll.
+- **Beleférő szakkörök a rácson** — kapcsolható (alapból ki): az osztálynak
+  vagy évfolyamának szóló és a mindenkinek nyitott szakkörök halvány,
+  szaggatott kártyaként a diák szabad sávjaiban
+  (`javaslat=1`, `lib/club-suggest-pref.ts`).
+- **„Mire lenne igény?"** — belépett diák témát ír fel vagy jelez; csak a
+  jelzések száma nyilvános. A tanár egy gombbal szakkört indít belőle, és az
+  ötlet onnantól a szakkörre mutat (`lib/club-ideas.ts`).
+- **Folyosói tábla** (`/tabla`) — az iskola kijelzőire: a nap hátralévő
+  szakkörei teremmel, a nevezési határidők és a közelgő versenyek; magától
+  frissül (`lib/hallway-board.ts`).
+
+### Versenyek
+
+- **A határidő áll elöl**: a `/versenyek` lap tetején a nyitott nevezések a
+  legsürgősebbel kezdve, a `/ma` oldalsávjában pedig az, amire az osztály
+  nevezhet.
+- **Egyéni nevezés** (fiókkal, nyilvános), osztályra/évfolyamra szűrve,
+  létszámkorláttal; a határidőig vissza lehet lépni. Csapatok később.
+- **Emlékeztető** (névtelen push): három nappal és egy nappal a határidő előtt,
+  meg a verseny előtti napon, délután négykor (`lib/contest-push.ts`).
+- Versenyt **tanár** hirdet meg, **piszkozatként**; a nevezést ő nyitja meg. Az
+  **eredményt** (helyezés, díj, pont) fokozatosan rögzítheti, és akkor lesz
+  nyilvános, amikor „Lezajlott"-ra állítja.
+- A felkészítő szakkör és a verseny kölcsönösen hivatkozik egymásra.
+
+| Végpont | Mire kell |
+| --- | --- |
+| `GET /api/szakkorok/orarend?osztaly=09A&het=…&klubok=…&javaslat=1` | Egy alany hetének szakkör-alkalmai (tanárnál `tanar=BNM`); `javaslat=1`: a nyitott szakkörök is, `suggested` jelöléssel |
+| `GET /api/szakkorok/<slug>/naptar.ics` | Egy szakkör alkalmai a következő 8 hétre |
+| `GET /api/versenyek/hataridok?osztaly=09A&versenyek=…` | A nyitott nevezési határidők, amire az osztály nevezhet (a `/ma` panelje) |
+| `GET /api/versenyek/<slug>/naptar.ics` | Egy verseny, a fordulói és a nevezési határideje |
+
+A Jedlikinfót ugyanaz a teremenkénti, óránkénti gyorsítótár védi, mint a
+teremkeresőt — de az órarend csak **a szükséges termeket** kéri le
+(`loadRoomsWeek`), nem mind a 71-et.
+
+| Env-változó | Mire kell |
+| --- | --- |
+| `NEXT_PUBLIC_CLUBS_PUBLIC` | `1` = a szakkörök mindenkinek látszanak. Előtte csak tanár és üzemeltető látja (feltöltéshez). Build-időben beég: átállítás után új build kell |
+
+A kapcsoló nem csak a lapokat zárja: a szakkör- és verseny-actionök is
+megkérdezik (`canBrowseClubs`), a nyitólap „Frissen a sütőből" sávja, a
+`/valtozasok` és a `sitemap.xml` pedig csak `1` mellett említi a két részt.
+Ha az adatbázis nem válaszol, a két rész saját hibalapot ad újrapróbálással
+(`szakkorok/error.tsx`, `versenyek/error.tsx`), nem a Next alapértelmezettjét.
+
 ## Arculat
 
 A jel a **„ji"** (Jedlik Info) két kisbetűje: egyenes szárak, kerek pontok. A
@@ -346,10 +455,17 @@ src/
     orarend/       heti rács (alapértelmezett útvonal)
     ma/            a mai nap egy képernyőn
     tanari/        tanári heti nézet
+    szakkorok/     szakkörök: lista, szakkör lapja hírfolyammal, javaslat, ötletek
+    versenyek/     versenyek: határidő-folyam, nevezés, eredmények
+    tabla/         folyosói kijelző (a nap szakkörei, határidők)
+    tantargyak/    tárgyanként ki tanítja és kiknek
+    teremkereso/   üres termek óránként
+    ugyelet/       folyosóügyelet
     valtozasok/    változások listája
     belepes/       opcionális iskolai belépés
     adatvedelem/   adatvédelmi tájékoztató
-    admin/         üzemeltetői pult (isAdmin): felhasználók, statisztika, közlemények
+    admin/         üzemeltetői pult (isAdmin): felhasználók, statisztika, közlemények,
+                   szakkörök, versenyek
     api/auth/      bejelentkezés és passkey-végpontok
     api/beallitasok/ beállítás-szinkron végpontok
     api/hasznalat/ osztályszintű használati számláló

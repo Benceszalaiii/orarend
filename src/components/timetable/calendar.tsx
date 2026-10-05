@@ -46,7 +46,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
+import { clubsVisibleHere } from "@/lib/club-events";
+import { loadClubSuggest, saveClubSuggest } from "@/lib/club-suggest-pref";
 import { DUAL_LABEL, type DualStatus, dualBlockLesson } from "@/lib/dualis";
+import { loadFillSplit, saveFillSplit } from "@/lib/fill-split-pref";
 import type {
   CalendarEvent,
   TimetableError as TimetableErrorInfo,
@@ -82,7 +85,12 @@ import {
 import { reportClassUse } from "@/lib/usage";
 import { useHiddenMenu } from "@/lib/use-hidden-menu";
 import { cn } from "@/lib/utils";
-import { GlanceNote, GlanceToggle } from "./glance-controls";
+import {
+  FillToggle,
+  GlanceNote,
+  GlanceToggle,
+  SuggestToggle,
+} from "./glance-controls";
 import { EventCard, LessonBlock } from "./lesson-block";
 import { type FocusTarget, LessonSheet } from "./lesson-sheet";
 import { GhostCard, MergeButton } from "./merge-controls";
@@ -279,9 +287,13 @@ function overlapping(a: SideItem, b: SideItem): boolean {
 //* különben a fél oszlop kártyákat takarna el, ami rosszabb a teljesnél. A
 //* teljes oszlopot kérő (összevont) kártya senkivel nem fedhet át: ha mégis
 //* van mellette óra, marad a sávozás, mert az mindkettőt megmutatja.
-function assignBySide(cluster: LayoutItem[]): boolean {
+function assignBySide(cluster: LayoutItem[], fill: boolean): boolean {
   const sides = cluster.map(itemSide);
   if (sides.some((side) => side === null)) return false;
+  //! KÉRÉSRE A MAGÁNYOS FÉL KITÖLTI AZ OSZLOPOT (lásd `fill-split-pref.ts`).
+  //! Csak az egyelemű klaszter: ha bármi átfed vele, a szemközti fél NEM üres,
+  //! és a két csoport órája egymás mellett marad.
+  if (fill && cluster.length === 1) sides[0] = FULL;
   for (let i = 0; i < cluster.length; i++) {
     for (let j = i + 1; j < cluster.length; j++) {
       if (!overlapping(cluster[i], cluster[j])) continue;
@@ -303,6 +315,7 @@ function layoutDay(
   runs: LessonRun[],
   ghosts: GhostBlock[],
   events: CalendarEvent[],
+  fill = false,
 ): LayoutItem[] {
   const items: LayoutItem[] = [
     ...runs.map((r) => ({
@@ -339,7 +352,7 @@ function layoutDay(
     //! óra is így kap fél oszlopot (egyelemű klaszter), a két egymásra eső
     //! csoport pedig mindig ugyanabban a sorrendben áll — nem aszerint, melyik
     //! kezdődött előbb.
-    if (assignBySide(cluster)) {
+    if (assignBySide(cluster, fill)) {
       cluster = [];
       return;
     }
@@ -899,17 +912,40 @@ export function TimetableCalendar({
   //* történik, ahol a sor születik (lásd `lib/use-hidden-menu.ts`).
   const menu = useHiddenMenu();
 
-  //* Aktuális perc (a "most" vonalhoz) — csak a kliensen, hydration-biztosan.
-  const [nowMin, setNowMin] = useState<number | null>(null);
+  //* Aktuális nap és perc (a "most" vonalhoz) — csak a kliensen, hydration-biztosan.
+  //! VISSZATÉRÉSKOR AZONNAL FRISSÜL. A háttérbe tett lapon (telefon zsebben,
+  //! PWA felfüggesztve, bfcache) az időzítő áll: csütörtök 13:12-kor elrakva,
+  //! péntek 9:08-kor elővéve a vonal különben a csütörtöki helyén maradna, amíg
+  //! a következő perc le nem jár. A NAPOT IS itt követjük — lásd `gridDays`.
+  const [now, setNow] = useState<{ dateKey: string; min: number } | null>(null);
   useEffect(() => {
     const tick = () => {
       const d = new Date();
-      setNowMin(d.getHours() * 60 + d.getMinutes());
+      const dateKey = dateToKey(d);
+      const min = d.getHours() * 60 + d.getMinutes();
+      setNow((prev) =>
+        prev && prev.dateKey === dateKey && prev.min === min
+          ? prev
+          : { dateKey, min },
+      );
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
     };
     tick();
     const id = setInterval(tick, 60_000);
-    return () => clearInterval(id);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", tick);
+    window.addEventListener("focus", tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", tick);
+      window.removeEventListener("focus", tick);
+    };
   }, []);
+  const nowMin = now?.min ?? null;
+  const liveToday = now?.dateKey ?? null;
 
   //! ─── EGY HÉT LEKÉRÉSE — ELŐRE IS ────────────────────────────────────────
   //! A héthatáron áthúzott mozdulat akkor EGY SZALAG, ha a következő hét már
@@ -1022,6 +1058,37 @@ export function TimetableCalendar({
   //! a hatások mindig a FRISS `load`-ot hívják, de nem futnak újra miatta.
   const loadRef = useRef(load);
   loadRef.current = load;
+
+  //! ─── BELEFÉRŐ SZAKKÖRÖK ──────────────────────────────────────────────────
+  //! Csak az osztály rácsán: a tanárnak nincs „szabad sávja", amibe egy diák-
+  //! szakkör beleférne. A kapcsoló ÚJRA LEKÉRI a hetet — a javaslatok a hét
+  //! válaszában jönnek (`buildTimetableView`), és a memóriában tartott hetek
+  //! még a kapcsolás előtti állapotot hordozzák.
+  const [suggesting, setSuggesting] = useState(false);
+  const [clubsHere, setClubsHere] = useState(false);
+  useEffect(() => {
+    setSuggesting(loadClubSuggest());
+    setClubsHere(clubsVisibleHere());
+  }, []);
+  const toggleSuggest = () => {
+    const next = !suggesting;
+    saveClubSuggest(next);
+    setSuggesting(next);
+    weekCache.current.clear();
+    void loadRef.current(view.weekStart);
+  };
+
+  //! ─── KITÖLTÖTT BONTOTT ÓRÁK ──────────────────────────────────────────────
+  //! Csak rajzolás: a hetet nem kell újra lekérni, a `layoutDay` dönt.
+  const [filling, setFilling] = useState(false);
+  useEffect(() => {
+    setFilling(loadFillSplit());
+  }, []);
+  const toggleFill = () => {
+    const next = !filling;
+    saveFillSplit(next);
+    setFilling(next);
+  };
 
   //! A MENTETT HÉTBŐL VISSZA KELL TALÁLNI A FRISSHEZ. A rács hálózat nélkül a
   //! készüléken tárolt hetet mutatja — de a térerő a folyosón perceken belül
@@ -1390,24 +1457,35 @@ export function TimetableCalendar({
   );
 
   //* Ha az API csak fallback napokat adott (hiba), a hét 5 tanítási napját mutatjuk.
-  const gridDays: Day[] =
-    days.length > 0
-      ? days
-      : Array.from({ length: 5 }, (_, i) => {
-          const dateKey = addDaysKey(weekStart, i);
-          return {
-            name: DAY_NAMES[i],
-            dateKey,
-            dateLabel: dateKey.slice(5).replace("-", ".").concat("."),
-            week: "",
-            dayOfWeek: i + 1,
-            isToday: dateKey === todayKey(),
-            //* Tartalék nap: a tanév rendjéből semmit nem tudunk róla.
-            teaching: null,
-            notes: [],
-            bells: null,
-          };
-        });
+  //! AZ `isToday` A NÉZET ÉPÍTÉSEKOR FAGY BE (`buildTimetableView`), és a
+  //! készüléken mentett hét is ezzel együtt kerül elő. A csütörtökön eltett hét
+  //! pénteken a csütörtököt mondaná mainak — a „most" vonal, az oszlop
+  //! kiemelése és az idő-morfológia is ott maradna. A kliensen ezért a mai
+  //! napot a saját óránkból számoljuk újra.
+  const gridDays: Day[] = useMemo(() => {
+    const base: Day[] =
+      days.length > 0
+        ? days
+        : Array.from({ length: 5 }, (_, i) => {
+            const dateKey = addDaysKey(weekStart, i);
+            return {
+              name: DAY_NAMES[i],
+              dateKey,
+              dateLabel: dateKey.slice(5).replace("-", ".").concat("."),
+              week: "",
+              dayOfWeek: i + 1,
+              isToday: dateKey === todayKey(),
+              //* Tartalék nap: a tanév rendjéből semmit nem tudunk róla.
+              teaching: null,
+              notes: [],
+              bells: null,
+            };
+          });
+    if (liveToday === null) return base;
+    return base.some((d) => d.isToday !== (d.dateKey === liveToday))
+      ? base.map((d) => ({ ...d, isToday: d.dateKey === liveToday }))
+      : base;
+  }, [days, weekStart, liveToday]);
 
   //* Az ütközés-feloldás naponként fut le; a `prefs` bármely változása azonnal
   //* átrajzolja a rácsot (nincs újratöltés).
@@ -2285,10 +2363,17 @@ export function TimetableCalendar({
   const showCalendar =
     hasSubject && menu.shows("calendar") && Boolean(calendarSetup);
   const showLegend = menu.shows("legend");
+  const showSuggest =
+    hasSubject && mode === "class" && clubsHere && menu.shows("suggest");
+  //* A tanári rácson nincs fél oszlop (lásd `teacherLessons`) — nincs mit
+  //* kitölteni.
+  const showFill = hasSubject && mode === "class" && menu.shows("fill");
   const hasSettings =
     showMerge ||
     showDual ||
     showGlance ||
+    showSuggest ||
+    showFill ||
     showNotify ||
     showCalendar ||
     showLegend ||
@@ -2355,7 +2440,7 @@ export function TimetableCalendar({
     return map;
   }, [gridDays, resolvedDays, events]);
 
-  const today = todayKey();
+  const today = liveToday ?? todayKey();
   const todayItems = agendaByDate.get(today) ?? [];
   const laterItems = useMemo(
     () =>
@@ -2679,6 +2764,15 @@ export function TimetableCalendar({
                               setGlanceKey(glancing ? null : storeKey)
                             }
                           />
+                        )}
+                        {showSuggest && (
+                          <SuggestToggle
+                            active={suggesting}
+                            onToggle={toggleSuggest}
+                          />
+                        )}
+                        {showFill && (
+                          <FillToggle active={filling} onToggle={toggleFill} />
                         )}
                         {showNotify && notifySetup?.({ subjectShort })}
                         {showCalendar &&
@@ -3179,6 +3273,7 @@ export function TimetableCalendar({
                       resolved.runs,
                       resolved.ghosts,
                       dayEvents,
+                      filling,
                     );
                     const showNow =
                       d.isToday &&

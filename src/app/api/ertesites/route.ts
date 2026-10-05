@@ -1,10 +1,16 @@
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { loadScheduleClubs } from "@/lib/club-store";
+import { loadLiveCompetitions } from "@/lib/competition-store";
 import { filterKnownClasses, filterKnownTeachers } from "@/lib/known-class";
 import { sendPush } from "@/lib/push-send";
 import {
+  clubsOf,
+  contestsOf,
   LEAD_MINUTES,
   MAX_CLASSES,
+  MAX_CLUBS,
+  MAX_CONTESTS,
   MAX_SUBSCRIBE_BYTES,
   MAX_TEACHERS,
   sanitizePushPersonalization,
@@ -63,6 +69,8 @@ type Body = {
   keys?: { p256dh?: unknown; auth?: unknown };
   classes?: unknown;
   teachers?: unknown;
+  clubs?: unknown;
+  contests?: unknown;
   everyLesson?: unknown;
   personalization?: unknown;
   replaces?: unknown;
@@ -207,7 +215,39 @@ export async function POST(request: Request) {
 
   //* Feliratkozás legalább egy alanyra: mindkét lista üresen egy olyan sor
   //* keletkezne, amire soha semmi nem megy ki.
-  if (classes.length === 0 && teachers.length === 0) {
+  //! CSAK ÉLŐ SZAKKÖR. A slug szabad szöveg a kérésben; ha nem szűrnénk,
+  //! bárki tetszőleges kulcsot hozhatna létre a tárolóban — ugyanaz az ok,
+  //! amiért az osztályt is a suli listájához mérjük. Ha a szakkörlista épp
+  //! nem tölthető be, a már tárolt követések maradnak, újat nem veszünk fel.
+  const liveClubs = await loadScheduleClubs();
+  const liveSlugs = new Set(liveClubs.map((c) => c.slug));
+  const storedClubs = clubsOf(stored ?? {});
+  const clubs =
+    payload?.clubs === undefined
+      ? storedClubs
+      : wantedList(payload.clubs, MAX_CLUBS).filter((slug) =>
+          liveSlugs.size > 0 ? liveSlugs.has(slug) : storedClubs.includes(slug),
+        );
+
+  //* A versenyek ugyanígy: csak élő (nyitott vagy lezárt nevezésű) verseny.
+  const liveContests = await loadLiveCompetitions();
+  const liveContestSlugs = new Set(liveContests.map((c) => c.slug));
+  const storedContests = contestsOf(stored ?? {});
+  const contests =
+    payload?.contests === undefined
+      ? storedContests
+      : wantedList(payload.contests, MAX_CONTESTS).filter((slug) =>
+          liveContestSlugs.size > 0
+            ? liveContestSlugs.has(slug)
+            : storedContests.includes(slug),
+        );
+
+  if (
+    classes.length === 0 &&
+    teachers.length === 0 &&
+    clubs.length === 0 &&
+    contests.length === 0
+  ) {
     return new Response(null, { status: 400 });
   }
 
@@ -217,6 +257,8 @@ export async function POST(request: Request) {
     auth,
     classes,
     teachers,
+    clubs,
+    contests,
     everyLesson:
       payload?.everyLesson === undefined
         ? (inherited?.everyLesson ?? false)
@@ -264,7 +306,16 @@ export async function POST(request: Request) {
       //* A visszaigazolás azt sorolja fel, amire a feliratkozás TÉNYLEGESEN
       //* szól — a tanárit is, különben a tanár nem tudná meg, hogy a jelzés az
       //* ő órarendjéről szólt-e, vagy az osztályéról.
-      body: `${[...classes, ...teachers].join(", ")} — szólunk ${LEAD_MINUTES} perccel az óra előtt és ha változik az órarend.`,
+      body: `${[
+        ...classes,
+        ...teachers,
+        ...liveClubs.filter((c) => clubs.includes(c.slug)).map((c) => c.name),
+        ...liveContests
+          .filter((c) => contests.includes(c.slug))
+          .map((c) => c.name),
+      ].join(
+        ", ",
+      )} — szólunk ${LEAD_MINUTES} perccel előtte, és ha változik az órarend.`,
       url: "/ma",
       tag: "orarend-welcome",
     });

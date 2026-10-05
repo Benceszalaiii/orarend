@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { isBlockedAiRequest } from "@/lib/ai-bots";
+import { aiGate, LLM_DOC_PATH, machineUrlFor } from "@/lib/ai-bots";
+import { JEDLIK_SITE } from "@/lib/jedlik-api";
 import { isViewRoute, LAST_VIEW_COOKIE } from "@/lib/last-view";
 
 //! ─── AZ AI-ROBOTOK KAPUJA ──────────────────────────────────────────────────
@@ -18,9 +19,17 @@ import { isViewRoute, LAST_VIEW_COOKIE } from "@/lib/last-view";
 //! EZT A VÁLASZT SENKI NE TEGYE EL. A tiltás a `User-Agent`-en múlik, tehát
 //! ugyanannak a címnek KÉT válasza van. Egy köztes gyorsítótár, ami csak a
 //! címet nézi, a robotnak szánt 403-at a következő látogatónak is kiadná.
+//*
+//! A SZÖVEG A GÉPNEK SZÓL, NEM CSAK A TILTÁST MONDJA. Ha csak annyit írna, hogy
+//! „ki vagy zárva", az asszisztens azt mondaná a felhasználónak, hogy az
+//! órarend elérhetetlen — pedig az `/api` neki is nyitva. Ezért angolul is, és
+//! a kész címekkel.
 function blockAiBot(): NextResponse {
   return new NextResponse(
-    "403 — Ez a lap egy iskola órarendje, nem tanítóanyag. Az AI-robotokat a /robots.txt is kizárja.\n",
+    "403 — Ez a lap egy iskola órarendje, nem tanítóanyag. Az AI-robotokat a /robots.txt is kizárja.\n" +
+      "The HTML pages are closed to AI crawlers, but the live timetable is open as JSON:\n" +
+      "- https://jedlik.info/llms.txt (how to use it)\n" +
+      "- https://jedlik.info/api/orarend (every class and teacher, each with a ready link)\n",
     {
       status: 403,
       headers: {
@@ -30,6 +39,48 @@ function blockAiBot(): NextResponse {
       },
     },
   );
+}
+
+//! ─── AZ ASSZISZTENS ÁTTERELÉSE ─────────────────────────────────────────────
+//! Az ember indította asszisztens (ChatGPT-User, Claude-User, …) a lap helyett
+//! annak gépi párját kapja: ugyanazt az alanyt, élő JSON-ban, vagy a
+//! `/llms.txt`-t. 307, mert a lap maga megmarad, csak ennek a kérdezőnek nem
+//! az való. A `Link` fejléc akkor is a leíráshoz vezet, ha a JSON-ra jutott.
+//*
+//! EZT A VÁLASZT SEM TEHETI EL SENKI — ugyanaz a cím böngészőnek a lapot adja.
+function redirectAiAgent(request: NextRequest): NextResponse {
+  const target = machineUrlFor(
+    request.nextUrl.pathname,
+    request.nextUrl.searchParams,
+  );
+  const response = NextResponse.redirect(new URL(target, request.url), 307);
+  response.headers.set("Cache-Control", "private, no-store");
+  response.headers.set("Vary", "User-Agent");
+  response.headers.set("Link", `<${LLM_DOC_PATH}>; rel="describedby"`);
+  return response;
+}
+
+//! ─── A JEDLIKINFO ÁTJÁRÓJA ─────────────────────────────────────────────────
+//! A `/api/jedlik/*` átirányító (`next.config.ts`) a böngésző fejléceit viszi
+//! tovább — a Jedlikinfo viszont a `timetable/cards` POST-ot csak akkor adja
+//! ki, ha az `Origin` ÉS a `Referer` is egy általa ismert oldalé (a
+//! `jedlik.info` az, a `localhost`, a `www.` és az előnézeti címek NEM —
+//! ellenőrizve 2026-09-25). Ezért ugyanazt mondjuk neki, amit a szerveroldali
+//! hívás is mond (`jedlik-api.ts`): a saját felületéről jövünk. Így a helyi
+//! fejlesztés és minden előnézet ugyanúgy működik, mint az éles oldal.
+//*
+//! A SÜTIT NEM VISSZÜK ÁT. Az átirányító különben a látogató MINDEN sütijét
+//! — a belépési munkamenetet is — egy idegen szervernek adná. A Jedlikinfo
+//! nyilvános végpontjainak nincs rá szükségük.
+//*
+//! A proxy a `next.config.ts` átirányítói ELŐTT fut, és a `request.headers`
+//! felülírása a továbbküldött kérésre vonatkozik, nem a válaszra.
+function jedlikUpstream(request: NextRequest): NextResponse {
+  const headers = new Headers(request.headers);
+  headers.set("origin", JEDLIK_SITE);
+  headers.set("referer", `${JEDLIK_SITE}/`);
+  headers.delete("cookie");
+  return NextResponse.next({ request: { headers } });
 }
 
 //! ─── A GYÖKÉR KAPUJA ───────────────────────────────────────────────────────
@@ -52,13 +103,14 @@ function blockAiBot(): NextResponse {
 //! átirányítást a böngésző és a kereső is elraktározna, és a nyitólap
 //! elérhetetlenné válna.
 export function proxy(request: NextRequest) {
-  if (
-    isBlockedAiRequest(
-      request.headers.get("user-agent"),
-      request.nextUrl.pathname,
-    )
-  ) {
-    return blockAiBot();
+  const gate = aiGate(
+    request.headers.get("user-agent"),
+    request.nextUrl.pathname,
+  );
+  if (gate === "block") return blockAiBot();
+  if (gate === "redirect") return redirectAiAgent(request);
+  if (request.nextUrl.pathname.startsWith("/api/jedlik/")) {
+    return jedlikUpstream(request);
   }
 
   //! A TÖBBI ÚTVONALON NINCS MÁS DOLGUNK. A süti-kapu csak a gyökérre szól; a

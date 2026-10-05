@@ -3,23 +3,14 @@
 import { MapPin, Sparkles } from "lucide-react";
 import { motion } from "motion/react";
 import { accentStyle } from "@/lib/accent";
+import type { CalendarEvent } from "@/lib/timetable";
 import { groupLabel, type LessonRun } from "@/lib/timetable-merge";
 import { cn } from "@/lib/utils";
 import { MergedBadge } from "./merge-controls";
 import { CELL_RADIUS, durationLabel, minLabel, rangeLabel } from "./shared";
 
-export type CalendarEvent = {
-  id: string;
-  title: string;
-  dayOfWeek: number;
-  startMin: number;
-  endMin: number;
-  room: string;
-  szakkorName: string;
-  szakkorSlug: string;
-  kozossegi: boolean;
-  cancelled: boolean;
-};
+//* Egy helyen definiálva (`lib/timetable.ts`), itt csak továbbadjuk.
+export type { CalendarEvent };
 
 //* ---------------------------------------------------------------------------
 //* Egy blokk a rácson — egy óra vagy egy összefűzött többórás sáv
@@ -300,10 +291,16 @@ export function EventCard({
   const compact = height < DENSE_FULL;
   const span = rangeLabel(event.startMin, event.endMin);
 
+  const suggested = event.suggested === true && !event.cancelled;
   const cardStyle = event.cancelled
     ? style
-    : { ...style, ...accentStyle(event.szakkorSlug) };
-  const title = `${event.title} — ${event.szakkorName} — ${span}${
+    : {
+        ...style,
+        ...accentStyle(event.szakkorSlug),
+        //* A keret színe az `acc-tint`-é; az alap átlátszó (lásd lent).
+        ...(suggested ? { backgroundColor: "transparent" } : {}),
+      };
+  const title = `${suggested ? "Javaslat: " : ""}${event.title} — ${event.szakkorName} — ${span}${
     event.room ? ` (${event.room})` : ""
   }`;
   const className = cn(
@@ -311,7 +308,12 @@ export function EventCard({
     CELL_RADIUS,
     event.cancelled
       ? "border-destructive/40 bg-destructive/10 text-destructive line-through"
-      : "acc-tint-strong text-foreground",
+      : //! A JAVASLAT NEM A DIÁKÉ — és ezt a kártyának kell kimondania, nem a
+        //! részletlapnak. Szaggatott keret, átlátszó alap: egy pillantásra
+        //! elválik a saját óráktól és a saját szakköröktől.
+        suggested
+        ? "acc-tint border-dashed text-foreground/75 shadow-none"
+        : "acc-tint-strong text-foreground",
     past && PAST_TONE,
     active && ACTIVE_TONE,
   );

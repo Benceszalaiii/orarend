@@ -39,15 +39,17 @@ import { cn } from "@/lib/utils";
 //!   Egy félúton lévő lapozás visszahúzható anélkül, hogy meg kéne várni.
 //! - SEBESSÉG-ÁTADÁS. Az elengedés pillanatában mért ujjsebesség a rugó
 //!   KEZDŐSEBESSÉGE lesz — így a húzás és az animáció közt nincs varrat.
-//! - LENDÜLET-VETÍTÉS. A pöccintés nem a legközelebbi naphoz ugrik, hanem oda,
-//!   ahova a mozdulat TARTOTT (`project`), és onnan keresi a legközelebbit.
+//! - EGY MOZDULAT, EGY NAP. A köteg lapozó, nem görgető: a pöccintés IRÁNYA
+//!   számít, nem a hossza. Egy vetített (görgetés-lassulású) végpont egy
+//!   átlagos pöccintésnél is túllőtt a szomszédon, és két napot ugrott.
 //! - GUMISZALAG a hét két végén: hétfő előtt és péntek után a lap egyre
 //!   nehezebben követ, de KÖVET. A kemény ütközés „lefagyottnak" olvasódik.
 
-//* Az iOS görgetés-lassulási együtthatója. A `project` ebből az exponenciális
-//* lecsengésből számol végpontot — nem a tankönyvi v²/2a-ból, mert az érezhetően
-//* rövidebbet vet, és a pöccintés „nem dob".
-const DECELERATION = 0.998;
+//! LAPOZÁSI KÜSZÖBÖK. Lassú húzásnál a szélesség ennyied része elég a
+//! továbblépéshez — a fele túl sok volt, a nap „visszaugrott" a kéz alól.
+//! Ennél gyorsabb elengedésnél (px/s) már csak az irány dönt, a távolság nem.
+const COMMIT_RATIO = 0.25;
+const FLICK_VELOCITY = 300;
 //* Ennyi képpont után dől el, hogy lapozás vagy görgetés — előtte egyik sem
 //* kap kizárólagosságot.
 const DRAG_THRESHOLD = 10;
@@ -56,10 +58,6 @@ const RUBBERBAND_CONSTANT = 0.55;
 //* `pointermove` különbsége zajos, a teljes húzás átlaga viszont már nem az,
 //* amit az ujj az UTOLSÓ pillanatban csinált.
 const VELOCITY_WINDOW_MS = 100;
-
-function project(velocity: number): number {
-  return ((velocity / 1000) * DECELERATION) / (1 - DECELERATION);
-}
 
 function rubberband(overshoot: number, dimension: number): number {
   return (
@@ -75,6 +73,9 @@ type DragSession = {
   //* A `x` értéke a megfogás pillanatában — a megfogás HELYE ebből és a
   //* `startX`-ből együtt adódik ki, ezért nem kell külön eltolás.
   base: number;
+  //* A nap, AHONNAN a mozdulat indul — a rugó célja, ha épp fut. Így két
+  //* gyors egymás utáni pöccintés két napot lép, nem egyet.
+  origin: number;
   active: boolean;
   abandoned: boolean;
   samples: { x: number; t: number }[];
@@ -282,6 +283,7 @@ export function DayDeck({
       startX: event.clientX,
       startY: event.clientY,
       base: x.get(),
+      origin: committedRef.current,
       active: false,
       abandoned: false,
       samples: [{ x: event.clientX, t: performance.now() }],
@@ -338,14 +340,19 @@ export function DayDeck({
     const last = drag.samples[drag.samples.length - 1];
     const elapsed = last.t - first.t;
     const velocity = elapsed > 0 ? ((last.x - first.x) / elapsed) * 1000 : 0;
-    //! ODA LAPOZUNK, AHOVA A MOZDULAT TARTOTT — nem oda, ahol elengedték. Ez
-    //! az a különbség, amitől a pöccintés DOB egyet a lapon, ahelyett hogy a
-    //! legközelebbi szomszédhoz csúszna.
-    const projected = x.get() + project(velocity);
-    const next = Math.min(
-      Math.max(Math.round(-projected / width), 0),
-      count - 1,
-    );
+    //* Előre (a hét vége felé) pozitív: a lap balra megy, `x` csökken.
+    const offset = -x.get() / width - drag.origin;
+    const forward = -velocity;
+    let step = 0;
+    if (Math.abs(forward) >= FLICK_VELOCITY) {
+      //! A PÖCCINTÉS IRÁNYA DÖNT — de ha a húzással SZEMBEN pöccint, az
+      //! meggondolás, nem visszalapozás: a nap a helyére áll.
+      const dir = Math.sign(forward);
+      step = offset * dir < 0 ? 0 : dir;
+    } else if (Math.abs(offset) >= COMMIT_RATIO) {
+      step = Math.sign(offset);
+    }
+    const next = Math.min(Math.max(drag.origin + step, 0), count - 1);
     settle(next, velocity, true);
   };
 

@@ -29,8 +29,8 @@ describe("proxy", () => {
   });
 
   //! AZ `/api` MINDEN AI-ROBOTNAK NYITVA — a tanító-, a kereső- és az ember
-  //! indította robotnak is. A lapok és a naptár-feed továbbra is 403.
-  test("bármely AI-robot eléri az API-t, de a lapokat nem", () => {
+  //! indította robotnak is. A naptár-feed mindenkinek 403.
+  test("bármely AI-robot eléri az API-t, a naptár-feedet nem", () => {
     for (const ua of [
       "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)",
       "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot",
@@ -43,9 +43,44 @@ describe("proxy", () => {
       );
       expect(proxy(request("/api/termek", { ua })).status).toBe(200);
       expect(proxy(request("/api/kozlemenyek", { ua })).status).toBe(200);
-      expect(proxy(request("/orarend", { ua })).status).toBe(403);
       expect(proxy(request("/api/naptar/abc.ics", { ua })).status).toBe(403);
       expect(proxy(request("/api/naptar", { ua })).status).toBe(403);
+    }
+  });
+
+  //! A GYŰJTŐ ROBOT A LAPON 403-AT KAP — de a szöveg a JSON-hoz irányítja.
+  test("gyűjtő robot a lapon: 403, a JSON címével", async () => {
+    for (const ua of [
+      "Mozilla/5.0 (compatible; GPTBot/1.1; +https://openai.com/gptbot)",
+      "Mozilla/5.0 (compatible; PerplexityBot/1.0)",
+    ]) {
+      const res = proxy(request("/orarend?class=13A", { ua }));
+      expect(res.status).toBe(403);
+      expect(await res.text()).toContain("/api/orarend");
+    }
+  });
+
+  //! AZ EMBER INDÍTOTTA ASSZISZTENS A LAP HELYETT A GÉPI PÁRJÁT KAPJA. Ez a
+  //! javítás lényege: korábban 403 (és robots.txt-tiltás) állt itt, és az
+  //! asszisztens azt felelte, hogy az órarend elérhetetlen.
+  test("asszisztens a lapon: 307 a lap gépi párjára", () => {
+    for (const ua of [
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)",
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot",
+    ]) {
+      const page = proxy(request("/orarend?class=13A", { ua }));
+      expect(page.status).toBe(307);
+      expect(page.headers.get("location")).toBe(
+        "https://orarend.test/api/orarend?osztaly=13A",
+      );
+      expect(page.headers.get("vary")).toBe("User-Agent");
+      expect(page.headers.get("cache-control")).toBe("private, no-store");
+
+      const home = proxy(request("/", { ua }));
+      expect(home.status).toBe(307);
+      expect(home.headers.get("location")).toBe(
+        "https://orarend.test/llms.txt",
+      );
     }
   });
 

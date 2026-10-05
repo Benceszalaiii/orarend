@@ -4,10 +4,11 @@ import {
   LLM_CLOSED_PREFIX,
   LLM_DOC_PATH,
   LLM_OPEN_PREFIX,
+  USER_TRIGGERED_ROBOTS_TOKENS,
 } from "@/lib/ai-bots";
 
 //! ─── A KIÍRT SZABÁLY ───────────────────────────────────────────────────────
-//! Két csoport (mindenki; az AI-robotok), és a sorrendjük nem számít: a robot
+//! Három csoport (mindenki; az AI-robotok; az ember indította asszisztensek), és a sorrendjük nem számít: a robot
 //! mindig a RÁ NÉZVE legpontosabb blokkot követi, a `*` csak az marad, akit
 //! senki más nem nevezett meg.
 //*
@@ -41,6 +42,15 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: [...DISALLOWED_AI_ROBOTS_TOKENS],
         allow: [LLM_DOC_PATH, LLM_OPEN_PREFIX],
         disallow: ["/", LLM_CLOSED_PREFIX],
+      },
+      //! AZ EMBER INDÍTOTTA ASSZISZTENS BEJÖHET A LAPOKRA IS. Ha a `/` tiltva
+      //! van neki, a nyitólapnál megáll, és azt mondja, hogy „a robots.txt
+      //! blokkol" — a JSON-ig el sem jut. A lap HTML-jét így sem kapja meg: a
+      //! `proxy.ts` a lap gépi párjára küldi tovább (lásd `lib/ai-bots.ts`).
+      {
+        userAgent: [...USER_TRIGGERED_ROBOTS_TOKENS],
+        allow: ["/"],
+        disallow: [LLM_CLOSED_PREFIX],
       },
     ],
     sitemap: "https://jedlik.info/sitemap.xml",

@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutGrid } from "lucide-react";
+import { Columns2, LayoutGrid, Sparkles } from "lucide-react";
 import { SheetItemBody, sheetItem } from "@/components/chrome/chrome-sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -88,5 +88,90 @@ export function GlanceNote({
         Vissza a sajátomhoz
       </Button>
     </div>
+  );
+}
+
+//* ---------------------------------------------------------------------------
+//* BELEFÉRŐ SZAKKÖRÖK — halvány javaslatok a szabad sávokban
+//* ---------------------------------------------------------------------------
+//! BEÁLLÍTÁS, NEM PILLANTÁS: megmarad, amíg ki nem kapcsolják (lásd
+//! `club-suggest-pref.ts`). A felirat mondja meg, mit tesz a rácsra, mert a
+//! javaslat kártyája halvány — aki nem tudja, honnan jött, összetévesztheti a
+//! saját szakkörével.
+export function SuggestToggle({
+  active,
+  onToggle,
+  className,
+}: {
+  active: boolean;
+  onToggle: () => void;
+  className?: string;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      data-key="b"
+      aria-pressed={active}
+      onClick={onToggle}
+      className={sheetItem(cn(active && "bg-muted", className))}
+    >
+      <Sparkles
+        className={cn(
+          "size-4 shrink-0",
+          active ? "text-primary" : "text-muted-foreground",
+        )}
+        aria-hidden
+      />
+      <SheetItemBody
+        label="Beleférő szakkörök"
+        hint={
+          active
+            ? "Bekapcsolva — szaggatott kerettel"
+            : "Neked szóló szakkörök a szabad sávjaidban"
+        }
+      />
+    </Button>
+  );
+}
+
+//* ---------------------------------------------------------------------------
+//* KITÖLTÖTT BONTOTT ÓRÁK — a magányos fél oszlop teljes szélességben
+//* ---------------------------------------------------------------------------
+//! BEÁLLÍTÁS, NEM PILLANTÁS: megmarad, amíg ki nem kapcsolják (lásd
+//! `fill-split-pref.ts`). Semmit nem rejt el és semmit nem tesz hozzá — csak
+//! azt, hogy a csak egy csoportnak szóló óra mennyi helyet kap.
+export function FillToggle({
+  active,
+  onToggle,
+  className,
+}: {
+  active: boolean;
+  onToggle: () => void;
+  className?: string;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      data-key="x"
+      aria-pressed={active}
+      onClick={onToggle}
+      className={sheetItem(cn(active && "bg-muted", className))}
+    >
+      <Columns2
+        className={cn(
+          "size-4 shrink-0",
+          active ? "text-primary" : "text-muted-foreground",
+        )}
+        aria-hidden
+      />
+      <SheetItemBody
+        label="Bontott órák kitöltése"
+        hint={
+          active
+            ? "Bekapcsolva — teljes oszlop, ha a másik fél üres"
+            : "Ne legyen fél oszlop, ha a másik csoportnak nincs órája"
+        }
+      />
+    </Button>
   );
 }

@@ -2,16 +2,22 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { lesson } from "@/test/fixtures";
 import { redisDel, redisDump, resetRedis } from "@/test/redis";
 import {
+  clubSubscribersOf,
   leaseChange,
+  leaseClubChange,
+  leaseClubReminder,
   leaseReminder,
   pushStoreReady,
+  readClubGone,
   readSnapshot,
   readSubscription,
   readWeekCache,
   removeSubscription,
   saveSubscription,
+  subscribedClubs,
   subscribedSubjects,
   subscribersOf,
+  writeClubGone,
   writeSnapshot,
   writeWeekCache,
 } from "./push-store";
@@ -152,5 +158,51 @@ describe("gyorsítótárak", () => {
       a: "b",
     });
     expect(await readSnapshot("class", "LM", "2026-09-14")).toBeNull();
+  });
+});
+
+describe("szakkörök", () => {
+  const withClubs = (endpoint: string, clubs: string[]) => ({
+    ...sub(endpoint, []),
+    clubs,
+  });
+
+  test("a követett szakkör feliratkozói", async () => {
+    await saveSubscription(withClubs("https://push/1", ["robotika", "dron"]));
+    await saveSubscription(withClubs("https://push/2", ["robotika"]));
+    expect((await subscribedClubs()).sort()).toEqual(["dron", "robotika"]);
+    expect(
+      (await clubSubscribersOf("robotika")).map((s) => s.endpoint).sort(),
+    ).toEqual(["https://push/1", "https://push/2"]);
+    //* A szakkör nem órarend-alany: az osztályok indexébe nem kerül.
+    expect(await subscribedSubjects("class")).toEqual([]);
+  });
+
+  test("a levett szakkörből kikerül, a törléssel mindből", async () => {
+    await saveSubscription(withClubs("https://push/1", ["robotika", "dron"]));
+    await saveSubscription(withClubs("https://push/1", ["dron"]));
+    expect(await clubSubscribersOf("robotika")).toEqual([]);
+    await removeSubscription("https://push/1");
+    expect(await clubSubscribersOf("dron")).toEqual([]);
+  });
+
+  test("a régi, szakkör nélküli sor sem hibázik", async () => {
+    await saveSubscription(sub("https://push/1", ["12A"]));
+    await removeSubscription("https://push/1");
+    expect(await subscribedClubs()).toEqual([]);
+  });
+
+  test("egy alkalomra egyszer szól, egy változásra egyszer", async () => {
+    expect(await leaseClubReminder("s1:2026-09-24")).toBe(true);
+    expect(await leaseClubReminder("s1:2026-09-24")).toBe(false);
+    expect(await leaseClubChange("robotika", "a|b")).toBe(true);
+    expect(await leaseClubChange("robotika", "a|b")).toBe(false);
+  });
+
+  test("a kiesett alkalmak lenyomata hetenként", async () => {
+    expect(await readClubGone("robotika", "2026-09-21")).toBeNull();
+    await writeClubGone("robotika", "2026-09-21", ["a"]);
+    expect(await readClubGone("robotika", "2026-09-21")).toEqual(["a"]);
+    expect(await readClubGone("robotika", "2026-09-28")).toBeNull();
   });
 });

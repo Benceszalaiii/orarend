@@ -8,6 +8,7 @@ import {
   SheetRow,
   SheetSection,
 } from "@/components/chrome/chrome-sheet";
+import { ContestDeadlines } from "@/components/ma/contest-deadlines";
 import { daySummary } from "@/components/ma/day";
 import { DayList, DayRibbon } from "@/components/ma/day-list";
 import { ChangeRow, DayPlanRow, StaleNote } from "@/components/ma/day-status";
@@ -23,7 +24,11 @@ import { SubjectPicker } from "@/components/ma/subject-picker";
 import { ClassLoads, FreePeriods } from "@/components/ma/teacher-panels";
 import { buildTeacherWeek, clashesOf } from "@/components/ma/teacher-week";
 import { useDayView } from "@/components/ma/use-day-view";
-import { MovedThisWeek, WeekPulse } from "@/components/ma/week-panels";
+import {
+  ClubsThisWeek,
+  MovedThisWeek,
+  WeekPulse,
+} from "@/components/ma/week-panels";
 import { NotificationMenu } from "@/components/pwa/notification-menu";
 import { minLabel, rangeLabel } from "@/components/timetable/shared";
 import { MorphingInfinity } from "@/components/ui/morphing-infinity";
@@ -236,6 +241,8 @@ export function TeacherDay() {
           {teacherWeek && (
             <FreePeriods teacher={teacherWeek} onFocus={dv.focusDay} />
           )}
+          <ContestDeadlines className={null} />
+          <ClubsThisWeek events={dv.view?.events ?? []} />
           <MovedThisWeek week={week} onFocus={dv.focusDay} />
         </>
       )}

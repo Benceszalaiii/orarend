@@ -10,6 +10,7 @@ import {
   animate,
   type MotionValue,
   motion,
+  motionValue,
   useMotionValue,
   useReducedMotion,
 } from "motion/react";
@@ -23,14 +24,28 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import { launchFlood, registerPillNav } from "@/components/chrome/flood";
-import { PLACES, placeOf, readFlight } from "@/components/chrome/places";
+import {
+  HIDDEN,
+  inkClips,
+  SHOWN,
+  type Span,
+} from "@/components/chrome/ink-clip";
+import {
+  type PanelId,
+  placeOf,
+  placesFor,
+  readFlight,
+  timetablePlace,
+} from "@/components/chrome/places";
 import { PlacesPanel } from "@/components/chrome/places-panel";
 import { type Pour, readPour } from "@/components/chrome/pour";
+import { useSession } from "@/lib/auth-client";
 import {
   DEFAULT_IDENTITY,
   type Identity,
@@ -64,16 +79,44 @@ import { cn } from "@/lib/utils";
 //* A „places" nem nézet, hanem a HELYEK cellája (lásd `chrome/places.ts`):
 //* a folyadék oda is átfolyik, ha az ügyeleten, a teremkeresőn, a kivetítésen
 //* vagy a nyitólapon állsz — így a váltó minden lapon megmondja, hol vagy.
-type ViewId = "week" | "today" | "places";
+type AxisViewId = "week" | "today" | "clubs" | "contests";
+type ViewId = AxisViewId | "places";
 
-const VIEWS: readonly {
-  id: Exclude<ViewId, "places">;
-  label: string;
-  title: string;
-}[] = [
-  { id: "week", label: "Hét", title: "A teljes heti órarend" },
-  { id: "today", label: "Ma", title: "A mai nap egy képernyőn" },
+//! ─── KÉT TENGELY, UGYANAZ A KÉT CELLA ─────────────────────────────────────
+//! A szakkörök és a versenyek ugyanúgy egy PÁR, mint a „Hét" és a „Ma": két
+//! lap ugyanarról (az iskola délutánjáról), amik között oda-vissza jár a diák.
+//! Ezért nem a helyek buborékjában ragadnak, hanem ha ott állsz, a váltó
+//! főtengelye ÁTFORDUL: a két cella „Szakkör" és „Verseny" lesz, a folyadék és
+//! az áradás ugyanúgy jár köztük. A helyek cellája közben helyben marad — onnan
+//! vezet vissza az út az órarendhez (lásd `timetablePlace`).
+type AxisId = "timetable" | "clubs";
+
+type AxisView = { id: AxisViewId; label: string; title: string };
+
+const AXES: Record<AxisId, readonly [AxisView, AxisView]> = {
+  timetable: [
+    { id: "week", label: "Hét", title: "A teljes heti órarend" },
+    { id: "today", label: "Ma", title: "A mai nap egy képernyőn" },
+  ],
+  clubs: [
+    { id: "clubs", label: "Szakkör", title: "Szakkörök — mikor, hol, kinek" },
+    {
+      id: "contests",
+      label: "Verseny",
+      title: "Versenyek — meddig lehet nevezni",
+    },
+  ],
+};
+
+//* A szakkör-lapok egész fája a tengelyé: egy szakkör adatlapján is a
+//* „Szakkör" cellán áll a folyadék, és onnan egy koppintás vissza a listára.
+const CLUB_ROOTS: readonly (readonly [string, AxisViewId])[] = [
+  ["/szakkorok", "clubs"],
+  ["/versenyek", "contests"],
 ];
+
+const axisOf = (view: ViewId | null): AxisId =>
+  view === "clubs" || view === "contests" ? "clubs" : "timetable";
 
 const ROLES: readonly {
   id: Identity;
@@ -98,7 +141,10 @@ const ROLES: readonly {
   },
 ];
 
-const VIEW_KEYS: readonly ViewId[] = [...VIEWS.map((v) => v.id), "places"];
+const VIEW_KEYS: Record<AxisId, readonly ViewId[]> = {
+  timetable: [...AXES.timetable.map((v) => v.id), "places"],
+  clubs: [...AXES.clubs.map((v) => v.id), "places"],
+};
 const ROLE_KEYS = ROLES.map((r) => r.id);
 
 //* A tanári rács ugyanaz a NÉZET, más alannyal — ezért ő is a „Hét"-et
@@ -109,8 +155,25 @@ const VIEW_OF: Record<string, ViewId> = {
   "/orarend": "week",
   "/tanari": "week",
   "/ma": "today",
-  ...Object.fromEntries(PLACES.map((p) => [p.href, "places" as const])),
 };
+
+function viewOf(pathname: string): ViewId | null {
+  const view = VIEW_OF[pathname];
+  if (view) return view;
+  for (const [root, id] of CLUB_ROOTS)
+    if (pathname === root || pathname.startsWith(`${root}/`)) return id;
+  return placeOf(pathname) ? "places" : null;
+}
+
+//! A TENGELYEK KÖZÖTT A CELLA HELYE AZ ÁTADÁS, NEM A NEVE. A „Ma"-ról a
+//! szakkörökre lépve a régi folyadék a MÁSODIK cellán állt — az új váltóban
+//! ott a „Verseny" áll, tehát onnan folyik át a „Szakkör"-re. Így a régi lap
+//! képe és az új lap első képkockája ugyanaz, csak más feliratokkal.
+function carry(view: ViewId | null, from: AxisId, to: AxisId): ViewId | null {
+  if (!view || view === "places" || from === to) return view;
+  const slot = AXES[from].findIndex((v) => v.id === view);
+  return slot < 0 ? null : AXES[to][slot].id;
+}
 
 //* Az útvonal, ahol az alanyra maga a cím válaszol. A `/ma` szándékosan nincs
 //* benne: az EGY útvonal mindkét alanynak (lásd `lib/identity.ts`).
@@ -154,8 +217,11 @@ const LEAN = 5;
 //! végig élve írja a jegyzetet (`useLayoutEffect`), és az új épp akkor olvassa,
 //! amikor a régi még áll. Ha közben nem állt váltó (pl. a `/valtozasok`-ról
 //! jössz vissza), a jegyzet csak rövid ideig érvényes.
-type Handoff = { view: ViewId | null; role: Identity };
+type Handoff = { view: ViewId | null; role: Identity; axis: AxisId };
 let handoff: Handoff | null = null;
+//* Az órarend melyik alakjában jártál utoljára — a szakkörök tengelyéről a
+//* buborék ide vezet vissza. Alapból a „Ma": telefonon, két óra között az a kérdés.
+let lastTimetable: "week" | "today" = "today";
 let liveNavs = 0;
 let lastUnmountAt = Number.NEGATIVE_INFINITY;
 const HANDOFF_TTL = 1500;
@@ -166,8 +232,79 @@ function readHandoff(): Handoff | null {
   return performance.now() - lastUnmountAt < HANDOFF_TTL ? handoff : null;
 }
 
-type Remnant = { id: number; l: number; r: number; dir: number; blob: string };
+//! ─── A LESZAKADÓ CSEPP ────────────────────────────────────────────────────
+//! A méretét mozgásértékek hordozzák, nem egy `animate` prop: így a feliratok
+//! tintája tudja, hol takar még (`spill`), és egy lapváltás közben leszerelődő
+//! váltó a félúton járó cseppet is át tudja adni (`carried`).
+type Remnant = {
+  id: number;
+  l: number;
+  r: number;
+  dir: number;
+  blob: string;
+  sx: MotionValue<number>;
+  sy: MotionValue<number>;
+  /** A teljes leszakadásból hátralévő rész (átvett cseppnél kevesebb, mint 1). */
+  rest: number;
+  endsAt: number;
+};
 let remnantSeq = 0;
+const REMNANT = { duration: 0.38, ease: [0.45, 0, 0.7, 0.5] } as const;
+//* Ennél laposabb csepp már nem takarja a betűk magasságát — ott a felirat
+//* újra a tok színével ír.
+const SPILL_MIN = 0.5;
+
+function newRemnant(
+  rm: { l: number; r: number; dir: number; blob: string },
+  from?: { sx: number; sy: number; rest: number },
+): Remnant {
+  return {
+    id: ++remnantSeq,
+    ...rm,
+    sx: motionValue(from?.sx ?? 1),
+    sy: motionValue(from?.sy ?? 1),
+    rest: from?.rest ?? 1,
+    endsAt: Number.POSITIVE_INFINITY,
+  };
+}
+
+//! ─── A MOZGÁS IS ÁTADÓDIK, NEM CSAK A CÉL ─────────────────────────────────
+//! Egy lapváltás néha KÉT újraszerelést jelent: a `loading.tsx` saját
+//! váltóval áll fel, és pár száz ezredmásodperc múlva a kész lap váltója
+//! váltja le. A második a jegyzetből (`handoff`) csak azt látta, hogy a
+//! folyadék MÁR a „Versenyen" áll — és odaugrott, a félúton járó áramlás
+//! helyett. Ezért a mozgás közben leszerelődő váltó a folyadék ÉLŐ helyét,
+//! sebességét és a cseppjeit hagyja hátra; a következő onnan folytatja.
+//*
+//! A React egy véglegesítésben előbb a régi takarítását futtatja, aztán az új
+//! effektjeit, tehát a jegyzet mindig időben ott van — és csak röviden él.
+type Carried = {
+  order: string;
+  l: number;
+  r: number;
+  vl: number;
+  vr: number;
+  at: number;
+  remnants: {
+    l: number;
+    r: number;
+    dir: number;
+    blob: string;
+    sx: number;
+    sy: number;
+    rest: number;
+  }[];
+};
+let carried: Carried | null = null;
+const CARRY_TTL = 250;
+
+function takeCarried(order: string): Carried | null {
+  const c = carried;
+  carried = null;
+  if (!c || c.order !== order || performance.now() - c.at > CARRY_TTL)
+    return null;
+  return c;
+}
 
 type Rect = { l: number; r: number };
 
@@ -190,6 +327,10 @@ type LiquidLayerProps = {
   restExtra: number;
   /** A buborékból kiöntött csepp (lásd `pour.ts`) — az első elhelyezés ebből terül szét. */
   seed?: Pour | null;
+  /** A leszakadó cseppek takarta sáv — a feliratok tintája ezt is kivágja. */
+  spill?: readonly [MotionValue<number>, MotionValue<number>];
+  /** Lapváltáskor a félúton járó mozgást is átadja (lásd `carried`). */
+  carry?: boolean;
 };
 
 function LiquidLayer({
@@ -207,6 +348,8 @@ function LiquidLayer({
   right: sharedRight,
   restExtra,
   seed,
+  spill,
+  carry = false,
 }: LiquidLayerProps) {
   const reduced = useReducedMotion() ?? false;
   const layerRef = useRef<HTMLDivElement>(null);
@@ -267,7 +410,9 @@ function LiquidLayer({
         const clip = extra?.parentElement;
         if (!extra || !clip) return now;
         const fixed = now - clip.getBoundingClientRect().width;
-        return fixed + (k === key ? extra.offsetWidth : restExtra);
+        //* A `data-liquid-rest` cella aktívan sem nyitja ki a részét.
+        const opens = k === key && el.dataset.liquidRest === undefined;
+        return fixed + (opens ? extra.offsetWidth : restExtra);
       });
       let l = first.offsetLeft;
       for (let i = 0; i < index; i++) l += settled[i];
@@ -323,7 +468,7 @@ function LiquidLayer({
         order.indexOf(activeKey) - order.indexOf(fromKey ?? activeKey),
       );
       setRemnants([
-        { id: ++remnantSeq, ...from, dir, blob: fromBlob ?? blobRef.current },
+        newRemnant({ ...from, dir, blob: fromBlob ?? blobRef.current }),
       ]);
       seed.arrived.then(() => {
         t.holding = false;
@@ -339,6 +484,26 @@ function LiquidLayer({
 
     if (!t.placed) {
       t.placed = true;
+      //* Az előző váltó mozgás közben szerelődött le: onnan folytatja, ahol
+      //* a folyadék ÉPP JÁRT, ugyanazzal a lendülettel.
+      const live = carry && !reduced ? takeCarried(order.join()) : null;
+      if (live) {
+        left.jump(live.l);
+        right.jump(live.r);
+        const shift = (l + r) / 2 - (live.l + live.r) / 2;
+        t.dir = Math.abs(shift) < 1 ? 0 : Math.sign(shift);
+        t.dirUntil = performance.now() + 700;
+        setRemnants(
+          live.remnants.map(({ sx, sy, rest, ...rm }) =>
+            newRemnant(rm, { sx, sy, rest }),
+          ),
+        );
+        const springOf = (lead: boolean) =>
+          t.dir === 0 ? EVEN : t.dir > 0 === lead ? LEAD : TRAIL;
+        animate(left, l, { ...springOf(false), velocity: live.vl });
+        animate(right, r, { ...springOf(true), velocity: live.vr });
+        return;
+      }
       const from =
         fromKey && fromKey !== activeKey && !reduced ? rectOf(fromKey) : null;
       if (!from || !fromKey) {
@@ -353,7 +518,7 @@ function LiquidLayer({
       t.dir = dir;
       t.dirUntil = performance.now() + 700;
       setRemnants([
-        { id: ++remnantSeq, ...from, dir, blob: fromBlob ?? blobRef.current },
+        newRemnant({ ...from, dir, blob: fromBlob ?? blobRef.current }),
       ]);
     } else if (reduced) {
       left.jump(l);
@@ -368,6 +533,7 @@ function LiquidLayer({
     fromKey,
     fromBlob,
     seed,
+    carry,
     hoverKey,
     reduced,
     order,
@@ -391,9 +557,78 @@ function LiquidLayer({
     t.dirUntil = performance.now() + 700;
     setRemnants((prev) => [
       ...prev,
-      { id: ++remnantSeq, l: from.l, r: from.r, dir, blob: blobRef.current },
+      newRemnant({ l: from.l, r: from.r, dir, blob: blobRef.current }),
     ]);
   }, [activeKey, order, reduced]);
+
+  const dropRemnant = useCallback(
+    (id: number) => setRemnants((prev) => prev.filter((x) => x.id !== id)),
+    [],
+  );
+
+  //* A még elég magas cseppek sávja — ezt a feliratok tintája is kivágja.
+  useEffect(() => {
+    if (!spill) return;
+    const [spillL, spillR] = spill;
+    const update = () => {
+      let a = Number.POSITIVE_INFINITY;
+      let b = Number.NEGATIVE_INFINITY;
+      for (const rm of remnants) {
+        if (rm.sy.get() < SPILL_MIN) continue;
+        const w = (rm.r - rm.l) * rm.sx.get();
+        const l = rm.dir > 0 ? rm.r - w : rm.l;
+        a = Math.min(a, l);
+        b = Math.max(b, l + w);
+      }
+      spillL.set(a < b ? a : 0);
+      spillR.set(a < b ? b : 0);
+    };
+    update();
+    const subs = remnants.flatMap((rm) => [
+      rm.sx.on("change", update),
+      rm.sy.on("change", update),
+    ]);
+    return () => {
+      for (const unsub of subs) unsub();
+    };
+  }, [remnants, spill]);
+
+  //* Leszereléskor, ha a folyadék épp úton van, az élő állapotát hátrahagyja
+  //* (lásd `carried`). Csak a leszerelés számít, ezért minden ref-ből olvas.
+  const remnantsRef = useRef(remnants);
+  const orderRef = useRef(order);
+  useLayoutEffect(() => {
+    remnantsRef.current = remnants;
+    orderRef.current = order;
+  }, [remnants, order]);
+  useLayoutEffect(() => {
+    if (!carry) return;
+    return () => {
+      const list = remnantsRef.current;
+      if (!track.current.placed) return;
+      if (!left.isAnimating() && !right.isAnimating() && list.length === 0)
+        return;
+      const now = performance.now();
+      const full = REMNANT.duration * 1000;
+      carried = {
+        order: orderRef.current.join(),
+        l: left.get(),
+        r: right.get(),
+        vl: left.getVelocity(),
+        vr: right.getVelocity(),
+        at: now,
+        remnants: list.map((rm) => ({
+          l: rm.l,
+          r: rm.r,
+          dir: rm.dir,
+          blob: rm.blob,
+          sx: rm.sx.get(),
+          sy: rm.sy.get(),
+          rest: Math.min(1, Math.max(0.1, (rm.endsAt - now) / full)),
+        })),
+      };
+    };
+  }, [carry, left, right]);
 
   const syncRef = useRef(sync);
   useEffect(() => {
@@ -415,31 +650,65 @@ function LiquidLayer({
     return () => ro.disconnect();
   }, [order, itemsRef]);
 
+  //! SAJÁT KOMPOZITOR-RÉTEG (mint a `places-panel.tsx` `LAYER`-je). A Safari a
+  //! szűrt réteget foltokban rajzolta újra, és a mozgó folyadék régi peremét
+  //! nem törölte: a tok tetején és alján vékony fehér csíkok maradtak ott,
+  //! ahonnan a folyadék elindult. Saját rétegen mindig egészében rajzolódik.
   return (
     <div
       ref={layerRef}
       aria-hidden
       className="pointer-events-none absolute inset-0"
-      style={{ filter: `url(#${filterId}) ${shadow}` }}
+      style={{
+        filter: `url(#${filterId}) ${shadow}`,
+        willChange: "transform",
+        transform: "translateZ(0)",
+      }}
     >
       {remnants.map((rm) => (
-        <motion.div
-          key={rm.id}
-          className={cn("absolute top-0 left-0 h-full rounded-full", rm.blob)}
-          style={{ x: rm.l, width: rm.r - rm.l, originX: rm.dir > 0 ? 1 : 0 }}
-          initial={{ scaleX: 1, scaleY: 1 }}
-          animate={{ scaleX: 0.15, scaleY: 0.3 }}
-          transition={{ duration: 0.38, ease: [0.45, 0, 0.7, 0.5] }}
-          onAnimationComplete={() =>
-            setRemnants((prev) => prev.filter((x) => x.id !== rm.id))
-          }
-        />
+        <RemnantDrop key={rm.id} rm={rm} onDone={dropRemnant} />
       ))}
       <motion.div
         className={cn("absolute top-0 left-0 h-full rounded-full", blob)}
         style={{ x: left, width, scaleY }}
       />
     </div>
+  );
+}
+
+function RemnantDrop({
+  rm,
+  onDone,
+}: {
+  rm: Remnant;
+  onDone: (id: number) => void;
+}) {
+  useEffect(() => {
+    const duration = REMNANT.duration * rm.rest;
+    rm.endsAt = performance.now() + duration * 1000;
+    const runs = [
+      animate(rm.sx, 0.15, { ...REMNANT, duration }),
+      animate(rm.sy, 0.3, { ...REMNANT, duration }),
+    ];
+    let alive = true;
+    runs[1].then(() => alive && onDone(rm.id));
+    return () => {
+      alive = false;
+      for (const run of runs) run.stop();
+    };
+  }, [rm, onDone]);
+
+  return (
+    <motion.div
+      className={cn("absolute top-0 left-0 h-full rounded-full", rm.blob)}
+      style={{
+        x: rm.l,
+        width: rm.r - rm.l,
+        originX: rm.dir > 0 ? 1 : 0,
+        scaleX: rm.sx,
+        scaleY: rm.sy,
+      }}
+    />
   );
 }
 
@@ -635,6 +904,81 @@ function RoleToggle({
   );
 }
 
+//! ─── A FELIRAT ÁTGÖRDÜL ───────────────────────────────────────────────────
+//! Tengelyváltáskor az új váltó a régi feliratokkal áll fel („Hét", „Ma"), és
+//! a szavak egy számlálókerék módjára gördülnek át („Szakkör", „Verseny"):
+//! a régi felfelé kifut, az új alulról érkezik, a cella szélessége közben a
+//! két szó között nyúlik. A második cella egy ütemmel később indul — a
+//! tengely végigfordul, nem egyszerre villan át.
+//*
+//! A VÁGÁS FÜGGŐLEGESEN TÚLNYÚLIK (`-my-1.5 py-1.5`), hogy a „Hét" ékezete
+//! és a „Szakkör" szára a kerék ablakában is egész maradjon.
+const WHEEL = { type: "spring", stiffness: 420, damping: 38, mass: 1 } as const;
+
+function RollingWord({
+  word,
+  from,
+  delay = 0,
+}: {
+  word: string;
+  from: string | null;
+  delay?: number;
+}) {
+  const reduced = useReducedMotion() ?? false;
+  const [start] = useState(() => (from && from !== word ? from : null));
+  const [done, setDone] = useState(start === null);
+  const rolling = !done && !reduced;
+  const oldRef = useRef<HTMLSpanElement>(null);
+  const newRef = useRef<HTMLSpanElement>(null);
+  const width = useMotionValue(0);
+  const [sized, setSized] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!rolling) return;
+    const a = oldRef.current?.offsetWidth ?? 0;
+    const b = newRef.current?.offsetWidth ?? 0;
+    width.jump(a);
+    setSized(true);
+    const run = animate(width, b, { ...WHEEL, delay });
+    let alive = true;
+    run.then(() => alive && setDone(true));
+    return () => {
+      alive = false;
+      run.stop();
+    };
+  }, [rolling, width, delay]);
+
+  if (!rolling) return word;
+
+  const wheel = { ...WHEEL, delay };
+  return (
+    <motion.span
+      className="relative -my-1.5 inline-flex py-1.5 [overflow:clip]"
+      style={sized ? { width } : undefined}
+    >
+      <motion.span
+        ref={oldRef}
+        aria-hidden
+        className="block w-max"
+        initial={{ y: 0, opacity: 1 }}
+        animate={{ y: "-130%", opacity: 0 }}
+        transition={wheel}
+      >
+        {start}
+      </motion.span>
+      <motion.span
+        ref={newRef}
+        className="absolute top-1.5 left-0 block w-max"
+        initial={{ y: "130%", opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={wheel}
+      >
+        {word}
+      </motion.span>
+    </motion.span>
+  );
+}
+
 //! ─── A FELIRAT KÉT RÉTEGBEN ───────────────────────────────────────────────
 //! A felirat pontosan ott fordul, ahol a folyadék takarja — nyúlás közben is.
 //! Alul a tokra szánt szín (`--foreground`), fölötte ugyanaz a szó a folyadékra
@@ -647,14 +991,16 @@ function RoleToggle({
 //! transzformáció-animációk, saját rétegre emelve), a Safari — és néha a
 //! Chrome is — elengedi a keverést, és a felirat nyers fehérként ül a fehér
 //! folyadékon. A vágás nem keverés, hanem geometria: nincs mit elengedni.
-const HIDDEN = "inset(0 100% 0 0)";
-const SHOWN = "none";
-
+//*
+//! A LESZAKADÓ CSEPP IS TAKAR (`spill`). Amíg csak a fő test két éle számított,
+//! a régi cella felirata a csepp alatt fehérrel írt a fehérre, és a betűi
+//! egyenként „leestek" (lásd `ink-clip.ts`).
 function InkLabel({
   label,
   rowRef,
   left,
   right,
+  spill,
   liquid,
   follow,
   className,
@@ -663,6 +1009,7 @@ function InkLabel({
   rowRef: RefObject<HTMLDivElement | null>;
   left: MotionValue<number>;
   right: MotionValue<number>;
+  spill?: readonly [MotionValue<number>, MotionValue<number>];
   liquid: boolean;
   /** Az elemet mozgató értékek (pl. a repülő ikoné) — a vágás ezekkel is újraszámol. */
   follow?: readonly MotionValue<number>[];
@@ -684,25 +1031,15 @@ function InkLabel({
       if (!el || !row) return;
       const x =
         el.getBoundingClientRect().left - row.getBoundingClientRect().left;
-      const w = el.offsetWidth;
-      //* A takart sáv a felirat saját koordinátáiban, [0, w]-re szorítva.
-      const cl = Math.min(w, Math.max(0, left.get() - x));
-      const cr = Math.min(w, Math.max(0, right.get() - x));
-      if (cr - cl < 0.5) {
-        inkClip.set(HIDDEN);
-        baseClip.set(SHOWN);
-        return;
-      }
-      //* Függőlegesen túlnyúlik, hogy az ékezetet és az alsó szárat ne vágja.
-      inkClip.set(`inset(-6px ${w - cr}px -6px ${cl}px)`);
-      baseClip.set(
-        cl <= 0 && cr >= w
-          ? HIDDEN
-          : `polygon(evenodd, -6px -6px, ${w + 6}px -6px, ${w + 6}px calc(100% + 6px), -6px calc(100% + 6px), -6px -6px, ${cl}px -6px, ${cl}px calc(100% + 6px), ${cr}px calc(100% + 6px), ${cr}px -6px, ${cl}px -6px)`,
-      );
+      //* A takart sávok a felirat saját koordinátáiban.
+      const spans: Span[] = [[left.get() - x, right.get() - x]];
+      if (spill) spans.push([spill[0].get() - x, spill[1].get() - x]);
+      const { ink, base } = inkClips(el.offsetWidth, el.offsetHeight, spans);
+      inkClip.set(ink);
+      baseClip.set(base);
     };
     update();
-    const subs = [left, right, ...(follow ?? [])].map((mv) =>
+    const subs = [left, right, ...(spill ?? []), ...(follow ?? [])].map((mv) =>
       mv.on("change", update),
     );
     //* A sor átméreteződése (nyíló-csukódó alany) a feliratot is odébb tolja.
@@ -712,7 +1049,7 @@ function InkLabel({
       for (const unsub of subs) unsub();
       ro.disconnect();
     };
-  }, [liquid, left, right, follow, rowRef, inkClip, baseClip]);
+  }, [liquid, left, right, spill, follow, rowRef, inkClip, baseClip]);
 
   return (
     <span ref={ref} className="relative flex">
@@ -778,13 +1115,20 @@ export function PillNav({
   const router = useRouter();
   const reduced = useReducedMotion() ?? false;
   const identity = useIdentity(pathname);
-  const activeView = VIEW_OF[pathname] ?? null;
+  const activeView = viewOf(pathname);
+  const axis = axisOf(activeView);
   const place = placeOf(pathname);
+  //* A helyek cellája csak akkor mutatja a helyet, ha maga a hely áll benne —
+  //* a szakkörök a tengelyen állnak, ott a cella iránytű marad.
+  const cellPlace = activeView === "places" ? place : null;
   const [hoverView, setHoverView] = useState<ViewId | null>(null);
   const itemsRef = useRef(new Map<string, HTMLElement>());
   const press = useMotionValue(1);
   const liquidLeft = useMotionValue(0);
   const liquidRight = useMotionValue(0);
+  const spillLeft = useMotionValue(0);
+  const spillRight = useMotionValue(0);
+  const [spill] = useState(() => [spillLeft, spillRight] as const);
   const navRef = useRef<HTMLElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -795,13 +1139,19 @@ export function PillNav({
   const [placesOpen, setPlacesOpen] = useState(false);
 
   const [from] = useState(readHandoff);
+  const fromAxis = from?.axis ?? axis;
+  const carried = carry(from?.view ?? null, fromAxis, axis);
   const fromView =
-    from?.view && activeView && from.view !== activeView ? from.view : null;
+    carried && activeView && carried !== activeView ? carried : null;
   const fromRole = from && from.role !== identity ? from.role : null;
+  //* A régi váltó feliratai, cellánként — ezekből gördül át az új tengely.
+  const fromLabels = fromAxis !== axis ? AXES[fromAxis] : null;
 
   useLayoutEffect(() => {
-    handoff = { view: activeView, role: identity };
-  }, [activeView, identity]);
+    handoff = { view: activeView, role: identity, axis };
+    if (activeView === "week" || activeView === "today")
+      lastTimetable = activeView;
+  }, [activeView, identity, axis]);
   useLayoutEffect(() => {
     const el = navRef.current;
     if (el) return registerPillNav(el);
@@ -823,22 +1173,53 @@ export function PillNav({
   const flyY = useMotionValue(0);
   const flyScale = useMotionValue(1);
   const [flyFollow] = useState(() => [flyX, flyY] as const);
-  const [incoming] = useState(() => readFlight(place?.id));
-  const [pour] = useState(() => readPour(place?.id));
+  const [incoming] = useState(() => readFlight(cellPlace?.id));
+  //! A CSEPP OTT ÉR LAPOT, AHOL A FOLYADÉK ÁLL. A helyek a saját cellájukba
+  //! hullanak, a szakkörök a tengely cellájába, a buborék „Órarend" sora
+  //! pedig a „Hét"/„Ma" közül abba, amelyiket a lap választotta.
+  const pourKey: PanelId | undefined =
+    activeView === "places" || axis === "clubs"
+      ? place?.id
+      : activeView
+        ? "timetable"
+        : undefined;
+  const [pour] = useState(() => readPour(pourKey));
+  const pourIntoIcon = activeView === "places";
   //* Amíg a kiöntött csepp úton van, az ikon a HEGYÉN utazik (lásd `pour.ts`)
   //* — a cella saját ikonja addig nem látszik, különben kettő lenne.
-  const flyOpacity = useMotionValue(pour ? 0 : 1);
+  const flyOpacity = useMotionValue(pour && pourIntoIcon ? 0 : 1);
   //! A CSEPPET NEM A TAKARÍTÁS VESZI ÁT. Fejlesztéskor a Strict Mode minden
   //! effektet fel-le-fel szerel; ha a takarítás azonnal elnyelte volna a
   //! cseppet, az a sugár közepén eltűnt, és az ikon be se repült. Az elnyelés
   //! ezért egy ütemmel később jön, és az újra felálló effekt visszavonja.
   const absorbLater = useRef<number | undefined>(undefined);
   useLayoutEffect(() => {
-    const el = iconRef.current;
+    //* A tengely cellájában a felirat közepe a cél, nem az egész cella: a
+    //* kinyíló alanyváltó a közepét odébb tolná.
+    const el = pourIntoIcon
+      ? iconRef.current
+      : activeView
+        ? (itemsRef.current.get(activeView)?.querySelector("a") ?? null)
+        : null;
     if (!pour || !el) return;
     window.clearTimeout(absorbLater.current);
     let cancelled = false;
     let runs: { stop: () => void }[] = [];
+    if (!pourIntoIcon) {
+      pour.follow(() => {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0) return null;
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      });
+      pour.arrived.then(() => {
+        if (!cancelled) pour.absorb();
+      });
+      return () => {
+        cancelled = true;
+        pour.follow(null);
+        absorbLater.current = window.setTimeout(pour.absorb, 0);
+      };
+    }
     flyOpacity.jump(0);
     //* A csepp az ikon HELYÉRE fut, nem a régi cella közepére: a cella itt
     //* szétnyílik, az ikon közben odébb kerül. A mért doboz az elrendezésé —
@@ -870,7 +1251,7 @@ export function PillNav({
       flyY.jump(0);
       flyScale.jump(1);
     };
-  }, [pour, flyX, flyY, flyScale, flyOpacity]);
+  }, [pour, pourIntoIcon, activeView, flyX, flyY, flyScale, flyOpacity]);
   useLayoutEffect(() => {
     const el = iconRef.current;
     if (!incoming || pour || reduced || !el) return;
@@ -903,6 +1284,30 @@ export function PillNav({
 
   //! A „HÉT" KÉT KÜLÖNBÖZŐ LAP (`weekRouteFor`), A „MA" EGY.
   const weekHref = weekRouteFor(identity);
+  const hrefOf = (id: AxisViewId) =>
+    id === "week"
+      ? weekHref
+      : id === "today"
+        ? "/ma"
+        : id === "clubs"
+          ? "/szakkorok"
+          : "/versenyek";
+
+  //! KI LÁTJA A SZAKKÖRÖKET A BUBORÉKBAN. Ugyanaz a szabály, mint a lapokon
+  //! (`canBrowseClubs`): a bevezetés után mindenki, előtte a tanár és az
+  //! admin. A munkamenetet a fiókmenü már lekérte — ez ugyanaz az atom.
+  const { data: session } = useSession();
+  const clubsForMe =
+    session?.user.isTeacher === true || session?.user.isAdmin === true;
+  const panelPlaces = useMemo(() => {
+    const list = placesFor(clubsForMe);
+    if (axis !== "clubs") return list;
+    const week = lastTimetable === "week";
+    return [timetablePlace(week ? weekHref : "/ma", week), ...list];
+  }, [clubsForMe, axis, weekHref]);
+  const placesTitle = panelPlaces
+    .map((p, i) => (i ? p.label.toLowerCase() : p.label))
+    .join(", ");
 
   const pickIdentity = (next: Identity) => {
     if (next === identity) return;
@@ -932,7 +1337,10 @@ export function PillNav({
 
   const placesActive = activeView === "places";
   const placesWasActive = fromView ? fromView === "places" : placesActive;
-  const PlaceIcon = place?.Icon ?? Compass;
+  const PlaceIcon = cellPlace?.Icon ?? Compass;
+  //* Az alanyváltó csak az órarend tengelyén nyílik: a szakkör nem „kié".
+  const roles = axis === "timetable";
+  const rolesWere = fromAxis === "timetable";
 
   return (
     <nav
@@ -957,141 +1365,156 @@ export function PillNav({
         className,
       )}
     >
-      {/*//! A TOKENEK FORDÍTÓJA (lásd `flood.ts` és `globals.css`). Doboza
-          //! nincs (`contents`), csak a két színt cseréli meg az áradás alatt. */}
-      <div data-pn-ink className="contents">
-        <GooFilter id={filterId} />
-        {activeView && (
-          <div className="pointer-events-none absolute inset-1">
-            <LiquidLayer
-              order={VIEW_KEYS}
-              activeKey={activeView}
-              fromKey={fromView}
-              hoverKey={hoverView}
-              itemsRef={itemsRef}
-              filterId={filterId}
-              blob="bg-foreground"
-              shadow="drop-shadow(0 2px 4px oklch(0 0 0 / 0.3))"
-              press={press}
-              left={liquidLeft}
-              right={liquidRight}
-              restExtra={6}
-              seed={pour}
-            />
-          </div>
-        )}
-        <div ref={rowRef} className="relative flex items-stretch">
-          {VIEWS.map(({ id, label, title }) => {
-            const active = id === activeView;
-            const wasActive = fromView ? id === fromView : active;
-            return (
-              <div
-                key={id}
-                ref={(el) => {
-                  if (el) itemsRef.current.set(id, el);
-                  else itemsRef.current.delete(id);
+      <GooFilter id={filterId} />
+      {activeView && (
+        <div className="pointer-events-none absolute inset-1">
+          <LiquidLayer
+            order={VIEW_KEYS[axis]}
+            activeKey={activeView}
+            fromKey={fromView}
+            hoverKey={hoverView}
+            itemsRef={itemsRef}
+            filterId={filterId}
+            blob="bg-foreground"
+            shadow="drop-shadow(0 2px 4px oklch(0 0 0 / 0.3))"
+            press={press}
+            left={liquidLeft}
+            right={liquidRight}
+            restExtra={6}
+            seed={pour}
+            spill={spill}
+            carry
+          />
+        </div>
+      )}
+      <div ref={rowRef} className="relative flex items-stretch">
+        {AXES[axis].map(({ id, label, title }, slot) => {
+          const active = id === activeView;
+          const wasActive = fromView ? id === fromView : active;
+          const href = hrefOf(id);
+          //* Egy szakkör adatlapján a cella aktív, de nem ITT vagy: a
+          //* koppintás visszavisz a listára.
+          const here = pathname === href;
+          return (
+            <div
+              key={id}
+              ref={(el) => {
+                if (el) itemsRef.current.set(id, el);
+                else itemsRef.current.delete(id);
+              }}
+              data-pn-cell={id}
+              data-active={active || undefined}
+              data-liquid-rest={roles ? undefined : ""}
+              className="relative flex items-center"
+            >
+              <Link
+                href={href}
+                title={title}
+                aria-current={here ? "page" : active ? "true" : undefined}
+                onClick={(e) => {
+                  //! A FOLYADÉK ELÖNTI A LAPOT, ÉS CSAK VÍZ ALATT VÁLT (lásd
+                  //! `flood.ts`). Új lapra nyitás és módosított kattintás
+                  //! marad a böngészőé.
+                  const nav = navRef.current;
+                  const cell = e.currentTarget.parentElement;
+                  if (
+                    here ||
+                    !nav ||
+                    !cell ||
+                    e.button !== 0 ||
+                    e.metaKey ||
+                    e.ctrlKey ||
+                    e.shiftKey ||
+                    e.altKey
+                  )
+                    return;
+                  const href = e.currentTarget.getAttribute("href");
+                  if (
+                    href &&
+                    launchFlood({
+                      nav,
+                      cell,
+                      label,
+                      navigate: () => router.push(href),
+                    })
+                  )
+                    e.preventDefault();
                 }}
-                data-pn-cell={id}
-                data-active={active || undefined}
-                className="relative flex items-center"
+                onPointerEnter={(e) =>
+                  e.pointerType === "mouse" && setHoverView(id)
+                }
+                onPointerLeave={() => setHoverView(null)}
+                className={cn(
+                  "group relative flex h-full items-center rounded-full pr-2 pl-3 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3.5",
+                  "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  here && "cursor-default",
+                )}
               >
-                <Link
-                  href={id === "today" ? "/ma" : weekHref}
-                  title={title}
-                  aria-current={active ? "page" : undefined}
-                  onClick={(e) => {
-                    //! A FOLYADÉK ELÖNTI A LAPOT, ÉS CSAK VÍZ ALATT VÁLT (lásd
-                    //! `flood.ts`). Új lapra nyitás és módosított kattintás
-                    //! marad a böngészőé.
-                    const nav = navRef.current;
-                    const cell = e.currentTarget.parentElement;
-                    if (
-                      active ||
-                      !nav ||
-                      !cell ||
-                      e.button !== 0 ||
-                      e.metaKey ||
-                      e.ctrlKey ||
-                      e.shiftKey ||
-                      e.altKey
-                    )
-                      return;
-                    const href = e.currentTarget.getAttribute("href");
-                    if (
-                      href &&
-                      launchFlood({
-                        nav,
-                        cell,
-                        label,
-                        navigate: () => router.push(href),
-                      })
-                    )
-                      e.preventDefault();
-                  }}
-                  onPointerEnter={(e) =>
-                    e.pointerType === "mouse" && setHoverView(id)
+                <InkLabel
+                  label={
+                    <RollingWord
+                      word={label}
+                      from={fromLabels?.[slot].label ?? null}
+                      delay={slot * 0.06}
+                    />
                   }
-                  onPointerLeave={() => setHoverView(null)}
+                  rowRef={rowRef}
+                  left={liquidLeft}
+                  right={liquidRight}
+                  spill={spill}
+                  liquid={Boolean(activeView)}
                   className={cn(
-                    "group relative flex h-full items-center rounded-full pr-2 pl-3 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3.5",
-                    "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
-                    active && "cursor-default",
+                    "transition-opacity duration-200 motion-reduce:transition-none",
+                    //! SÖTÉT TOKON A TELJES FEHÉR KIABÁL. A rámutatás ott
+                    //! csak halkan erősödhet; világos tokon a teljes erő marad.
+                    idleInk(active),
                   )}
-                >
-                  <InkLabel
-                    label={label}
-                    rowRef={rowRef}
-                    left={liquidLeft}
-                    right={liquidRight}
-                    liquid={Boolean(activeView)}
-                    className={cn(
-                      "transition-opacity duration-200 motion-reduce:transition-none",
-                      //! SÖTÉT TOKON A TELJES FEHÉR KIABÁL. A rámutatás ott
-                      //! csak halkan erősödhet; világos tokon a teljes erő marad.
-                      idleInk(active),
-                    )}
-                  />
-                </Link>
-                <motion.div
-                  initial={
-                    fromView
-                      ? {
-                          width: wasActive ? "auto" : 6,
-                          opacity: wasActive ? 1 : 0,
-                        }
-                      : false
-                  }
-                  animate={{
-                    width: active ? "auto" : 6,
-                    opacity: active ? 1 : 0,
-                  }}
-                  transition={
-                    reduced
-                      ? INSTANT
-                      : {
-                          width: COLLAPSE,
-                          opacity: active
+                />
+              </Link>
+              <motion.div
+                //! A TENGELY ÁTFORDULÁSAKOR AZ ALANYVÁLTÓ BECSUKÓDIK, NEM
+                //! ELTŰNIK. Az új váltó ott nyitva kezdi, ahol a régin
+                //! nyitva állt, és a szakkörök tengelyén összecsukódik.
+                initial={
+                  fromView || fromLabels
+                    ? {
+                        width: wasActive && rolesWere ? "auto" : 6,
+                        opacity: wasActive && rolesWere ? 1 : 0,
+                      }
+                    : false
+                }
+                animate={{
+                  width: active && roles ? "auto" : 6,
+                  opacity: active && roles ? 1 : 0,
+                }}
+                transition={
+                  reduced
+                    ? INSTANT
+                    : {
+                        width: COLLAPSE,
+                        opacity:
+                          active && roles
                             ? { duration: 0.22, delay: 0.14 }
                             : { duration: 0.1 },
-                        }
-                  }
-                  className="flex h-full items-center [overflow-x:clip]"
-                >
-                  <div data-liquid-extra className="shrink-0 pr-1">
-                    <RoleToggle
-                      role={identity}
-                      fromRole={fromRole}
-                      onToggle={pickIdentity}
-                      filterId={filterId}
-                      hidden={!active}
-                    />
-                  </div>
-                </motion.div>
-              </div>
-            );
-          })}
+                      }
+                }
+                className="flex h-full items-center [overflow-x:clip]"
+              >
+                <div data-liquid-extra className="shrink-0 pr-1">
+                  <RoleToggle
+                    role={identity}
+                    fromRole={fromRole}
+                    onToggle={pickIdentity}
+                    filterId={filterId}
+                    hidden={!(active && roles)}
+                  />
+                </div>
+              </motion.div>
+            </div>
+          );
+        })}
 
-          {/*//! ─── A HELYEK CELLÁJA ─────────────────────────────────────────
+        {/*//! ─── A HELYEK CELLÁJA ─────────────────────────────────────────
             //! Egy gomb, nem négy. Inaktívan egy iránytű: „innen máshová is
             //! mehetsz". Ha egy helyen állsz, a folyadék ide folyik át, az
             //! iránytű helyén a hely SAJÁT ikonja áll, és `sm`-től a neve is —
@@ -1100,106 +1523,109 @@ export function PillNav({
             //! A GOMB NYITVA IS GOMB MARAD. Újra megnyomva becsukja a
             //! buborékot; a folyadék közben nem mozdul, mert a hely, ahol
             //! állsz, nem változott. */}
-          <div
-            ref={(el) => {
-              if (el) itemsRef.current.set("places", el);
-              else itemsRef.current.delete("places");
-            }}
-            data-pn-cell="places"
-            data-active={placesActive || undefined}
-            className="relative flex items-center"
+        <div
+          ref={(el) => {
+            if (el) itemsRef.current.set("places", el);
+            else itemsRef.current.delete("places");
+          }}
+          data-pn-cell="places"
+          data-active={placesActive || undefined}
+          className="relative flex items-center"
+        >
+          <button
+            ref={triggerRef}
+            type="button"
+            aria-expanded={placesOpen}
+            aria-controls={placesOpen ? panelId : undefined}
+            aria-label={
+              cellPlace ? `Helyek — most: ${cellPlace.label}` : "Helyek"
+            }
+            title={placesTitle}
+            onClick={() => setPlacesOpen((v) => !v)}
+            onPointerEnter={(e) =>
+              e.pointerType === "mouse" && setHoverView("places")
+            }
+            onPointerLeave={() => setHoverView(null)}
+            className={cn(
+              "group relative flex h-full cursor-pointer items-center rounded-full pr-1 pl-2.5 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3",
+              "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
+            )}
           >
-            <button
-              ref={triggerRef}
-              type="button"
-              aria-expanded={placesOpen}
-              aria-controls={placesOpen ? panelId : undefined}
-              aria-label={place ? `Helyek — most: ${place.label}` : "Helyek"}
-              title="Ügyelet, teremkereső, kivetítés, nyitólap"
-              onClick={() => setPlacesOpen((v) => !v)}
-              onPointerEnter={(e) =>
-                e.pointerType === "mouse" && setHoverView("places")
-              }
-              onPointerLeave={() => setHoverView(null)}
-              className={cn(
-                "group relative flex h-full cursor-pointer items-center rounded-full pr-1 pl-2.5 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3",
-                "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
-              )}
+            <motion.span
+              ref={iconRef}
+              className="relative flex"
+              style={{
+                x: flyX,
+                y: flyY,
+                scale: flyScale,
+                opacity: flyOpacity,
+              }}
             >
-              <motion.span
-                ref={iconRef}
-                className="relative flex"
-                style={{
-                  x: flyX,
-                  y: flyY,
-                  scale: flyScale,
-                  opacity: flyOpacity,
-                }}
-              >
-                <InkLabel
-                  label={
-                    <motion.span
-                      key={place?.id ?? "compass"}
-                      className="flex"
-                      initial={false}
-                      animate={{
-                        rotate: placesOpen && !placesActive ? 135 : 0,
-                      }}
-                      transition={reduced ? INSTANT : ROLL}
-                    >
-                      <PlaceIcon className="size-4" strokeWidth={2.25} />
-                    </motion.span>
-                  }
-                  rowRef={rowRef}
-                  left={liquidLeft}
-                  right={liquidRight}
-                  liquid={Boolean(activeView)}
-                  follow={flyFollow}
-                  className={cn(
-                    "transition-opacity duration-200 motion-reduce:transition-none",
-                    idleInk(placesActive || placesOpen),
-                  )}
-                />
-              </motion.span>
-              <motion.span
-                initial={
-                  fromView
-                    ? {
-                        width: placesWasActive ? "auto" : 6,
-                        opacity: placesWasActive ? 1 : 0,
-                      }
-                    : false
+              <InkLabel
+                label={
+                  <motion.span
+                    key={cellPlace?.id ?? "compass"}
+                    className="flex"
+                    initial={false}
+                    animate={{
+                      rotate: placesOpen && !placesActive ? 135 : 0,
+                    }}
+                    transition={reduced ? INSTANT : ROLL}
+                  >
+                    <PlaceIcon className="size-4" strokeWidth={2.25} />
+                  </motion.span>
                 }
-                animate={{
-                  width: placesActive ? "auto" : 6,
-                  opacity: placesActive ? 1 : 0,
-                }}
-                transition={
-                  reduced
-                    ? INSTANT
-                    : {
-                        width: COLLAPSE,
-                        opacity: placesActive
-                          ? { duration: 0.22, delay: 0.14 }
-                          : { duration: 0.1 },
-                      }
-                }
-                className="flex h-full items-center [overflow-x:clip]"
-              >
-                <span data-liquid-extra className="block w-max min-w-1.5">
-                  <span className="block pr-1.5 pl-1.5 max-sm:hidden">
-                    <InkLabel
-                      label={place?.label ?? ""}
-                      rowRef={rowRef}
-                      left={liquidLeft}
-                      right={liquidRight}
-                      liquid={placesActive}
-                    />
-                  </span>
+                rowRef={rowRef}
+                left={liquidLeft}
+                right={liquidRight}
+                spill={spill}
+                liquid={Boolean(activeView)}
+                follow={flyFollow}
+                className={cn(
+                  "transition-opacity duration-200 motion-reduce:transition-none",
+                  idleInk(placesActive || placesOpen),
+                )}
+              />
+            </motion.span>
+            <motion.span
+              initial={
+                fromView
+                  ? {
+                      width: placesWasActive ? "auto" : 6,
+                      opacity: placesWasActive ? 1 : 0,
+                    }
+                  : false
+              }
+              animate={{
+                width: placesActive ? "auto" : 6,
+                opacity: placesActive ? 1 : 0,
+              }}
+              transition={
+                reduced
+                  ? INSTANT
+                  : {
+                      width: COLLAPSE,
+                      opacity: placesActive
+                        ? { duration: 0.22, delay: 0.14 }
+                        : { duration: 0.1 },
+                    }
+              }
+              className="flex h-full items-center [overflow-x:clip]"
+            >
+              <span data-liquid-extra className="block w-max min-w-1.5">
+                <span className="block pr-1.5 pl-1.5 max-sm:hidden">
+                  <InkLabel
+                    label={cellPlace?.label ?? ""}
+                    rowRef={rowRef}
+                    left={liquidLeft}
+                    right={liquidRight}
+                    spill={spill}
+                    liquid={placesActive}
+                  />
                 </span>
-              </motion.span>
-            </button>
-          </div>
+              </span>
+            </motion.span>
+          </button>
         </div>
       </div>
 
@@ -1210,6 +1636,7 @@ export function PillNav({
         triggerRef={triggerRef}
         floating={floating}
         current={place}
+        places={panelPlaces}
         panelId={panelId}
       />
     </nav>
