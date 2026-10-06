@@ -55,103 +55,95 @@ export function markShapes(letters: string, dot: string = CREST.red) {
 //! ═══════════════════════════════════════════════════════════════════════════
 //! A ROZMÁR (JDLK-32)
 //! ═══════════════════════════════════════════════════════════════════════════
-//! A ji egyben egy rozmár arca, de a rozmárból CSAK A KÖRVONAL látszik. A
-//! betűk tömörek és változatlanok, hogy a „ji" kis méretben is olvasható
-//! maradjon; a rajz egyetlen vonalvastagság, a betűk színében.
+//! A ji egyben egy rozmár feje, lapos, geometrikus jelként: egy tömör
+//! fejsziluett, rajta a ji. Nem illusztráció; a Vercel, a Linear, a MongoDB
+//! és a Postgres jeleinek nyelvén beszél (egy alak, egy-két szín, apró
+//! részlet nélkül).
 //!   - a két pont a két szem,
 //!   - a j szára a horoggal és az i szára a két agyar,
-//!   - a szemek ALATT külön bajuszpárna (orral, bajuszpöttyökkel), és az
-//!     agyarak ebből lógnak ki.
+//!   - a fej alja két bajuszpárna, rajtuk három-három bajuszpötty. A pöttyök
+//!     és a széles, kétívű pofa mondják ki, hogy rozmár; nélkülük a fej
+//!     gombának vagy medúzának olvasható.
 //*
-//! A SZEM ATTÓL SZEM, HOGY HOMLOK VAN FÖLÖTTE ÉS POFA ALATTA. Az első
-//! vázlaton a fej körvonala közvetlenül a pontok alatt zárult bajuszívvel,
-//! és a pontok orrlyuknak látszottak. Ezt a sorrendet (homlok, szem, orr és
-//! párna, agyar) ne lapítsd össze.
+//! AZ AGYARAK HOSSZABBAK A JI SZÁRAINÁL (+60). A fej eltakarja a szárak
+//! tövét, és az eredeti hosszal az i csonk maradt.
 //*
-//! TAKARÁS MASZKKAL, NEM FEHÉR KITÖLTÉSSEL. A párna eltakarja az agyarak
-//! tövét, a szemek körül rés van a vonalakban; mindkettő maszk, így a jel
-//! átlátszó alapon, sötét témán is helyes. A szem fénypöttye is kivágás.
+//! KÉT VÁLTOZAT, UGYANABBÓL A GEOMETRIÁBÓL.
+//!   - Ikon: sötét csempe, címerkék fej, fehér ji. A ji itt végig egy szín,
+//!     ezért ez olvasható a legjobban, 16 px-en is.
+//!   - Egyszínű jel átlátszó alapra: a fejből a szemek ki vannak vágva, az
+//!     agyarak alatta egy réssel különülnek el. A fejen ÁTMENŐ szárkivágás
+//!     (XOR) koponyát rajzolt, a kivágott szárak fogaknak látszottak.
 //*
-//! KÉT OPTIKAI MÉRET. A `large` a rajz. A `small` a fülikonnak és mindennek
-//! kb. 48 px alatt: vastagabb vonal, bajuszpötty és fénypötty nélkül, mert
-//! azok ott már szürke zajjá olvadnak.
+//! PIROS NINCS BENNE. Egy piros szem sérült állatnak látszott; a piros az
+//! appban marad a „most" jele.
+//*
+//! KIS MÉRETBEN (kb. 48 px alatt) a bajuszpöttyök elmaradnak (`detail:
+//! false`), mert ott már zajjá olvadnak.
 //! ═══════════════════════════════════════════════════════════════════════════
 
 export const WALRUS = {
-  //* A rajz doboza a jel koordinátáiban. A fej a pontok fölé, a párna a
-  //* szárak mellé nyúlik, ezért nagyobb a MARK dobozánál.
-  box: { x: 0, y: -146, width: 790, height: 819.8 },
-  //* A fej alja a párna mögött fut, a maszk tünteti el.
-  head: "M461 -122C651 -122 767 -16 767 112C767 182 727 212 671 212H251C195 212 155 182 155 112C155 -16 271 -122 461 -122Z",
-  muzzle:
-    "M461 174C491 152 540 144 590 144C680 144 747 188 747 210C747 234 680 264 590 264C530 264 487 256 461 232C435 256 392 264 332 264C242 264 175 234 175 210C175 188 242 144 332 144C382 144 431 152 461 174Z",
-  nose: "M427 150C427 126 495 126 495 150C495 174 461 188 461 188C461 188 427 174 427 150Z",
-  pores: [
-    [534, 192],
-    [590, 182],
-    [646, 196],
-    [560, 228],
-    [618, 226],
-    [388, 192],
-    [332, 182],
-    [276, 196],
-    [362, 228],
-    [304, 226],
+  //* A jel doboza: a fej tetejétől a horog aljáig, kis ráhagyással.
+  box: { x: -9, y: -124, width: 820, height: 870 },
+  letters:
+    "M282 193.8H400V533.8A200 200 0 0 1 3 568.5L119.2 548A82 82 0 0 0 282 533.8ZM522 193.8H640V533.8H522Z",
+  head: "M461 -112C611 -112 693 -50 709 60C723 130 799 144 799 214C799 278 715 314 581 314C528 314 487 294 461 268C435 294 394 314 341 314C207 314 123 278 123 214C123 144 199 130 213 60C229 -50 311 -112 461 -112Z",
+  whiskers: [
+    [681, 206],
+    [723, 232],
+    [681, 258],
+    [241, 206],
+    [199, 232],
+    [241, 258],
   ],
-  glint: { dx: -20, dy: -20, r: 15 },
-  sizes: {
-    large: { line: 22, halo: 20, detail: true },
-    small: { line: 40, halo: 26, detail: false },
-  },
+  whiskerR: 13,
+  //* A fej és az agyarak közti rés az egyszínű jelen.
+  gap: 18,
+  //* Az ikon csempéje: majdnem fekete.
+  tile: "#0b0d12",
 } as const;
 
-//* Az alkalmazásikonon a rozmár helye (1000 egységes csempe). A fej nehezebb
-//* a horognál, ezért a közép a fej felé tolva: így a pár nem dől balra.
-export const WALRUS_ICON = { x: 130.4, y: 260.6, scale: 0.88 } as const;
+//* A rozmár helye az 1000 egységes csempén: optikailag középen, körben
+//* nagyjából egyforma levegővel.
+export const WALRUS_ICON = { x: 179.2, y: 251.2, scale: 0.8 } as const;
 
-/** A rozmáros jel SVG-elemei. Az `id` a maszkok előtagja: egy dokumentumon belül egyedi legyen. */
-export function walrusShapes(
-  letters: string,
-  {
-    dot = CREST.red,
-    line = letters,
-    size = "large",
-    id = "ji",
-  }: {
-    dot?: string;
-    line?: string;
-    size?: keyof typeof WALRUS.sizes;
-    id?: string;
-  } = {},
+const disc = (cx: number, cy: number, r: number) =>
+  `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0Z`;
+const eyes =
+  disc(MARK.jDot.cx, MARK.jDot.cy, MARK.jDot.r) +
+  disc(MARK.iDot.cx, MARK.iDot.cy, MARK.iDot.r);
+const whiskerHoles = (detail: boolean) =>
+  detail
+    ? WALRUS.whiskers.map(([x, y]) => disc(x, y, WALRUS.whiskerR)).join("")
+    : "";
+
+/** Az ikon rajza: címerkék fej, fehér ji. `detail: false` a kis méretekhez. */
+export function walrusIcon({
+  head = CREST.blue,
+  ink = "#ffffff",
+  detail = true,
+}: {
+  head?: string;
+  ink?: string;
+  detail?: boolean;
+} = {}) {
+  return (
+    `<path d="${WALRUS.head}${whiskerHoles(detail)}" fill="${head}" fill-rule="evenodd"/>` +
+    `<path d="${WALRUS.letters}${eyes}" fill="${ink}"/>`
+  );
+}
+
+/** Egyszínű jel átlátszó alapra. Az `id` a maszk neve: egy dokumentumon belül egyedi legyen. */
+export function walrusGlyph(
+  fill: string,
+  { detail = true, id = "ji-tusks" }: { detail?: boolean; id?: string } = {},
 ) {
-  const s = WALRUS.sizes[size];
-  const { jDot, iDot } = MARK;
   const { x, y, width, height } = WALRUS.box;
   const area = `x="${x}" y="${y}" width="${width}" height="${height}"`;
-  const mask = (name: string, holes: string) =>
-    `<mask id="${id}-${name}" maskUnits="userSpaceOnUse" ${area}><rect ${area} fill="#fff"/><g fill="#000">${holes}</g></mask>`;
-  const muzzle = `<path d="${WALRUS.muzzle}"/>`;
-  const halos = [jDot, iDot]
-    .map((d) => `<circle cx="${d.cx}" cy="${d.cy}" r="${d.r + s.halo}"/>`)
-    .join("");
-  const stroke = `fill="none" stroke="${line}" stroke-width="${s.line}" stroke-linecap="round" stroke-linejoin="round"`;
-  const disc = (cx: number, cy: number, r: number) =>
-    `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0Z`;
-  const { dx, dy, r } = WALRUS.glint;
-  const eye = (d: { cx: number; cy: number; r: number }, fill: string) =>
-    `<path fill="${fill}" fill-rule="evenodd" d="${disc(d.cx, d.cy, d.r)}${s.detail ? disc(d.cx + dx, d.cy + dy, r) : ""}"/>`;
-  const pores = s.detail
-    ? WALRUS.pores
-        .map(([cx, cy]) => `<circle cx="${cx}" cy="${cy}" r="10.5"/>`)
-        .join("")
-    : "";
   return (
-    `<defs>${mask("head", muzzle + halos)}${mask("tusks", muzzle)}${mask("muzzle", halos)}</defs>` +
-    `<path d="${WALRUS.head}" ${stroke} mask="url(#${id}-head)"/>` +
-    `<path d="${MARK.letters}" fill="${letters}" mask="url(#${id}-tusks)"/>` +
-    `<path d="${WALRUS.muzzle}" ${stroke} mask="url(#${id}-muzzle)"/>` +
-    `<g fill="${line}"><path d="${WALRUS.nose}"/>${pores}</g>` +
-    eye(jDot, letters) +
-    eye(iDot, dot)
+    `<defs><mask id="${id}" maskUnits="userSpaceOnUse" ${area}><rect ${area} fill="#fff"/>` +
+    `<path d="${WALRUS.head}" fill="#000" stroke="#000" stroke-width="${WALRUS.gap * 2}" stroke-linejoin="round"/></mask></defs>` +
+    `<path d="${WALRUS.head}${eyes}${whiskerHoles(detail)}" fill="${fill}" fill-rule="evenodd"/>` +
+    `<path d="${WALRUS.letters}" fill="${fill}" mask="url(#${id})"/>`
   );
 }
