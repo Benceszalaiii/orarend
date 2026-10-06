@@ -91,6 +91,12 @@ Two mechanisms a generic timetable viewer could not truthfully copy:
 - Mark: the lowercase **"ji"**, flat stems and round dots. The letters wear the
   crest blue, the dot of the i the crest red. Red keeps its one meaning from the
   app: *now*. The pun is deliberate: a *pont* is a dot, *pontos* is on time.
+- Walrus variant (JDLK-32, not yet the default icon): the same solid "ji" with a
+  walrus drawn around it in **outline only**. The dots are the eyes, the j stem
+  and hook and the i stem are the tusks, and a separate muzzle (nose, whisker
+  pores) sits *below* the eyes; without that muzzle the dots read as nostrils.
+  Below ~48 px the drawing turns to noise, so tab-sized icons stay the plain ji.
+  Files: `public/brand/jedlik-info-walrus{,-dark,-icon}.svg`.
 - Colours come from the school's 2020 crest on jedlik.eu: blue `#2D57A4` (now
   `--primary`; a lighter `#5784D6` with dark text in dark mode) and red
   `#E61B20` (≈ the existing `--brand`, `#E41B1F`). The mark borrows the crest's
