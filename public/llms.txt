@@ -88,6 +88,7 @@ holiday). This site did not cause these; retry later if `retryable` is true.
 - [Weekly timetable](https://jedlik.info/orarend): the week grid (`?class=13C`)
 - [Today](https://jedlik.info/ma): today's lessons and what is on now
 - [Teachers' timetable](https://jedlik.info/tanari) (`?teacher=AA`)
+- [Room timetable](https://jedlik.info/terem): one room's week — which class and teacher, when (`?classroom=102`; not available via `/api/orarend`)
 - [Free rooms](https://jedlik.info/teremkereso)
 - [Subjects](https://jedlik.info/tantargyak): who teaches a subject, and to which classes (`?tantargy=Fizika`)
 - [Hall duty](https://jedlik.info/ugyelet)

@@ -885,7 +885,7 @@ function WatchView({
           : phase === "connecting"
             ? "kapcsolódás…"
             : phase === "lost"
-              ? "megszakadt, újrapróbálom…"
+              ? "megszakadt, újracsatlakozás…"
               : phase === "givenup"
                 ? "nem sikerült a kapcsolat"
                 : "vége"
@@ -1319,7 +1319,7 @@ function Unreachable({ onRetry }: { onRetry?: () => void }) {
         </li>
         <li>
           {hasWideFallback()
-            ? "Ha máshonnan nézed, pár másodperc után újrapróbálom egy tágabb úton."
+            ? "Ha máshonnan nézed, az oldal pár másodperc múlva egy másik úton próbál csatlakozni."
             : "A kapcsolat csak a helyi hálózaton belül épülhet fel."}
         </li>
       </ul>
@@ -1336,7 +1336,7 @@ function Unreachable({ onRetry }: { onRetry?: () => void }) {
             className="mt-4 gap-1.5 rounded-full px-4"
           >
             <RefreshCw className="size-3.5" aria-hidden />
-            Újrapróbálom
+            Próbáld újra
           </Button>
           <p className="mt-2 text-xs text-white/50">
             Ha ugyanarra a wifire csatlakozol, mint a megosztó, jó eséllyel
@@ -1345,7 +1345,7 @@ function Unreachable({ onRetry }: { onRetry?: () => void }) {
         </>
       ) : (
         <p className="mt-3 text-xs text-white/50">
-          A háttérben tovább próbálkozom.
+          Az oldal a háttérben tovább próbálkozik.
         </p>
       )}
     </div>

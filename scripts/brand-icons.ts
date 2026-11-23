@@ -14,6 +14,7 @@
 //!   public/icon-512.png         PWA, kerekített csempe
 //!   public/icon-maskable-512.png Android maszk: teli háttér, kisebb jel
 //!   public/brand/*.svg          a jel önállóan (világos és sötét alapra)
+//!   public/brand/*-walrus*.svg  a rozmáros jel (JDLK-32), ugyanígy
 //*
 //! A SZÖVEGES FORRÁSOK KÉZBEN VANNAK. A `public/brand/jedlik-info-lockup*.svg`
 //! és a `jedlik-info-og.svg` a „Jedlik Info" szót Geist-körvonalként hordozza
@@ -28,7 +29,16 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import sharp from "sharp";
-import { CREST, ICON, MARK, markShapes } from "../src/lib/brand-mark";
+import {
+  CREST,
+  ICON,
+  MARK,
+  markShapes,
+  WALRUS,
+  WALRUS_ICON,
+  walrusGlyph,
+  walrusIcon,
+} from "../src/lib/brand-mark";
 
 const ROOT = join(import.meta.dir, "..");
 const out = (...p: string[]) => join(ROOT, ...p);
@@ -89,6 +99,15 @@ function ico(images: { size: number; data: Buffer }[]) {
 const markOnly = (letters: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MARK.width} ${MARK.height}" role="img" aria-label="Jedlik Info">${markShapes(letters)}</svg>\n`;
 
+//* A rozmáros jel (JDLK-32): ikon sötét csempén, és egyszínű jel világos és
+//* sötét alapra.
+const { x: wx, y: wy, width: ww, height: wh } = WALRUS.box;
+const walrusOnly = (fill: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${wx} ${wy} ${ww} ${wh}" role="img" aria-label="Jedlik Info">${walrusGlyph(fill)}</svg>\n`;
+const walrusTile = svg(
+  `<rect width="${ICON.size}" height="${ICON.size}" rx="${ICON.radius}" fill="${WALRUS.tile}"/><g transform="translate(${WALRUS_ICON.x} ${WALRUS_ICON.y}) scale(${WALRUS_ICON.scale})">${walrusIcon()}</g>`,
+);
+
 async function main() {
   //! A FAVICON NAGYOBB JELET KAP. 16 px-en a csempe margója két képpont, a
   //! pontok egy-egy képpontra zsugorodnának; 1,15-ös nagyítással még pont
@@ -119,6 +138,15 @@ async function main() {
     markOnly(FG_DARK),
   );
   writeFileSync(out("public/brand/jedlik-info-icon.svg"), tile());
+  writeFileSync(
+    out("public/brand/jedlik-info-walrus.svg"),
+    walrusOnly(CREST.blue),
+  );
+  writeFileSync(
+    out("public/brand/jedlik-info-walrus-dark.svg"),
+    walrusOnly(FG_DARK),
+  );
+  writeFileSync(out("public/brand/jedlik-info-walrus-icon.svg"), walrusTile);
 
   const og = readFileSync(out("public/brand/jedlik-info-og.svg"));
   writeFileSync(

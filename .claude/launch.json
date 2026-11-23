@@ -4,7 +4,12 @@
     {
       "name": "orarend-dev",
       "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "dev", "--port", "3005"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--port",
+        "3005"
+      ],
       "port": 3005
     },
     {
@@ -15,9 +20,23 @@
     {
       "name": "orarend-eles",
       "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "start"],
+      "runtimeArgs": [
+        "run",
+        "start"
+      ],
       "port": 3001,
       "autoPort": true
+    },
+    {
+      "name": "orarend-prod-sw",
+      "runtimeExecutable": "bunx",
+      "runtimeArgs": [
+        "next",
+        "start",
+        "--port",
+        "3107"
+      ],
+      "port": 3107
     }
   ]
 }

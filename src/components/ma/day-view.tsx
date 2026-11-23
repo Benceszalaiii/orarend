@@ -7,6 +7,7 @@ import {
   PAGE_COLUMNS,
 } from "@/components/chrome/page-field";
 import { SITE_BAR_MAX, StandingLine } from "@/components/chrome/standing-line";
+import type { SubjectPickerSpec } from "@/components/chrome/subject-quick-pick";
 import { SiteFooter } from "@/components/site-footer";
 import { dateFromKey } from "@/components/timetable/shared";
 import { MorphingInfinity } from "@/components/ui/morphing-infinity";
@@ -61,6 +62,7 @@ const COLUMNS = PAGE_COLUMNS;
 export function DayView({
   dv,
   lineSubject,
+  picker,
   sheet,
   rail,
   renderDay,
@@ -70,6 +72,8 @@ export function DayView({
   dv: DayViewState;
   /** Az álló sor bal oldala: az alany rövid jele, vagy a helyette álló szó. */
   lineSubject: string;
+  /** Az alany választója a váltó aktív szerepén (lásd `LineContent.picker`). */
+  picker?: SubjectPickerSpec;
   sheet: ReactNode;
   rail: (week: NonNullable<DayViewState["week"]>) => ReactNode;
   renderDay: (ctx: DayRenderContext) => ReactNode;
@@ -111,6 +115,7 @@ export function DayView({
         <StandingLine
           line={{
             subject: lineSubject,
+            picker,
             context: isToday ? "ma" : (active?.day?.dayName ?? undefined),
           }}
           sheet={sheet}

@@ -33,8 +33,8 @@ import {
   addDays,
   getTimetableWeek,
   mondayOf,
+  type PersonSubjectKind,
   type TimetableLesson,
-  type TimetableSubjectKind,
 } from "@/lib/timetable";
 
 //! ─── A HÁTTÉRFELADAT ───────────────────────────────────────────────────────
@@ -85,7 +85,7 @@ type WeekData = { lessons: TimetableLesson[]; weekLetter: string };
 //! `PersonalView`). A tanárét nem: duális napja nincs, a saját óráit nem
 //! rejti el — ott a döntés nélküli nézet a teljes órarend.
 function personalView(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
   subscriber: PushSubscription,
   weekLetter: string,
@@ -118,7 +118,7 @@ function memo<T>(cache: Map<string, T>, key: string, compute: () => T): T {
 //! egy kiküldésben kapja; a foglalás kulcsa a lista lenyomata, tehát két
 //! különböző lista két foglalás — egy közös kulcs elnyelné a másodikat.
 async function sendChanges(input: {
-  kind: TimetableSubjectKind;
+  kind: PersonSubjectKind;
   short: string;
   before: WeekSnapshot;
   after: WeekSnapshot;
@@ -168,7 +168,7 @@ async function sendChanges(input: {
 //* A hét óráinak beszerzése: gyorsítótárból, vagy friss lekéréssel — és a
 //* friss lekérés az EGYETLEN pillanat, amikor változást lehet észrevenni.
 async function loadWeek(input: {
-  kind: TimetableSubjectKind;
+  kind: PersonSubjectKind;
   short: string;
   weekStart: string;
   todayKey: string;
@@ -245,7 +245,7 @@ async function loadWeek(input: {
 }
 
 async function runSubject(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
   tally: Tally,
 ): Promise<void> {
@@ -366,7 +366,7 @@ export async function GET(request: Request) {
   }
 
   const tally: Tally = { reminders: 0, changes: 0, dropped: 0, failed: 0 };
-  const counts: Record<TimetableSubjectKind, number> = { class: 0, teacher: 0 };
+  const counts: Record<PersonSubjectKind, number> = { class: 0, teacher: 0 };
 
   //! ALANYONKÉNT SORBAN, NEM EGYSZERRE. A párhuzamos futás egyetlen tickben
   //! annyi kérést zúdítana a Jedlikinfóra, ahány alany van — pont azt a

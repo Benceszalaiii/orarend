@@ -3,6 +3,7 @@ import { SiteFooter } from "@/components/site-footer";
 import Cta from "./cta";
 import { GridFilm } from "./film";
 import Latest from "./latest";
+import Places from "./places";
 
 //! ─── A NYITÓLAP EGY TÁRGYAT MUTAT ──────────────────────────────────────────
 //! A lap nem szakaszokban magyarázza el az órarendet, hanem EGYETLEN hetet
@@ -36,6 +37,9 @@ export function Landing() {
       />
       <GridFilm />
       <Latest />
+      {/*//* A sáv után a lap többi fele: a helyek, valódi képekkel (lásd
+          //* `_components/places.tsx`). A két ajtó előtt, mert ezek is ajtók. */}
+      <Places />
       <Cta />
       <SiteFooter />
     </main>

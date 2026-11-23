@@ -5,14 +5,12 @@ import {
   BellRing,
   CalendarDays,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CloudOff,
   // ExternalLink, //! a szakmai portál linkjével együtt visszakapcsolni
   Info,
   Merge,
-  Users,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
@@ -30,7 +28,6 @@ import {
   SheetDisclosure,
   SheetDivider,
   SheetItemBody,
-  SheetRow,
   SheetSection,
   sheetItem,
 } from "@/components/chrome/chrome-sheet";
@@ -104,6 +101,7 @@ import {
   todayKey,
   weekLabel,
 } from "./shared";
+import { useClockDay, useClockMinute } from "./use-clock";
 import { useMergePreferences } from "./use-merge-preferences";
 import {
   focusMorph,
@@ -899,17 +897,15 @@ export function TimetableCalendar({
   //* történik, ahol a sor születik (lásd `lib/use-hidden-menu.ts`).
   const menu = useHiddenMenu();
 
-  //* Aktuális perc (a "most" vonalhoz) — csak a kliensen, hydration-biztosan.
-  const [nowMin, setNowMin] = useState<number | null>(null);
-  useEffect(() => {
-    const tick = () => {
-      const d = new Date();
-      setNowMin(d.getHours() * 60 + d.getMinutes());
-    };
-    tick();
-    const id = setInterval(tick, 60_000);
-    return () => clearInterval(id);
-  }, []);
+  //! A PIROS VONAL A KÖZÖS ÓRÁBÓL JÁR (`use-clock.ts`), nem saját időzítőből.
+  //! A régi 60 másodperces `setInterval` alvás / befagyasztott lap után akár
+  //! egy percig a régi helyén hagyta a vonalat; a közös tár ébredéskor azonnal
+  //! újraolvas. Perc-pontosságú feliratkozás: a rács percenként rajzol újra,
+  //! nem másodpercenként. Csak a kliensen, hidratálás-biztosan.
+  const nowMin = useClockMinute();
+  //* A „ma" is innen jön: az éjszakán át nyitva hagyott lap reggel nem a
+  //* tegnapot jelöli, és a mentett hét régi `isToday`-ét sem hisszük el.
+  const clockDay = useClockDay();
 
   //! ─── EGY HÉT LEKÉRÉSE — ELŐRE IS ────────────────────────────────────────
   //! A héthatáron áthúzott mozdulat akkor EGY SZALAG, ha a következő hét már
@@ -1074,7 +1070,21 @@ export function TimetableCalendar({
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
 
-  const { days, periods, events, weekStart } = view;
+  const { days: viewDays, periods, events, weekStart } = view;
+  //! AZ `isToday` A LETÖLTÉS PILLANATÁÉ. A hét a szerverről (vagy a készülék
+  //! mentett példányából) érkezik, és az ott eldőlt „ma" éjfél után hazudik.
+  //! Az óra napjához igazítjuk; ahol egyezik, az eredeti objektum marad.
+  const days = useMemo(
+    () =>
+      clockDay
+        ? viewDays.map((d) =>
+            d.isToday === (d.dateKey === clockDay)
+              ? d
+              : { ...d, isToday: d.dateKey === clockDay },
+          )
+        : viewDays,
+    [viewDays, clockDay],
+  );
 
   //! A „MOSTANI" HÉT NEM MINDIG A MAI. Hétvégén a mai hét öt tanítási napja
   //! már elmúlt, ezért a lap a következő hetet tekinti a mostaninak — ide tér
@@ -1401,7 +1411,7 @@ export function TimetableCalendar({
             dateLabel: dateKey.slice(5).replace("-", ".").concat("."),
             week: "",
             dayOfWeek: i + 1,
-            isToday: dateKey === todayKey(),
+            isToday: dateKey === (clockDay ?? todayKey()),
             //* Tartalék nap: a tanév rendjéből semmit nem tudunk róla.
             teaching: null,
             notes: [],
@@ -2314,9 +2324,12 @@ export function TimetableCalendar({
           endMin: r.endMin,
           title: r.lesson.subjectShort || r.lesson.subject,
           fullTitle: r.lesson.subject || r.lesson.subjectShort,
+          //* A terem órarendjén az osztály ÉS a tanár is ki van töltve (lásd
+          //* `classroomLessons`); a másik két nézetben ezek egyike üres.
           meta: [
             r.rooms.join(" · "),
-            r.lesson.teacherShort || r.lesson.classShort,
+            r.lesson.classShort,
+            r.lesson.teacherShort,
           ].filter(Boolean),
           room: r.rooms.join(" · "),
           //* A rács sávján a rövid alak fér ki; a tanári lekérésnél a tanár
@@ -2355,7 +2368,7 @@ export function TimetableCalendar({
     return map;
   }, [gridDays, resolvedDays, events]);
 
-  const today = todayKey();
+  const today = clockDay ?? todayKey();
   const todayItems = agendaByDate.get(today) ?? [];
   const laterItems = useMemo(
     () =>
@@ -2528,8 +2541,10 @@ export function TimetableCalendar({
                 //! — az a sor elején nem mond semmit. Tanári lapon ezért a NÉV
                 //! áll ott; a hosszát a sor felső korlátja fogja meg, nem egy
                 //! rövidítés (lásd `standing-line.tsx`).
+                //* A TEREMNÉL ugyanígy: a „Könyvtár" jel mellett a teljes
+                //* név („118 - Könyvtár") mondja meg, hol van.
                 subject:
-                  (mode === "teacher"
+                  (mode !== "class"
                     ? view.subject?.name || view.subject?.short
                     : view.subject?.short) || words.oneCapital,
                 context: weekLabel(weekStart, narrowBar),
@@ -2544,59 +2559,20 @@ export function TimetableCalendar({
                 returnTitle: weekendFocus ? "Következő hét (T)" : "Mai hét (T)",
                 onStep: (delta) => step(delta),
                 disabled: pending,
+                picker: {
+                  kind: mode,
+                  subjects,
+                  value: selectedSubject || "",
+                  disabled: pending,
+                  onChange: (next) => load(weekStart, next),
+                },
               }}
               sheet={
                 <>
-                  <SheetSection title="Kit nézel">
-                    {subjects.length > 0 && (
-                      <SheetRow
-                        icon={<Users className="size-4" />}
-                        label={words.oneCapital}
-                      >
-                        {/*//! NATÍV `<select>`, nem buborékos lista. Ez az
-                            //! egyetlen vezérlő, amit MINDEN eszközön, sokszor,
-                            //! gyorsan használnak: mobilon a rendszer saját
-                            //! kerekét kapja, billentyűvel a betűre ugrást és a
-                            //! natív keresést — ezt egy egyedi lista sem adja
-                            //! vissza. */}
-                        <div className="relative">
-                          <select
-                            aria-label={words.oneCapital}
-                            value={selectedSubject || ""}
-                            disabled={pending}
-                            onChange={(event) =>
-                              load(weekStart, event.target.value)
-                            }
-                            className={cn(
-                              "h-9 touch-target appearance-none rounded-full border border-input bg-transparent py-1 pr-7 pl-3 text-sm transition-colors outline-none",
-                              mode === "teacher" ? "w-[160px]" : "w-[104px]",
-                              "hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                              "disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
-                              !selectedSubject && "text-muted-foreground",
-                            )}
-                          >
-                            {!selectedSubject && (
-                              <option value="" disabled>
-                                {words.oneCapital}
-                              </option>
-                            )}
-                            {subjects.map((c) => (
-                              <option key={c.short} value={c.short}>
-                                {c.name}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown
-                            className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                            aria-hidden
-                          />
-                        </div>
-                      </SheetRow>
-                    )}
-                  </SheetSection>
-
-                  <SheetDivider />
-
+                  {/*//! „KIT NÉZEL" NINCS TÖBBÉ A LAPBAN. Az alany választója a
+                      //! folyékony váltó aktív szerepe lett („13C" a fejléc
+                      //! jobb oldalán, lásd `line.picker`) — telefonon és
+                      //! asztalon ugyanott, egy koppintásra. */}
                   {/*//! A HÉT NAPTÁRA A LAPBAN, NEM EGY MÁSODIK BUBORÉKBAN. A
                       //! sor kimondja, melyik hetet nézed; ha ugrani akarsz,
                       //! ugyanott van a naptár is. */}
@@ -3570,9 +3546,13 @@ function ChoosePrompt({
           ? hasSubjects
             ? "Válaszd ki a nevedet a jobb felső sarokban, és megjelenik az órarended."
             : "Nincs kiválasztva tanár, és a tanárlista sem érhető el most."
-          : hasSubjects
-            ? "Válaszd ki az osztályod a jobb felső sarokban, és megjelenik az órarend."
-            : "Nincs beállítva az osztályod, és az osztálylista sem érhető el most."}
+          : mode === "classroom"
+            ? hasSubjects
+              ? "Válassz egy termet a jobb felső sarokban, és megjelenik a heti foglaltsága."
+              : "Nincs kiválasztva terem, és a teremlista sem érhető el most."
+            : hasSubjects
+              ? "Válaszd ki az osztályod a jobb felső sarokban, és megjelenik az órarend."
+              : "Nincs beállítva az osztályod, és az osztálylista sem érhető el most."}
       </p>
     </div>
   );

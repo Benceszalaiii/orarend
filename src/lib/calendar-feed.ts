@@ -24,11 +24,11 @@ import { type DualSchedule, dualStatusFor } from "./dual-schedule";
 import { DUAL_DAY_END_MIN, DUAL_DAY_START_MIN } from "./dualis";
 import type { IcsEvent } from "./ics";
 import {
+  type PersonSubjectKind,
   periodsOfDay,
   type TimetableDay,
   type TimetableLesson,
   type TimetablePeriod,
-  type TimetableSubjectKind,
 } from "./timetable";
 import {
   groupLabel,
@@ -46,7 +46,7 @@ export type FeedWeek = {
 };
 
 export type FeedInput = {
-  kind: TimetableSubjectKind;
+  kind: PersonSubjectKind;
   /** Az alany jele — az UID névterébe és a naptár nevébe kerül. */
   short: string;
   weeks: readonly FeedWeek[];
@@ -80,7 +80,7 @@ function shortHash(value: string): string {
 //! eshetnek — közös UID mellett a naptár a kettőt EGYNEK hinné, és az egyik
 //! némán eltüntetné a másikat.
 function eventUid(input: {
-  kind: TimetableSubjectKind;
+  kind: PersonSubjectKind;
   short: string;
   dateKey: string;
   startMin: number;
@@ -234,6 +234,6 @@ export function feedEvents(input: FeedInput): IcsEvent[] {
 }
 
 /** A naptár neve, ahogy a telefon naptárlistájában megjelenik. */
-export function feedName(kind: TimetableSubjectKind, short: string): string {
+export function feedName(kind: PersonSubjectKind, short: string): string {
   return kind === "teacher" ? `${short} órarendje` : `${short} órarend`;
 }

@@ -26,7 +26,7 @@ import {
   revokeFeed,
   type StoredFeed,
 } from "@/lib/calendar-local";
-import { subjectStoreKey, type TimetableSubjectKind } from "@/lib/timetable";
+import { type PersonSubjectKind, subjectStoreKey } from "@/lib/timetable";
 
 //! ═══════════════════════════════════════════════════════════════════════════
 //! A NAPTÁR-FELIRATKOZÁS FELÜLETE
@@ -60,7 +60,7 @@ export function CalendarFeedMenu({
   subjectShort,
   hasDecisions,
 }: {
-  mode: TimetableSubjectKind;
+  mode: PersonSubjectKind;
   subjectShort: string;
   //! VAN-E MÁR CSOPORTBONTÁS-DÖNTÉS. Aki még egyet sem hozott, annak a
   //! naptárába az osztály MINDEN párhuzamos csoportja bekerül — két angol, két

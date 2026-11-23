@@ -40,9 +40,11 @@ const highlights = [
       "A legutóbb betöltött hetet hálózat nélkül is meg tudod nyitni.",
   },
   {
+    //! A BELÉPÉS MÁR AZ ISKOLAI GOOGLE-FIÓKKAL MEGY (lásd `/valtozasok`,
+    //! 2026-09-10). A korábbi „Jedlik AD-fiókoddal" egy kivezetett utat ígért.
     title: "Szinkronizálás",
     description:
-      "A Jedlik AD-fiókoddal a csoportbontásaid és beállításaid több eszközön is követhetnek.",
+      "Lépj be az iskolai Google-fiókoddal, és a csoportbontásaid, beállításaid minden eszközödön veled jönnek.",
   },
   {
     title: "Értesítések",

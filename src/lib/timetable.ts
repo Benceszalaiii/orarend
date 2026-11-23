@@ -34,10 +34,16 @@ export const PUBLIC_DEFAULT_CLASS = "13C";
 //! „tanári elemző": egyetlen modul tudja mindkettőt, és így nem tud a két
 //! nézet elcsúszni egymástól.
 //*
-//* A `classroom` szándékosan nincs bevezetve: terem-órarendre eddig nem volt
-//* kérés, és egy nem használt harmadik ág csak abban segítene, hogy némán
-//* elromoljon.
-export type TimetableSubjectKind = "class" | "teacher";
+//* A harmadik alany a TEREM (`/terem`): ugyanaz a kártya, ugyanaz a rács —
+//* csak a terem az, ami magától értetődik, és a kártyán az osztály ÉS a tanár
+//* is hír.
+export type TimetableSubjectKind = "class" | "teacher" | "classroom";
+
+//! AKIT KÖVETNI LEHET — ÉS A TEREM NEM ILYEN. Az értesítés és a
+//! naptár-feliratkozás EGY EMBER (egy diák osztálya, egy tanár) napját viszi
+//! egy készülékre. A terem órarendje nézelődésre való: senki nem „jár" egy
+//! terembe, ezért ezek az utak a típus szintjén sem fogadják el.
+export type PersonSubjectKind = Exclude<TimetableSubjectKind, "classroom">;
 
 /** Az órarend alanya — egy osztály vagy egy tanár, ahogy a forrás nevezi. */
 export type TimetableSubject = { short: string; name: string };
@@ -53,6 +59,7 @@ export type TimetableClass = TimetableSubject;
 const SUBJECT_PATH: Record<TimetableSubjectKind, string> = {
   class: "timetable/classes",
   teacher: "timetable/teachers",
+  classroom: "timetable/classrooms",
 };
 
 //* A felületen megjelenő szavak. A hibaüzenetek és a felszólítások mind innen
@@ -86,6 +93,13 @@ export const SUBJECT_WORDS: Record<
     listIn: "tanárlistájában",
     accusative: "tanárt",
   },
+  classroom: {
+    one: "terem",
+    oneCapital: "Terem",
+    list: "teremlista",
+    listIn: "teremlistájában",
+    accusative: "termet",
+  },
 };
 
 //* A korábban kiválasztott osztály/tanár megjegyzése: frissítéskor ne vesszen
@@ -93,6 +107,7 @@ export const SUBJECT_WORDS: Record<
 const SUBJECT_STORAGE_KEY: Record<TimetableSubjectKind, string> = {
   class: "orarend:class:v1",
   teacher: "orarend:teacher:v1",
+  classroom: "orarend:classroom:v1",
 };
 
 export function loadCachedSubject(kind: TimetableSubjectKind): string | null {
@@ -124,6 +139,7 @@ export function saveCachedSubject(
 export const SUBJECT_URL_PARAM: Record<TimetableSubjectKind, string> = {
   class: "class",
   teacher: "teacher",
+  classroom: "classroom",
 };
 
 export function loadUrlSubject(kind: TimetableSubjectKind): string | null {
@@ -181,7 +197,12 @@ export function subjectStoreKey(
   short: string,
 ): string {
   if (!short) return "";
-  return kind === "teacher" ? `tanar:${short}` : short;
+  //! A TEREM JELE ÜTKÖZHETNE IS. A `24`, `25` vagy `B1` alakra nem osztály,
+  //! de egy `tanar:` nélküli kulcstérben semmi nem tartaná távol egy jövőbeli
+  //! osztálynévtől — ezért ez is saját előtagot kap.
+  if (kind === "teacher") return `tanar:${short}`;
+  if (kind === "classroom") return `terem:${short}`;
+  return short;
 }
 
 //* ---------------------------------------------------------------------------
@@ -686,7 +707,8 @@ type ResolvedSubject = {
 //! `BNM`, `GÉ`) viszont nem gépelős mező: a listából választják ki. Ami mégis
 //! érkezhet — egy másik készülékről szinkronizált, azóta megszűnt jel, vagy
 //! kézzel írt cím — arra a kisbetű/nagybetű és a NÉV szerinti egyezés a
-//! tartalék; találgatni nem találgatunk.
+//! tartalék; találgatni nem találgatunk. A TEREM ugyanígy: a jele (`102`,
+//! `Klub1`, `tor`) listából jön, a teljes neve („118 - Könyvtár") a tartalék.
 function subjectKey(kind: TimetableSubjectKind, value: string): string {
   return kind === "class"
     ? classKey(value)
@@ -707,7 +729,9 @@ async function resolveSubjectResult(
         message:
           kind === "class"
             ? "Nincs beállítva (vagy nem ismerhető fel) az osztályod."
-            : "Nincs kiválasztva, kinek az órarendjét mutassuk.",
+            : kind === "classroom"
+              ? "Nincs kiválasztva, melyik terem órarendjét mutassuk."
+              : "Nincs kiválasztva, kinek az órarendjét mutassuk.",
         hint: `Válaszd ki a(z) ${words.accusative} a fenti listából.`,
         retryable: false,
       },
@@ -725,9 +749,10 @@ async function resolveSubjectResult(
   if (exact) return { resolved: exact };
   const byKey = subjects.find((c) => subjectKey(kind, c.short) === wanted);
   if (byKey) return { resolved: byKey };
-  //* Csak a tanárnál: a teljes név is azonosít („Ágoston Anett"). Az iskolai
-  //* belépés ezt adja vissza, nem a rövid jelet — lásd `/tanari`.
-  if (kind === "teacher") {
+  //* A tanárnál és a teremnél a teljes név is azonosít („Ágoston Anett",
+  //* „118 - Könyvtár"). Az iskolai belépés a tanár nevét adja vissza, nem a
+  //* rövid jelet — lásd `/tanari`.
+  if (kind !== "class") {
     const byName = subjects.find(
       (c) =>
         c.name.toLocaleLowerCase("hu") === input.trim().toLocaleLowerCase("hu"),
@@ -849,6 +874,12 @@ async function withSchoolCalendar(
   });
 }
 
+export async function resolveClassroom(
+  input: string | null | undefined,
+): Promise<TimetableSubject | null> {
+  return (await resolveSubjectResult("classroom", input)).resolved;
+}
+
 export async function getTimetableWeek(options: {
   //! MELYIK ALANY — ÉS EZ MARADHAT KIMONDATLAN. A régi hívók (`/ma`, az
   //! értesítés-számoló) osztályt kérnek, és nem is tudnak másról; nekik a
@@ -858,10 +889,17 @@ export async function getTimetableWeek(options: {
   class?: string | null;
   /** A tanár rövid jele vagy neve — `kind: "teacher"` esetén. */
   teacher?: string | null;
+  /** A terem jele (`102`, `Klub1`) — `kind: "classroom"` esetén. */
+  classroom?: string | null;
   weekStart?: string;
 }): Promise<TimetableWeek> {
   const kind: TimetableSubjectKind = options.kind ?? "class";
-  const wanted = kind === "teacher" ? options.teacher : options.class;
+  const wanted =
+    kind === "teacher"
+      ? options.teacher
+      : kind === "classroom"
+        ? options.classroom
+        : options.class;
   const words = SUBJECT_WORDS[kind];
   const weekStart = mondayOf(options.weekStart);
   const { resolved, error: resolveError } = await resolveSubjectResult(
@@ -893,7 +931,7 @@ export async function getTimetableWeek(options: {
       //! nem metszet lesz, hanem kiszámíthatatlan válasz.
       body: JSON.stringify({
         class: kind === "class" ? resolved.short : "",
-        classroom: "",
+        classroom: kind === "classroom" ? resolved.short : "",
         teacher: kind === "teacher" ? resolved.short : "",
         full: false,
         fromDate: weekStart,
@@ -965,7 +1003,11 @@ export async function getTimetableWeek(options: {
   });
 
   const lessons =
-    kind === "teacher" ? teacherLessons(cards) : cards.map(classLesson);
+    kind === "teacher"
+      ? teacherLessons(cards)
+      : kind === "classroom"
+        ? classroomLessons(cards)
+        : cards.map(classLesson);
 
   return {
     ok: true,
@@ -987,8 +1029,11 @@ export async function getTimetableWeek(options: {
 //!
 //!   osztály órarendje:  bal = TEREM,    jobb = TANÁR
 //!   tanár órarendje:    bal = OSZTÁLY,  jobb = TEREM
+//!   terem órarendje:    bal = TANÁR,    jobb = OSZTÁLY
 //!
-//! Ez nem következtetés: a `type` mező is ezt mondja (`"class"` / `"teacher"`),
+//! Ez nem következtetés: a `type` mező is ezt mondja (`"class"` / `"teacher"`
+//! / `"classroom"` — a termet 2026-11-23-án ellenőriztük a 102-esen és a
+//! tornacsarnokon),
 //! és a válaszok végignézve egyetlen kivétel sincs. Ha valaha megfordulna, ez
 //! az a két függvény, ami hazudni kezd — máshol nem kell keresni.
 function baseLesson(c: RawCard) {
@@ -1083,6 +1128,75 @@ function teacherLessons(cards: RawCard[]): TimetableLesson[] {
   });
 }
 
+//! ─── A TEREMBEN AZ OSZTÁLY ÉS A TANÁR IS HÍR ───────────────────────────────
+//! A terem órarendjén a terem magától értetődik — ő az alany. Ami a kártyán
+//! kérdés, az KÉT dolog: melyik osztály ül bent, és ki tartja az órát (a
+//! kivetítőhöz, a teremkulcshoz mindkettő kell). Ezért itt mindkét mező ki van
+//! töltve, és a terem mezője üres.
+//*
+//! AMIT ÖSSZEVONUNK: ugyanabban a percben, ugyanannál a tanárnál, ugyanabból a
+//! tantárgyból érkező több kártya EGY óra a teremben — pl. két osztály közös
+//! etikája, vagy egy tanár két csoportja. Az osztályokat felsoroljuk. Ami
+//! ezután is egymásra esik (két tanár egy teremben), az ütközés: fél oszlopot
+//! kap a rácson, ahogy az osztály bontott órája — eltüntetni nem szabad.
+function classroomLessons(cards: RawCard[]): TimetableLesson[] {
+  const buckets = new Map<string, RawCard[]>();
+  for (const c of cards) {
+    const key = [
+      c.dayOfWeek,
+      c.week,
+      c.startMinuteFromMidnight,
+      c.endMinuteFromMidnight,
+      c.leftBottom,
+      c.text,
+    ].join("|");
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(c);
+    else buckets.set(key, [c]);
+  }
+
+  const merged = [...buckets.values()].map((bucket) => {
+    const c = bucket[0];
+    const classes = [
+      ...new Set(bucket.map((x) => x.rightBottom).filter(Boolean)),
+    ];
+    const classShort = classes.join(", ");
+    const wholeClass = bucket.length > 1 || /egész osztály/i.test(c.groupName);
+    return {
+      ...baseLesson(c),
+      key: `${c.dayOfWeek}-${c.startMinuteFromMidnight}-${c.leftBottom}-${c.text}`,
+      teacher: c.leftBottomTitle || c.leftBottom,
+      teacherShort: c.leftBottom,
+      classShort,
+      className:
+        classes.length === 1 ? c.rightBottomTitle || classShort : classShort,
+      //* A terem maga az alany — a kártyán ismételné önmagát.
+      room: "",
+      group: wholeClass ? "" : c.groupName,
+      groupColumn: 0,
+      groupCount: 1,
+      wholeClass,
+    } satisfies TimetableLesson;
+  });
+
+  //* Ütközés: ugyanarra az időre két külön óra jut ugyanabba a terembe.
+  const slots = new Map<string, TimetableLesson[]>();
+  for (const l of merged) {
+    const key = `${l.dayOfWeek}|${l.week}|${l.startMin}|${l.endMin}`;
+    const slot = slots.get(key);
+    if (slot) slot.push(l);
+    else slots.set(key, [l]);
+  }
+  for (const slot of slots.values()) {
+    if (slot.length < 2) continue;
+    slot.forEach((l, i) => {
+      l.groupColumn = i;
+      l.groupCount = slot.length;
+    });
+  }
+  return merged;
+}
+
 export type CalendarEvent = {
   id: string;
   title: string;
@@ -1118,6 +1232,7 @@ export async function buildTimetableView(input: {
     kind,
     class: kind === "class" ? wanted : null,
     teacher: kind === "teacher" ? wanted : null,
+    classroom: kind === "classroom" ? wanted : null,
     weekStart: input.weekStart,
   });
   //* Az összevonási döntések ALANYONKÉNT külön állnak — a tanár döntései nem

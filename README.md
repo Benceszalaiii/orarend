@@ -12,8 +12,24 @@ fekvő lapra is kinyomtatható.
 
 ## Mit tud
 
+- **Navigáció a fejlécben.** A jobb felső folyékony váltóban a Hét és a Ma
+  mellett asztalon (80rem-től) a helyek is saját ikont kapnak — Ügyelet,
+  Teremkereső, Tantárgyak, Kivetítés, Nyitólap —, névvel és
+  gyorsbillentyűvel a buborékban. Telefonon ugyanezek az iránytű buborékában
+  vannak. A testreszabóban elrejtett helyek asztalon az iránytű mögé kerülnek.
+- **Gyorsválasztás.** A váltóban Diák · Tanár · Terem áll (a Ma csak Diák ·
+  Tanár), és az aktív szerep viseli a kiválasztott alanyt („13C"). Rákoppintva
+  görgetés nélkül, legfeljebb két koppintásból választasz: az osztályok
+  évfolyam-sorokban, a tanárok betű, a termek emelet szerint. A buborék
+  sarkában a „Hagyományos lista" visszahozza a böngésző saját listáját; a
+  Testreszabásban visszakapcsolható, és a beállítás szinkronizálódik.
 - **Heti rács.** A suli listájából bármelyik osztály, regisztráció nélkül. Az
   utoljára választott osztály megmarad az eszközön.
+- **Terem** (`/terem`). Egy terem heti rácsa, a váltó Terem szerepéből: mikor, melyik osztály és melyik tanár van benne. Ugyanaz a
+  lap, mint az osztályé és a tanáré, a Jedlikinfo `timetable/classrooms`
+  listájával és a `timetable/cards` `classroom` szűrőjével; a link megosztható
+  (`?classroom=102`). Értesítés, naptár-feliratkozás és duális beosztás itt
+  nincs — a termet nézik, nem követik. A választott terem csak az eszközön marad.
 - **Csoportbontás összevonása.** Az API az osztály minden párhuzamos csoportjának
   kártyáját visszaadja, ezért a bontott órák a rácsban egymásra csúsznak. Az
   ütköző kártyák azonosság szerint csoportokba kerülnek, a diák kiválasztja a
@@ -37,6 +53,14 @@ fekvő lapra is kinyomtatható.
   kezd. Egy tárgyon belül osztályonként (alapból) vagy tanáronként nézhető
   (`&nezet=tanar`); ha az órarendben választottál osztályt, az kerül előre, és
   meg is van jelölve — ezt a lap csak a böngészőből olvassa, nem küldi el.
+- **Kivetítés** (`/kivetites/<terem>`). A tanári gépen futó ScreenTask képe
+  saját lapon, ugyanarról a wifiről: a böngésző közvetlenül a tanári gépről
+  tölti le, a szerverünk nem látja. A terem címét egy tanár egyszer beállítja,
+  onnantól a link (akár QR-kódként az ajtón) mindenkinek működik. Az óra
+  részletlapjának „Kivetítés megnyitása" gombja is erre a lapra visz
+  (`?tanar=<jel>`, hogy a diák saját, tartalék címe is meglegyen), a vissza gomb
+  pedig az órarendre. Ahol a böngésző nem engedi a lapba ágyazott képet
+  (Safari, Firefox, `.local` név), a ScreenTask saját oldala nyílik új lapon.
 - **Nyomtatás.** `@page { size: A4 landscape }`, saját világos palettával, ami
   megtartja a tantárgyak színeit: a szín itt információ, nem dekoráció.
 - **Megnevezett hibák.** Az órarend adatai nem a mieink, ezért minden hibafajtának
@@ -54,6 +78,16 @@ fekvő lapra is kinyomtatható.
   Prisma kezeli
 - Két szerveroldali funkció: az osztályszintű használati számláló és a
   push-értesítések (Upstash Redis + VAPID)
+- A függvények **Frankfurtban (`fra1`) futnak** (`vercel.json`), az
+  adatbázis (Neon, `eu-central-1`) mellett és a diákokhoz közel. A Vercel
+  alapértelmezése `iad1` (Washington) volt: minden oldalbetöltés egy
+  óceánon túli adatbázis-kört fizetett.
+- **Azonnali indítás.** A service worker (`public/sw.js`) a nézeteket
+  (`/ma`, `/orarend`, `/tanari`, …) a mentett vázból nyitja meg, és a friss
+  HTML-t a háttérben tölti le a következő indításra; az órarend a böngésző
+  helyi példányából rajzolódik ki, amíg a friss hét megérkezik. A belépéshez
+  kötött lapok (`/admin`, `/statisztika`, `/belepes`) továbbra is előbb a
+  hálózatot kérdezik.
 
 ## Indítás
 
@@ -195,8 +229,8 @@ kétszeres kiküldést nem az ütemezés pontossága zárja ki, hanem egy Redisb
 **lefoglalt** kulcs (`SET NX`) — ugyanaz a minta, mint a jedlik-szakkor
 levélküldésénél.
 
-> **Az ütemezés kívülről jön.** A repóban nincs `vercel.json`: a Vercel
-> Hobby-terve naponta csak egyszer futtat cront, ami az óra előtti
+> **Az ütemezés kívülről jön.** A `vercel.json` csak a függvények régióját
+> rögzíti, cront nem: a Vercel Hobby-terve naponta csak egyszer futtat cront, ami az óra előtti
 > emlékeztetőhöz kevés. A végpont bármelyik ütemezőnek megfelel — a hívás
 > `GET` vagy `POST` a `/api/ertesites/tick`-re, `Authorization: Bearer
 > $CRON_SECRET` fejléccel.
@@ -346,6 +380,7 @@ src/
     orarend/       heti rács (alapértelmezett útvonal)
     ma/            a mai nap egy képernyőn
     tanari/        tanári heti nézet
+    terem/         egy terem heti nézete
     valtozasok/    változások listája
     belepes/       opcionális iskolai belépés
     adatvedelem/   adatvédelmi tájékoztató

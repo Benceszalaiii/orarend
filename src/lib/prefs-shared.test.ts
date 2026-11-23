@@ -87,6 +87,7 @@ describe("sanitizePrefs", () => {
       },
       dual: { "12A": { A: [1], B: [] } },
       hiddenMenu: ["duty"],
+      quickPick: false,
     };
     expect(sanitizePrefs(full)).toEqual(full as never);
   });

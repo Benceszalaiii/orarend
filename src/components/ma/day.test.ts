@@ -245,6 +245,48 @@ describe("daySummary", () => {
     expect(daySummary(day, true)).toBe("2 óra · 1 lyukasóra");
   });
 
+  test("a többórás blokk minden órája számít", () => {
+    //* Tripla C# (1–3.) + dupla matek (4–5.): két blokk, de öt óra.
+    const multi = view({
+      lessons: [480, 535, 590].map((startMin) =>
+        lesson({ startMin, endMin: startMin + 45, subjectShort: "C#" }),
+      ),
+    });
+    multi.lessons.push(
+      ...[650, 705].map((startMin) =>
+        lesson({
+          startMin,
+          endMin: startMin + 45,
+          subjectShort: "mat",
+          teacherShort: "KB",
+        }),
+      ),
+    );
+    const day = buildDayModel(multi, [], MON, null);
+    if (!day) throw new Error("nincs nap");
+    expect(day.lessonCount).toBe(2);
+    expect(day.periodCount).toBe(5);
+    expect(daySummary(day, true)).toBe("5 óra");
+  });
+
+  test("a párhuzamos csoportórák egy órának számítanak", () => {
+    const parallel = view({
+      lessons: ["AA", "BB"].map((teacherShort, i) =>
+        lesson({
+          subjectShort: "ang",
+          group: String(i + 1),
+          groupColumn: i,
+          groupCount: 2,
+          wholeClass: false,
+          teacherShort,
+        }),
+      ),
+    });
+    const day = buildDayModel(parallel, [], MON, null);
+    if (!day) throw new Error("nincs nap");
+    expect(daySummary(day, true)).toBe("1 óra");
+  });
+
   test("üres nap", () => {
     const day = buildDayModel(view(), [], MON, null);
     if (!day) throw new Error("nincs nap");

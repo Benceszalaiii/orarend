@@ -129,11 +129,18 @@ export function useDayView({
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [pickedKey, setPickedKey] = useState<string | null>(null);
   const [today, setToday] = useState<string | null>(null);
+  //! A „MA" AZ ÓRÁVAL LÉP, NEM A MEGNYITÁSSAL. Az éjszakán át nyitva hagyott
+  //! lap reggel különben a tegnapot tekintené mainak: a hero a tegnapi napra
+  //! mérne, a „most" sehol nem állna. A közös óra napja éjfélkor (és ébredéskor
+  //! azonnal) vált — ilyenkor a lap a mai napra áll vissza.
+  const clockDay = clock?.day ?? null;
   useEffect(() => {
+    if (!clockDay) return;
     const key = todayKey();
     setToday(key);
     setFocusKey(focusDayKey(key));
-  }, []);
+    setPickedKey(null);
+  }, [clockDay]);
 
   const lastFetch = useRef(0);
 
@@ -246,8 +253,16 @@ export function useDayView({
         day,
         dayAll,
         mineKeys,
-        hiddenCount:
-          dayAll && day ? Math.max(0, dayAll.lessonCount - day.lessonCount) : 0,
+        //* Órában, nem blokkban: egy elrejtett dupla óra KÉT óra.
+        hiddenCount: day
+          ? (dayAll?.segments ?? []).reduce(
+              (sum, seg) =>
+                seg.kind === "lesson" && !mineKeys.has(seg.key)
+                  ? sum + seg.run.lessonCount
+                  : sum,
+              0,
+            )
+          : 0,
       };
     });
   }, [view, week, prefs, dualSchedule]);

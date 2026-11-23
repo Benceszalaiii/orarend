@@ -13,7 +13,7 @@ import { dualStatusFor } from "./dual-schedule";
 import { dualBlockLesson } from "./dualis";
 import type { DualScheduleEntry } from "./prefs-shared";
 import { LEAD_MINUTES, LEAD_WINDOW_MINUTES } from "./push-shared";
-import type { TimetableLesson, TimetableSubjectKind } from "./timetable";
+import type { PersonSubjectKind, TimetableLesson } from "./timetable";
 import { type MergePreference, resolveDay } from "./timetable-merge";
 
 const TIME_ZONE = "Europe/Budapest";
@@ -257,7 +257,7 @@ function teacherReminderText(reminder: Reminder): {
 //* hol) — a rendszersávban gyakran csak a cím látszik.
 export function reminderText(
   reminder: Reminder,
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   classShort: string,
 ): { title: string; body: string } {
   if (kind === "teacher") return teacherReminderText(reminder);
@@ -616,7 +616,7 @@ const CHANGE_LINES = 3;
 
 export function changeText(
   changes: readonly Change[],
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
 ): { title: string; body: string } {
   const shown = changes.slice(0, CHANGE_LINES).map((c) => c.text);

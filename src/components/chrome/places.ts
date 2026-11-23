@@ -23,7 +23,7 @@ import type { MenuItemId } from "@/lib/menu-items";
 
 export type PlaceId = Extract<
   MenuItemId,
-  "duty" | "rooms" | "subjects" | "screens" | "home"
+  "duty" | "rooms" | "roomTimetable" | "subjects" | "screens" | "home"
 >;
 
 export type Place = {
@@ -55,6 +55,10 @@ export const PLACES: readonly Place[] = [
     Icon: DoorOpen,
     hotkey: "k",
   },
+  //! A TEREM HETI RÁCSA (`/terem`) MÁR NEM HELY. A váltóban a „Hét" cella
+  //! harmadik szerepe lett (Diák · Tanár · Terem, lásd `pill-nav.tsx`), mert
+  //! ugyanaz a rács, csak más alannyal. A `roomTimetable` jel a
+  //! testreszabóban kihasználatlanul marad (szerződés, lásd `menu-items.ts`).
   {
     id: "subjects",
     href: "/tantargyak",

@@ -114,7 +114,11 @@ export function useDutyDay(): DutyDayState {
   //! válasza triviálisan nem — akit érdekel a beosztás, az a HÉTFŐI-t nézi.
   //! Ugyanaz a döntés, mint az órarendé (`focusMondayKey`), és ugyanonnan jön,
   //! hogy a két lap ne mondjon két különböző „mostani hetet”.
+  //* A „ma" az órával lép (lásd `use-day-view.ts`): az éjszakán át nyitva
+  //* hagyott lap reggel a mai napra áll vissza.
+  const clockDay = clock?.day ?? null;
   useEffect(() => {
+    if (!clockDay) return;
     const key = todayKey();
     const monday = focusMondayKey(key);
     setToday(key);
@@ -125,7 +129,7 @@ export function useDutyDay(): DutyDayState {
         86_400_000,
     );
     setIndex(offset >= 0 && offset <= 4 ? offset : 0);
-  }, []);
+  }, [clockDay]);
 
   //* Az ügyeleti tábla tanévnyi állandó — egyszer, a lap életére.
   useEffect(() => {

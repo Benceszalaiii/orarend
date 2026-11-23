@@ -8,10 +8,15 @@ import {
   type LessonRun,
   lessonIdentity,
   type MergePreference,
-  type PeriodLike,
   resolveDay,
 } from "@/lib/timetable-merge";
-import { weekLetterOf } from "./day";
+import {
+  coveredPeriods,
+  mergeSpans,
+  type Span,
+  teachingSpans,
+  weekLetterOf,
+} from "./day";
 
 //* ---------------------------------------------------------------------------
 //* A HÉT MODELLJE — amit a rács NEM mond meg
@@ -123,36 +128,6 @@ function netMinutes(run: LessonRun): number {
   return Math.max(0, gross - breaks);
 }
 
-type Span = { startMin: number; endMin: number };
-
-//* Ugyanaz a tanítási idő, sávokra bontva: a futam ideje, a benne lévő szünetek
-//* kivágásával. A hosszuk összege pontosan a `netMinutes`.
-function teachingSpans(run: LessonRun): Span[] {
-  const spans: Span[] = [];
-  let cursor = run.startMin;
-  for (const gap of [...run.breaks].sort((a, b) => a.startMin - b.startMin)) {
-    if (gap.startMin > cursor) {
-      spans.push({ startMin: cursor, endMin: gap.startMin });
-    }
-    cursor = Math.max(cursor, gap.endMin);
-  }
-  if (run.endMin > cursor) spans.push({ startMin: cursor, endMin: run.endMin });
-  return spans;
-}
-
-function mergeSpans(spans: Span[]): Span[] {
-  const out: Span[] = [];
-  for (const span of [...spans].sort((a, b) => a.startMin - b.startMin)) {
-    const last = out[out.length - 1];
-    if (last && span.startMin <= last.endMin) {
-      last.endMin = Math.max(last.endMin, span.endMin);
-      continue;
-    }
-    out.push({ ...span });
-  }
-  return out;
-}
-
 //! A NAP HOSSZA NEM AZ ÓRÁK ÖSSZEGE, HANEM A LEFEDETT IDŐ. Feloldatlan
 //! csoportbontásnál két óra ugyanarra a percre esik; összeadva a hétfő „7 óra
 //! 30 perc" lenne egy hat órás napon, és a hét sávján a leghosszabb csík olyan
@@ -160,14 +135,6 @@ function mergeSpans(spans: Span[]): Span[] {
 //! — egyszer is számoljuk.
 function coveredMinutes(merged: Span[]): number {
   return merged.reduce((sum, span) => sum + (span.endMin - span.startMin), 0);
-}
-
-//* Ugyanez órákban: hány tanítási sávot érint a nap lefedett ideje.
-function coveredPeriods(merged: Span[], periods: PeriodLike[]): number {
-  const hit = periods.filter((p) =>
-    merged.some((s) => p.startMin < s.endMin && s.startMin < p.endMin),
-  ).length;
-  return hit > 0 ? hit : merged.length;
 }
 
 function branchOption(option: {

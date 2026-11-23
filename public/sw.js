@@ -7,7 +7,10 @@
 //! Szándékosan kézzel írt és rövid: egy offline gyorsítótár-könyvtár több
 //! viselkedést hozna, mint amennyit ez a lap használ.
 
-const VERSION = "orarend-v4";
+//* v5: a nézetek a mentett vázból indulnak (lásd `navigate`), és az
+//* átirányításból mentett példány jelölést kap — a régi, jelöletlen
+//* példányokat ezért ki kell söpörni.
+const VERSION = "orarend-v5";
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -66,13 +69,125 @@ const ASSET_PATTERN = /\/_next\/static\/[A-Za-z0-9._\-/]+/g;
 //*
 //* Az átcsomagolás ugyanazt a törzset és fejlécet viszi tovább, csak a
 //* „követett átirányítás" jelölés vész el vele — pontosan az, ami zavar.
+//*
+//! A JELÖLÉS VISZONT NEM VESZHET EL NYOMTALANUL. Az átirányításból mentett
+//! példány a `/` kulcsán egy MÁSIK lap tartalmát hordja (pl. a `/ma`-ét). Ezt
+//! offline tartaléknak jó, azonnali indításra nem: a cím és a tartalom szétesne.
+//! Ezért kap egy saját fejlécet, amiből a `navigate` felismeri.
+const REDIRECTED_HEADER = "x-sw-redirected";
+
 function storable(response) {
   if (!response.redirected) return response;
+  const headers = new Headers(response.headers);
+  headers.set(REDIRECTED_HEADER, "1");
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
-    headers: response.headers,
+    headers,
   });
+}
+
+//! ─── AZONNALI INDÍTÁS ──────────────────────────────────────────────────────
+//! A TELEFONON MEGNYITOTT APP EDDIG A HÁLÓZATRA VÁRT, MIELŐTT BÁRMIT RAJZOLT.
+//! A HTML kérésenként renderelődik (a gyökér-elrendezés munkamenetet olvas),
+//! tehát minden indítás egy teljes kiszolgálói kör volt — hidegindításkor a
+//! függvény ébredésével és az adatbázis-kapcsolattal együtt, gyenge iskolai
+//! wifin pedig a `fetch` addig lógott, amíg a böngésző fel nem adta. Ez volt
+//! az 5–10 másodperc.
+//*
+//! EZEKEN A CÍMEKEN A MENTETT VÁZ AZONNAL JÖN, A FRISS A HÁTTÉRBEN ÉRKEZIK
+//! (stale-while-revalidate). Biztonságosan megtehető, mert ezeknek a lapoknak a
+//! HTML-je csak váz: az órarendet a böngésző tölti le, és a lap maga mondja ki,
+//! ha a mutatott hét a helyi példányból van (`lib/timetable-cache.ts`). A
+//! következő indítás már a háttérben frissült vázat kapja.
+//*
+//! AMI NINCS A LISTÁN, AZ MARAD „ELŐBB A HÁLÓZAT": a belépés, az `/admin`, a
+//! `/statisztika` HTML-je a munkamenettől függ, és egy kijelentkezés után nem
+//! mutathatja a mentett, belépett állapotot. A `/valtozasok` a kiszolgálón
+//! számol dátumot, ezért az sem.
+const FAST_START = new Set([
+  "/",
+  "/home",
+  "/ma",
+  "/orarend",
+  "/tanari",
+  "/terem",
+  "/teremkereso",
+  "/ugyelet",
+  "/tantargyak",
+  "/miert",
+  "/adatvedelem",
+]);
+
+//* A friss HTML hivatkozta, még nem mentett kód- és stíluslapok. Egy új build
+//* után így a KÖVETKEZŐ indítás is teljesen helyből fut, és hálózat nélkül sem
+//* hiányzik semmi a frissített vázból.
+async function warmAssets(html) {
+  const runtime = await caches.open(RUNTIME);
+  const urls = [...new Set(html.match(ASSET_PATTERN) ?? [])];
+  await Promise.all(
+    urls.map(async (url) => {
+      if (await runtime.match(url)) return;
+      await runtime.add(url).catch(() => undefined);
+    }),
+  );
+}
+
+//* A hálózati kör, ami a vázat is frissíti. A navigációs előtöltés (ha a
+//* böngésző tudja) a worker ébredésével PÁRHUZAMOSAN indítja a kérést, nem
+//* utána — a „nincs mentett példány" ágon ez a worker indulásának idejét spórolja.
+function fetchAndStore(event) {
+  const request = event.request;
+  return Promise.resolve(event.preloadResponse)
+    .then((preloaded) => preloaded || fetch(request))
+    .then((response) => {
+      if (response.ok && response.type === "basic") {
+        const copy = storable(response.clone());
+        const html = response.clone();
+        event.waitUntil(
+          caches
+            .open(SHELL)
+            .then((cache) => cache.put(request, copy))
+            .then(() => html.text())
+            .then(warmAssets)
+            .catch(() => undefined),
+        );
+      }
+      return response;
+    });
+}
+
+async function navigate(event) {
+  const request = event.request;
+  const url = new URL(request.url);
+  const network = fetchAndStore(event);
+
+  if (FAST_START.has(url.pathname)) {
+    const cached = await caches.match(request, { cacheName: SHELL });
+    if (cached && !cached.headers.has(REDIRECTED_HEADER)) {
+      //! A HÁTTÉRBELI KÖRNEK VÉGIG KELL FUTNIA, különben a böngésző a válasz
+      //! után leállíthatja a workert, és a váz soha nem frissülne.
+      event.waitUntil(network.catch(() => undefined));
+      return cached;
+    }
+  }
+
+  try {
+    return await network;
+  } catch {
+    //* `ignoreSearch`: a mentett példány a tiszta útvonalon ül, a
+    //* megnyitás viszont gyakran hoz lekérdezést (`?utm=`, megosztott
+    //* link) — enélkül a saját oldalunkat NEM ismernénk fel.
+    const cached =
+      (await caches.match(request)) ||
+      (await caches.match(request, { ignoreSearch: true }));
+    if (cached) return cached;
+    //! ISMERETLEN ÚTVONALRA NEM ADUNK MÁS OLDALT. Régen a `/ma` jött
+    //! ilyenkor: a `/statisztika` hálózat nélkül a mai nap tartalmát
+    //! mutatta, a saját címén. Aki nem tudja, hogy offline van, az azt
+    //! hiszi, ELROMLOTT a lap. Az `OFFLINE_URL` kimondja, mi történt.
+    return (await caches.match(OFFLINE_URL)) || Response.error();
+  }
 }
 
 async function precache() {
@@ -139,6 +254,17 @@ self.addEventListener("activate", (event) => {
             .map((key) => caches.delete(key)),
         ),
       )
+      //* Navigációs előtöltés: a lap kérése a worker ébredésével párhuzamosan
+      //* indul. Ahol a böngésző nem tudja, a `fetchAndStore` sima kérésre vált.
+      //* Fejlesztésben KI: ott a `fetch` figyelő nem szól bele, és egy el nem
+      //* vett előtöltés minden navigációnál figyelmeztetést írna.
+      .then(() => {
+        const preload = self.registration.navigationPreload;
+        if (!preload) return undefined;
+        return (DEV ? preload.disable() : preload.enable()).catch(
+          () => undefined,
+        );
+      })
       .then(() => self.clients.claim()),
   );
 });
@@ -164,35 +290,11 @@ self.addEventListener("fetch", (event) => {
   //* Az RSC-válaszok kérésenként eltérnek; eltárolva rossz oldalt adnának vissza.
   if (url.searchParams.has("_rsc")) return;
 
-  //! A LAP MEGNYITÁSA: előbb a hálózat, mert a friss HTML a helyes. Ha nincs
-  //! hálózat, a mentett váz jön — és a lap ilyenkor kiírja, milyen régi
-  //! órarendet mutat.
+  //! A LAP MEGNYITÁSA: a nézeteken a mentett váz azonnal, mindenhol máshol
+  //! előbb a hálózat. Hálózat nélkül a mentett váz jön — és a lap ilyenkor
+  //! kiírja, milyen régi órarendet mutat. Lásd `navigate`.
   if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = storable(response.clone());
-          caches
-            .open(SHELL)
-            .then((cache) => cache.put(request, copy))
-            .catch(() => undefined);
-          return response;
-        })
-        .catch(async () => {
-          //* `ignoreSearch`: a mentett példány a tiszta útvonalon ül, a
-          //* megnyitás viszont gyakran hoz lekérdezést (`?utm=`, megosztott
-          //* link) — enélkül a saját oldalunkat NEM ismernénk fel.
-          const cached =
-            (await caches.match(request)) ||
-            (await caches.match(request, { ignoreSearch: true }));
-          if (cached) return cached;
-          //! ISMERETLEN ÚTVONALRA NEM ADUNK MÁS OLDALT. Régen a `/ma` jött
-          //! ilyenkor: a `/statisztika` hálózat nélkül a mai nap tartalmát
-          //! mutatta, a saját címén. Aki nem tudja, hogy offline van, az azt
-          //! hiszi, ELROMLOTT a lap. Az `OFFLINE_URL` kimondja, mi történt.
-          return (await caches.match(OFFLINE_URL)) || Response.error();
-        }),
-    );
+    event.respondWith(navigate(event));
     return;
   }
 

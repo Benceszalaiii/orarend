@@ -300,11 +300,19 @@ function LessonBody({
           </Row>
         )}
 
+        {/*//* A terem órarendjén a terem az alany — a kártyán nincs, a
+            //* kiegészítőknek viszont kell, hogy tudják, HOL volt az óra. */}
         <LessonExtrasSection
           teacher={mode === "teacher" ? viewedShort : lesson.teacherShort}
           subject={lesson.subjectShort || lesson.subject}
-          classes={mode === "teacher" ? [lesson.classShort] : [viewedShort]}
-          rooms={rooms}
+          classes={
+            mode === "teacher"
+              ? [lesson.classShort]
+              : mode === "classroom"
+                ? lesson.classShort.split(", ").filter(Boolean)
+                : [viewedShort]
+          }
+          rooms={mode === "classroom" ? [viewedShort] : rooms}
         />
 
         {groupOnly && (

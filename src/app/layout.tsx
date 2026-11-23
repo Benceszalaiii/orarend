@@ -42,6 +42,11 @@ const jakartaSans = localFont({
 });
 
 export const metadata: Metadata = {
+  //! A RELATÍV KÉP- ÉS LINKCÍMEK ALAPJA. Enélkül a Next éles üzemben a Vercel
+  //! által adott tartománynévből rakja össze az `og:image`-et és társait, ami
+  //! nem feltétlenül a `jedlik.info`. Fejlesztés közben a Next SZÁNDÉKOSAN a
+  //! `localhost`-ot írja ki (lásd `resolve-url.js`) — az nem hiba.
+  metadataBase: new URL("https://jedlik.info"),
   title: "Jedlik Info",
   description:
     "A Győri SZC Jedlik Ányos technikum órarendje osztályokra, csoportbontásokra és duális hetekre bontva.",

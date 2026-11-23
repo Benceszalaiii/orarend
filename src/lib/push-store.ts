@@ -4,9 +4,9 @@ import type { WeekSnapshot } from "./push-plan";
 import type { PushPersonalization, PushPrefs } from "./push-shared";
 import { subjectsOf } from "./push-shared";
 import {
+  type PersonSubjectKind,
   subjectStoreKey,
   type TimetableLesson,
-  type TimetableSubjectKind,
 } from "./timetable";
 
 //! CSAK A SZERVEREN. Ez a modul az írás-jogú tokent olvassa a környezetből —
@@ -69,22 +69,19 @@ const SUB_KEY = (id: string) => `push:sub:${id}`;
 //! nyitja meg a lapot. A tanár a maga előtagját kapja, és ezzel a két névtér
 //! akkor sem ér össze, ha a suli egyszer számjeggyel kezdődő tanári jelet ad
 //! ki.
-const SUBJECT_KEY = (kind: TimetableSubjectKind, short: string) =>
+const SUBJECT_KEY = (kind: PersonSubjectKind, short: string) =>
   kind === "teacher" ? `push:teacher:${short}` : `push:class:${short}`;
 
 //* Melyik alanyokra van EGYÁLTALÁN feliratkozó. Enélkül a háttérfeladatnak
 //* végig kellene pásztáznia a kulcsteret, hogy megtudja, kinek dolgozzon.
-const SUBJECT_INDEX: Record<TimetableSubjectKind, string> = {
+const SUBJECT_INDEX: Record<PersonSubjectKind, string> = {
   class: "push:classes",
   teacher: "push:teachers",
 };
 
 //* A háttérfeladat mindkét ágon ugyanazt csinálja, csak más listából — ezért
 //* mindenhol EZEN a soron megyünk végig, és nem két külön másolaton.
-export const SUBJECT_KINDS: readonly TimetableSubjectKind[] = [
-  "class",
-  "teacher",
-];
+export const SUBJECT_KINDS: readonly PersonSubjectKind[] = ["class", "teacher"];
 
 //! MEDDIG ÉL EGY FELIRATKOZÁS. Egy tanév plusz a szünet: aki egy éve nem
 //! nyitotta meg a lapot, annak az órarend-értesítés már nem szolgáltatás,
@@ -150,14 +147,14 @@ export async function readSubscription(
 
 //* Mely alanyokra van feliratkozó — a háttérfeladat munkalistája.
 export async function subscribedSubjects(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
 ): Promise<string[]> {
   if (!redis) return [];
   return (await redis.smembers(SUBJECT_INDEX[kind])) ?? [];
 }
 
 export async function subscribersOf(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
 ): Promise<PushSubscription[]> {
   if (!redis) return [];
@@ -209,7 +206,7 @@ async function lease(key: string, ttlSeconds: number): Promise<boolean> {
 //! foglalása közös kulcson OSSZA EGYMÁST — az egyik kiküldés elnyelné a
 //! másikat, és a hiba pont az a fajta lenne, ami csak élesben, ritkán, egy
 //! elmaradt értesítésként derül ki.
-function subjectNs(kind: TimetableSubjectKind, short: string): string {
+function subjectNs(kind: PersonSubjectKind, short: string): string {
   return subjectStoreKey(kind, short);
 }
 
@@ -221,7 +218,7 @@ function subjectNs(kind: TimetableSubjectKind, short: string): string {
 //! egyik csoportnak a 214, a másiknak a 305. Egy percre szóló közös kulcs
 //! mellett az első kiküldés elnyelné a többit.
 export function leaseReminder(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
   dayKey: string,
   startMin: number,
@@ -237,7 +234,7 @@ export function leaseReminder(
 //* A változás-értesítés foglalása a különbség lenyomatával. Egy nap: ha
 //* ugyanaz a változás egy nap múlva ÚJRA előáll, az már valóban új hír.
 export function leaseChange(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
   fingerprint: string,
 ): Promise<boolean> {
@@ -269,7 +266,7 @@ export type CachedWeekLessons = {
 };
 
 export async function readWeekCache(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
   weekStart: string,
 ): Promise<CachedWeekLessons | null> {
@@ -280,7 +277,7 @@ export async function readWeekCache(
 }
 
 export async function writeWeekCache(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
   weekStart: string,
   lessons: TimetableLesson[],
@@ -300,7 +297,7 @@ export async function writeWeekCache(
 const SNAPSHOT_SECONDS = 60 * 60 * 24 * 30;
 
 export async function readSnapshot(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
   weekStart: string,
 ): Promise<WeekSnapshot | null> {
@@ -311,7 +308,7 @@ export async function readSnapshot(
 }
 
 export async function writeSnapshot(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
   weekStart: string,
   snapshot: WeekSnapshot,
