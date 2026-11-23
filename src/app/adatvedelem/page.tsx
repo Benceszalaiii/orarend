@@ -332,8 +332,9 @@ export default function AdatvedelemPage() {
             </p>
             <p>
               Belépés után a saját órarend-beállításaid (osztály, összevont
-              csoportbontások, duális beosztás, utoljára megnyitott nézet) a
-              fiókodhoz mentődnek. Ezen kívül semmi mást nem kötünk a fiókodhoz:
+              csoportbontások, duális beosztás, utoljára megnyitott nézet, a
+              megjelenés és a testreszabás, például az elrejtett sorok és a
+              gyorsválasztás be- vagy kikapcsolása) a fiókodhoz mentődnek. Ezen kívül semmi mást nem kötünk a fiókodhoz:
               sem azt, hogy melyik osztály órarendjét mikor nézted meg, sem az
               értesítés-feliratkozásaidat — a használati statisztika és az
               értesítések ugyanúgy névtelenek maradnak, mint bejelentkezés
@@ -491,7 +492,7 @@ export default function AdatvedelemPage() {
               Helyi tárolás a böngészőben
             </h2>
             <p>
-              A kiválasztott osztály (a tanári és a terem-órarenden a
+              A kiválasztott osztály (a tanári és a terem órarendjén a
               kiválasztott tanár, illetve terem), a beállítások (pl. összevont
               csoportbontások, duális beosztás) és az utoljára megnyitott nézet
               a böngésző saját, helyi tárolójában (localStorage) mentődnek,

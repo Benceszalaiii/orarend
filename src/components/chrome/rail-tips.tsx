@@ -38,9 +38,21 @@ type Tip = {
   top: number;
 };
 
+//* A buborék két fajta vezérlőt ismer: a sáv sorait (`.sheet-item`) és bármit,
+//* ami `data-tip`-ben mondja meg a nevét — így a folyékony váltó helyeinek
+//* ikoncellái (`pill-nav.tsx`) is ugyanezt a buborékot és billentyűt kapják.
+const TIPPED = ".sheet-item, [data-tip]";
+
 //* A gomb olvasóneve két részből áll (`SheetItemBody`): a felirat az első
 //* blokk, a magyarázat a `sheet-hint`. A buborék ugyanezt a kettőt mutatja.
 function readTip(el: HTMLElement): Omit<Tip, "left" | "top"> | null {
+  if (el.dataset.tip) {
+    return {
+      label: el.dataset.tip,
+      hint: el.dataset.tipHint ?? "",
+      hotkey: el.dataset.key?.toUpperCase() ?? "",
+    };
+  }
   const text = el.querySelector(".sheet-item-text");
   const label = text?.firstElementChild?.textContent?.trim() ?? "";
   if (!label) return null;
@@ -85,9 +97,7 @@ export function RailTips({
       ) {
         return;
       }
-      const el = (event.target as Element | null)?.closest<HTMLElement>(
-        ".sheet-item",
-      );
+      const el = (event.target as Element | null)?.closest<HTMLElement>(TIPPED);
       if (!el || !rail.contains(el)) return;
       const read = readTip(el);
       if (!read) return;
@@ -100,7 +110,7 @@ export function RailTips({
       //* mozgó egér (ikonról a szegélyre) ne villogtassa.
       if (event.type === "pointerout") {
         const next = (event as PointerEvent).relatedTarget as Element | null;
-        if (next?.closest(".sheet-item")) return;
+        if (next?.closest(TIPPED)) return;
       }
       setTip(null);
     };
@@ -153,7 +163,7 @@ export function RailTips({
       }
       const key = event.key.toLowerCase();
       const hit = rail.querySelector<HTMLElement>(
-        `.sheet-item[data-key="${key}"]`,
+        `.sheet-item[data-key="${key}"], [data-tip][data-key="${key}"]`,
       );
       if (!hit) return;
       event.preventDefault();

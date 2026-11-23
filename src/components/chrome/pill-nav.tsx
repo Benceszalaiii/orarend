@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  ChevronDown,
   Compass,
+  DoorOpen,
   GraduationCap,
   type LucideIcon,
   Presentation,
@@ -17,20 +19,34 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   type PointerEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
   useCallback,
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import { launchFlood, registerPillNav } from "@/components/chrome/flood";
-import { PLACES, placeOf, readFlight } from "@/components/chrome/places";
+import {
+  PLACES,
+  type PlaceId,
+  placeOf,
+  readFlight,
+} from "@/components/chrome/places";
 import { PlacesPanel } from "@/components/chrome/places-panel";
 import { type Pour, readPour } from "@/components/chrome/pour";
+import { RailTips } from "@/components/chrome/rail-tips";
+import {
+  QuickPickToast,
+  type SubjectPickerSpec,
+  SubjectQuickPick,
+} from "@/components/chrome/subject-quick-pick";
+import { useWideChrome } from "@/components/chrome/use-wide-chrome";
 import {
   DEFAULT_IDENTITY,
   type Identity,
@@ -38,7 +54,11 @@ import {
   saveIdentity,
   weekRouteFor,
 } from "@/lib/identity";
+import { DEFAULT_HIDDEN_MENU, loadHiddenMenu } from "@/lib/menu-items";
 import { onPrefsChanged } from "@/lib/prefs-events";
+import { saveQuickPick, useQuickPick } from "@/lib/quick-pick";
+import { roomLabel } from "@/lib/subject-groups";
+import type { TimetableSubjectKind } from "@/lib/timetable";
 import { cn } from "@/lib/utils";
 
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -65,6 +85,9 @@ import { cn } from "@/lib/utils";
 //* a folyadék oda is átfolyik, ha az ügyeleten, a teremkeresőn, a kivetítésen
 //* vagy a nyitólapon állsz — így a váltó minden lapon megmondja, hol vagy.
 type ViewId = "week" | "today" | "places";
+//* Sáv-alakban (lásd `NavCells` lentebb) minden hely SAJÁT cella, és a
+//* folyadék egyenesen rá folyik — ott a kulcs maga a hely.
+type NavKey = ViewId | PlaceId;
 
 const VIEWS: readonly {
   id: Exclude<ViewId, "places">;
@@ -76,30 +99,45 @@ const VIEWS: readonly {
 ];
 
 const ROLES: readonly {
-  id: Identity;
+  id: Role;
   label: string;
   title: string;
   Icon: LucideIcon;
   blob: string;
+  /** A folyadékon álló szöveg színe. */
+  ink: string;
 }[] = [
-  {
-    id: "teacher",
-    label: "Tanár",
-    title: "Tanár órarendje",
-    Icon: Presentation,
-    blob: "bg-chart-3",
-  },
   {
     id: "class",
     label: "Diák",
     title: "Osztály órarendje",
     Icon: GraduationCap,
     blob: "bg-primary",
+    ink: "text-ink-on-primary",
+  },
+  {
+    id: "teacher",
+    label: "Tanár",
+    title: "Tanár órarendje",
+    Icon: Presentation,
+    blob: "bg-chart-3",
+    ink: "text-[var(--ink-on-band)]",
+  },
+  {
+    id: "room",
+    label: "Terem",
+    title: "Terem órarendje",
+    Icon: DoorOpen,
+    blob: "bg-chart-2",
+    ink: "text-[var(--ink-on-band)]",
   },
 ];
 
-const VIEW_KEYS: readonly ViewId[] = [...VIEWS.map((v) => v.id), "places"];
-const ROLE_KEYS = ROLES.map((r) => r.id);
+//* A „Hét" mindhármat, a „Ma" csak a két személyt viszi (lásd `RoleSwitch`).
+const ROLE_KEYS_OF: Record<"week" | "today", readonly Role[]> = {
+  week: ["class", "teacher", "room"],
+  today: ["class", "teacher"],
+};
 
 //* A tanári rács ugyanaz a NÉZET, más alannyal — ezért ő is a „Hét"-et
 //* világítja meg. A helyek (nyitólap, ügyelet, teremkereső, kivetítés) a
@@ -109,6 +147,7 @@ const VIEW_OF: Record<string, ViewId> = {
   "/orarend": "week",
   "/tanari": "week",
   "/ma": "today",
+  "/terem": "week",
   ...Object.fromEntries(PLACES.map((p) => [p.href, "places" as const])),
 };
 
@@ -154,7 +193,7 @@ const LEAN = 5;
 //! végig élve írja a jegyzetet (`useLayoutEffect`), és az új épp akkor olvassa,
 //! amikor a régi még áll. Ha közben nem állt váltó (pl. a `/valtozasok`-ról
 //! jössz vissza), a jegyzet csak rövid ideig érvényes.
-type Handoff = { view: ViewId | null; role: Identity };
+type Handoff = { view: NavKey | null; role: Role };
 let handoff: Handoff | null = null;
 let liveNavs = 0;
 let lastUnmountAt = Number.NEGATIVE_INFINITY;
@@ -469,27 +508,59 @@ function GooFilter({ id }: { id: string }) {
   );
 }
 
-//! ─── AZ ALANY EGY KAPCSOLÓ, NEM KÉT RÁDIÓ ─────────────────────────────────
-//! Két alany van, és mindig az egyik áll. Két külön rádiógombbal a diáknak
-//! célozni kellett: a MÁSIKRA koppintani, a sajátjára koppintva semmi nem
-//! történt — egy 26 px magas, két ikonnyi sávban ez fél találat. Kapcsolóként
-//! az egész sáv EGY célpont, és bárhová esik az ujj, átfordít.
+//! ─── AZ ALANY: DIÁK · TANÁR · TEREM, ÉS AZ AKTÍV MAGA A VÁLASZTÓ ──────────
+//! Eddig két alany volt egy kapcsolóban (az egész sáv EGY célpont volt, és
+//! átfordított). A terem harmadikként kerül mellé, és ezzel a kapcsoló
+//! rádiósorrá válik: a halvány ikonra koppintva átfolyik a folyadék, az
+//! AKTÍV szerepre koppintva pedig a választó nyílik — az aktív szerep viseli
+//! a kiválasztott alanyt („13C", „Kovács B.", „118"), tehát ő maga a kapu.
 //*
-//! A KÉT IKON ETTŐL MÉG LÁTSZIK. A kapcsoló nem rejti el, mire vált: a folyadék
-//! az aktuálison ül, a másik halványan mellette — így ránézésre kétállású,
-//! nem egy rejtélyes gomb. Egérrel a folyadék a másik felé dől (`LEAN`), ami
-//! előre megmondja, mi fog történni.
+//! A TEREM CSAK A „HÉT" CELLÁJÁBAN VAN. A „Ma" személy nézete: egy terem
+//! napja nem kérdés, amit bárki reggel feltesz. Teremről a „Ma"-ra lépve a
+//! legutóbb nézett osztály vagy tanár napja jön (a tárolt `identity`), és a
+//! `/` átirányítása sem visz soha teremre (`lib/last-view.ts`).
 //*
-//! ÁTFORDÍTÁSKOR A FOLYADÉK REMEG, AZ IKON GÖRDÜL. A csepp lelapul és
-//! visszapattan (a térfogat megmarad, lásd `LiquidLayer`), az érkező ikon a
-//! haladás irányába fordulva gurul a helyére. A kettő együtt mondja: ez EGY
-//! tárgy volt, ami átbillent — nem két gomb, amiből az egyik kigyulladt.
-type RoleToggleProps = {
-  role: Identity;
-  fromRole: Identity | null;
-  onToggle: (role: Identity) => void;
+//! ÁTVÁLTÁSKOR A FOLYADÉK REMEG, AZ IKON GÖRDÜL — ugyanaz a nyelv, mint a
+//! kétállású kapcsolóé volt: egy tárgy billent át, nem egy gomb gyulladt ki.
+export type Role = Identity | "room";
+
+const KIND_OF_ROLE: Record<Role, TimetableSubjectKind> = {
+  class: "class",
+  teacher: "teacher",
+  room: "classroom",
+};
+
+//* A teljes névből a sor rövid alakja: „Kovács Bence" → „Kovács B.".
+function shortName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const lead = /^\d+[A-Za-z.]*$/.test(parts[0] ?? "") ? parts.slice(1) : parts;
+  if (lead.length < 2) return lead[0] ?? name;
+  return `${lead[0]} ${lead[1].charAt(0)}.`;
+}
+
+function subjectLabel(picker: SubjectPickerSpec): string | null {
+  const s = picker.subjects.find((x) => x.short === picker.value);
+  if (!s) return picker.value || null;
+  if (picker.kind === "teacher") return shortName(s.name || s.short);
+  if (picker.kind === "classroom") return roomLabel(s.name || s.short);
+  return s.short;
+}
+
+type RoleSwitchProps = {
+  role: Role;
+  keys: readonly Role[];
+  fromRole: Role | null;
+  onToggle: (role: Role) => void;
   filterId: string;
   hidden: boolean;
+  /** Az aktív szerep alanyválasztója — csak ha a lap a mostani szerepé. */
+  picker: SubjectPickerSpec | null;
+  quick: boolean;
+  open: boolean;
+  onOpen: () => void;
+  pickId: string;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
+  selectRef?: RefObject<HTMLSelectElement | null>;
 };
 
 const ROLL = {
@@ -499,20 +570,29 @@ const ROLL = {
   mass: 0.7,
 } as const;
 
-function RoleToggle({
+function RoleSwitch({
   role,
+  keys,
   fromRole,
   onToggle,
   filterId,
   hidden,
-}: RoleToggleProps) {
+  picker,
+  quick,
+  open,
+  onOpen,
+  pickId,
+  triggerRef,
+  selectRef,
+}: RoleSwitchProps) {
   const reduced = useReducedMotion() ?? false;
   const itemsRef = useRef(new Map<string, HTMLElement>());
-  const [hovering, setHovering] = useState(false);
+  const [hoverRole, setHoverRole] = useState<Role | null>(null);
   const press = useMotionValue(1);
+  const roles = ROLES.filter((r) => keys.includes(r.id));
   const current = ROLES.find((r) => r.id === role) ?? ROLES[0];
-  const other = ROLES.find((r) => r.id !== role) ?? ROLES[1];
   const previous = fromRole ? ROLES.find((r) => r.id === fromRole) : undefined;
+  const label = picker ? subjectLabel(picker) : null;
 
   //* Hányszor fordult át ENNÉL a példánynál. A lapváltás utáni első rajz nem
   //* gördít (azt az átadás már elmondta), csak a helyben tett váltás.
@@ -525,32 +605,20 @@ function RoleToggle({
     if (!reduced) animate(press, WOBBLE, { duration: 0.55, ease: "easeOut" });
   }, [role, reduced, press]);
 
-  const nextIndex = ROLE_KEYS.indexOf(role);
-
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={role === "teacher"}
-      aria-label="Tanári órarend"
+    <div
+      role="group"
+      aria-label="Kié az órarend"
       aria-hidden={hidden || undefined}
-      tabIndex={hidden ? -1 : undefined}
       inert={hidden}
-      title={`${current.title} — koppints: ${other.title.toLowerCase()}`}
-      onClick={() => onToggle(other.id)}
-      onPointerEnter={(e) => e.pointerType === "mouse" && setHovering(true)}
-      onPointerLeave={() => setHovering(false)}
-      className={cn(
-        "relative flex h-[26px] cursor-pointer items-center rounded-full outline-none",
-        "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-ring",
-      )}
+      className="relative flex h-[26px] items-center rounded-full"
     >
       <LiquidLayer
-        order={ROLE_KEYS}
-        activeKey={role}
-        fromKey={fromRole}
+        order={keys}
+        activeKey={keys.includes(role) ? role : keys[0]}
+        fromKey={fromRole && keys.includes(fromRole) ? fromRole : null}
         fromBlob={previous?.blob}
-        hoverKey={hovering ? other.id : null}
+        hoverKey={hoverRole}
         itemsRef={itemsRef}
         filterId={filterId}
         blob={cn("transition-colors duration-500", current.blob)}
@@ -558,10 +626,12 @@ function RoleToggle({
         press={press}
         restExtra={0}
       />
-      {ROLES.map(({ id, label, Icon }, i) => {
+      {roles.map(({ id, label: roleLabel, title, Icon, ink }) => {
         const selected = id === role;
-        //* Az érkező ikon a folyadék haladásának irányába gördül be.
-        const spin = i === nextIndex ? (i === 0 ? -1 : 1) : 0;
+        const withPicker = selected && picker !== null;
+        const text = withPicker ? (label ?? roleLabel) : roleLabel;
+        const native = withPicker && !quick && picker.subjects.length > 0;
+        const canPick = withPicker && picker.subjects.length > 0;
         return (
           <span
             key={id}
@@ -569,69 +639,146 @@ function RoleToggle({
               if (el) itemsRef.current.set(id, el);
               else itemsRef.current.delete(id);
             }}
-            className={cn(
-              "relative flex h-full items-center rounded-full px-2 text-xs font-semibold tracking-[-0.005em] transition-colors duration-200 motion-reduce:transition-none",
-              selected
-                ? "text-ink-on-primary"
-                : hovering
-                  ? "text-background"
-                  : "text-background/55",
-            )}
+            className="relative flex h-full items-center rounded-full"
           >
-            <motion.span
-              key={selected ? `${id}-${flips}` : id}
-              aria-hidden
-              className="flex"
-              initial={
-                selected && flips > 0 && !reduced
-                  ? { rotate: spin * 200, scale: 0.4 }
-                  : false
+            <button
+              ref={selected ? triggerRef : undefined}
+              type="button"
+              //* Nem rádió: az aktív gomb nem „bejelölt", hanem a választót
+              //* nyitja — ezért `aria-current` jelöli, és `aria-expanded`.
+              aria-current={selected || undefined}
+              aria-label={withPicker ? `${title}: ${text} — választás` : title}
+              aria-haspopup={canPick && quick ? "dialog" : undefined}
+              aria-expanded={canPick && quick ? open : undefined}
+              aria-controls={canPick && quick && open ? pickId : undefined}
+              tabIndex={native ? -1 : undefined}
+              title={
+                selected
+                  ? canPick
+                    ? `${title} — koppints a választáshoz`
+                    : title
+                  : title
               }
-              animate={{ rotate: 0, scale: 1 }}
-              transition={ROLL}
-            >
-              <Icon className="size-4 shrink-0" strokeWidth={2.25} />
-            </motion.span>
-            {/*//! A NÉV TELEFONON NEM NYÍLIK KI. Az olvasónév (`aria-label`)
-                //! végig megvan; a szemnek a mellette álló sor mondja ki az
-                //! alanyt („13C" vagy „Kovács B."). `sm`-től kifér. */}
-            <motion.span
-              aria-hidden
-              initial={
-                fromRole
-                  ? {
-                      width: id === fromRole ? "auto" : 0,
-                      opacity: id === fromRole ? 1 : 0,
-                    }
-                  : false
-              }
-              animate={{
-                width: selected ? "auto" : 0,
-                opacity: selected ? 1 : 0,
+              disabled={selected && withPicker && picker.disabled}
+              onClick={() => {
+                if (!selected) onToggle(id);
+                else if (canPick && quick) onOpen();
               }}
-              transition={
-                reduced
-                  ? INSTANT
-                  : {
-                      width: COLLAPSE,
-                      opacity: selected
-                        ? { duration: 0.2, delay: 0.06 }
-                        : { duration: 0.1 },
-                    }
+              onPointerEnter={(e) =>
+                e.pointerType === "mouse" && !selected && setHoverRole(id)
               }
-              className="overflow-hidden whitespace-nowrap"
+              onPointerLeave={() => setHoverRole(null)}
+              className={cn(
+                "relative flex h-full cursor-pointer items-center rounded-full px-2 text-xs font-semibold tracking-[-0.005em] outline-none transition-colors duration-200 motion-reduce:transition-none",
+                "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-ring",
+                selected
+                  ? ink
+                  : hoverRole === id
+                    ? "text-background"
+                    : "text-background/55",
+                selected && !canPick && "cursor-default",
+              )}
             >
-              <span
-                data-liquid-extra
-                className="block w-max pl-1 max-sm:hidden"
+              <motion.span
+                key={selected ? `${id}-${flips}` : id}
+                aria-hidden
+                className="flex"
+                initial={
+                  selected && flips > 0 && !reduced
+                    ? { rotate: 200, scale: 0.4 }
+                    : false
+                }
+                animate={{ rotate: 0, scale: 1 }}
+                transition={ROLL}
               >
-                {label}
-              </span>
-            </motion.span>
+                <Icon className="size-4 shrink-0" strokeWidth={2.25} />
+              </motion.span>
+              <motion.span
+                aria-hidden
+                initial={
+                  fromRole
+                    ? {
+                        width: id === fromRole ? "auto" : 0,
+                        opacity: id === fromRole ? 1 : 0,
+                      }
+                    : false
+                }
+                animate={{
+                  width: selected ? "auto" : 0,
+                  opacity: selected ? 1 : 0,
+                }}
+                transition={
+                  reduced
+                    ? INSTANT
+                    : {
+                        width: COLLAPSE,
+                        opacity: selected
+                          ? { duration: 0.2, delay: 0.06 }
+                          : { duration: 0.1 },
+                      }
+                }
+                className="overflow-hidden whitespace-nowrap"
+              >
+                {/*//! A SZEREP NEVE TELEFONON NEM NYÍLIK KI, AZ ALANY IGEN. A
+                    //! „Diák" szót a mellette álló sor amúgy is kimondja; a
+                    //! „13C" viszont maga a választó — nélküle a koppintásnak
+                    //! nem látszana a célja. */}
+                <span
+                  data-liquid-extra
+                  className={cn(
+                    "flex w-max items-center gap-0.5 pl-1",
+                    !withPicker && "max-sm:hidden",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      withPicker &&
+                        "max-w-[4.75rem] truncate tabular-nums sm:max-w-[9rem]",
+                    )}
+                  >
+                    {text}
+                  </span>
+                  {canPick && (
+                    <ChevronDown
+                      className={cn(
+                        "size-3.5 shrink-0 transition-transform duration-200 motion-reduce:transition-none",
+                        open && quick && "rotate-180",
+                      )}
+                      strokeWidth={2.5}
+                    />
+                  )}
+                </span>
+              </motion.span>
+            </button>
+            {/*//! HAGYOMÁNYOS MÓDBAN A VALÓDI `<select>` FEKSZIK AZ AKTÍV
+                //! SZEREPEN, átlátszón: a koppintás a böngésző saját listáját
+                //! nyitja (mobilon a kerék, asztalon a betűre ugrás), pontosan
+                //! úgy, mint a gyorsválasztó előtt. */}
+            {native && (
+              <select
+                ref={selectRef}
+                aria-label={title}
+                value={picker.value}
+                disabled={picker.disabled}
+                onChange={(e) => picker.onChange(e.target.value)}
+                className="absolute inset-0 size-full cursor-pointer appearance-none rounded-full opacity-0"
+              >
+                {!picker.value && (
+                  <option value="" disabled>
+                    {roleLabel}
+                  </option>
+                )}
+                {picker.subjects.map((s) => (
+                  <option key={s.short} value={s.short}>
+                    {s.name || s.short}
+                  </option>
+                ))}
+              </select>
+            )}
           </span>
         );
       })}
-    </button>
+    </div>
   );
 }
 
@@ -760,6 +907,28 @@ function useIdentity(pathname: string): Identity {
   return routed ?? stored;
 }
 
+//! ─── A SÁV-ALAK HELYEI ────────────────────────────────────────────────────
+//! A testreszabó (`lib/menu-items.ts`) ugyanazokkal a jelekkel rejti a
+//! helyeket, mint eddig a sáv pirulásorában. A rejtett hely csak akkor kap
+//! cellát, ha épp ott állsz: a folyadéknak kell egy cella, ahová folyjon.
+//*
+//! `useSyncExternalStore` A `useHiddenMenu` ÁLLAPOTA HELYETT. Az a horog
+//! effektből olvas, tehát lapváltás után az első képkocka az alapértelmezett
+//! listát rajzolná, és a cellák egy képkockával később ugranának a helyükre —
+//! épp az átfolyás közben. A pillanatkép szöveg, hogy értékként legyen stabil.
+function useInlinePlaces(wide: boolean, current: PlaceId | undefined) {
+  const hiddenKey = useSyncExternalStore(
+    onPrefsChanged,
+    () => (loadHiddenMenu() ?? DEFAULT_HIDDEN_MENU).join(","),
+    () => DEFAULT_HIDDEN_MENU.join(","),
+  );
+  return useMemo(() => {
+    if (!wide) return [];
+    const hidden = new Set(hiddenKey.split(","));
+    return PLACES.filter((p) => p.id === current || !hidden.has(p.id));
+  }, [wide, hiddenKey, current]);
+}
+
 //! A REPÜLÉS RUGÓI. A két tengely KÜLÖN rugón fut, és a függőleges lazább: a
 //! vízszintes hamarabb ér célba, a függőleges utána húzódik — az ikon így ívben
 //! száll a buborék sorából a cellába, nem egyenes vonalon csúszik.
@@ -769,18 +938,44 @@ const FLY_S = { type: "spring", stiffness: 260, damping: 20, mass: 1 } as const;
 
 export function PillNav({
   floating = false,
+  picker,
   className,
 }: {
   floating?: boolean;
+  /** A lap alanyválasztója — az aktív szerep viseli (lásd `RoleSwitch`). */
+  picker?: SubjectPickerSpec;
   className?: string;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const reduced = useReducedMotion() ?? false;
   const identity = useIdentity(pathname);
-  const activeView = VIEW_OF[pathname] ?? null;
+  //! A TEREM SZEREP CSAK AZ ÚTVONALBÓL JÖN, SOSEM A TÁROLÓBÓL. A tárolt
+  //! `identity` személy marad (osztály vagy tanár): ebből tudja a „Ma" és a
+  //! `/` átirányítása, kinek a napját mutassa — teremre egyik sem visz.
+  const role: Role = pathname === "/terem" ? "room" : identity;
+  const quick = useQuickPick();
+  const rolePicker =
+    picker && KIND_OF_ROLE[role] === picker.kind ? picker : null;
   const place = placeOf(pathname);
-  const [hoverView, setHoverView] = useState<ViewId | null>(null);
+  const wide = useWideChrome();
+  const inline = useInlinePlaces(wide, place?.id);
+  //* Sáv-alakban csak akkor marad iránytű, ha van rejtett hely — a buborék
+  //* ott a rejtettek egyetlen útja.
+  const overflow = !wide || inline.length < PLACES.length;
+  const activeView: NavKey | null =
+    wide && place ? place.id : (VIEW_OF[pathname] ?? null);
+  const inlineKey = inline.map((p) => p.id).join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a kulcs a jel
+  const order = useMemo<readonly NavKey[]>(
+    () => [
+      ...VIEWS.map((v) => v.id),
+      ...inline.map((p) => p.id),
+      ...(overflow ? (["places"] as const) : []),
+    ],
+    [inlineKey, overflow],
+  );
+  const [hoverView, setHoverView] = useState<NavKey | null>(null);
   const itemsRef = useRef(new Map<string, HTMLElement>());
   const press = useMotionValue(1);
   const liquidLeft = useMotionValue(0);
@@ -797,11 +992,11 @@ export function PillNav({
   const [from] = useState(readHandoff);
   const fromView =
     from?.view && activeView && from.view !== activeView ? from.view : null;
-  const fromRole = from && from.role !== identity ? from.role : null;
+  const fromRole = from && from.role !== role ? from.role : null;
 
   useLayoutEffect(() => {
-    handoff = { view: activeView, role: identity };
-  }, [activeView, identity]);
+    handoff = { view: activeView, role };
+  }, [activeView, role]);
   useLayoutEffect(() => {
     const el = navRef.current;
     if (el) return registerPillNav(el);
@@ -823,8 +1018,13 @@ export function PillNav({
   const flyY = useMotionValue(0);
   const flyScale = useMotionValue(1);
   const [flyFollow] = useState(() => [flyX, flyY] as const);
-  const [incoming] = useState(() => readFlight(place?.id));
-  const [pour] = useState(() => readPour(place?.id));
+  //! SÁV-ALAKBAN NINCS REPÜLÉS ÉS KIÖNTÉS. Mindkettő az iránytű cellájába
+  //! érkezik, a sávban viszont a hely a SAJÁT cellájában áll — a csepp egy
+  //! cellába hullana, a folyadék egy másikban terülne szét. A sávban amúgy is
+  //! az áradás visz át (`flood.ts`); a ki nem vett csepp a saját idejében
+  //! felszívódik (`pour.ts`).
+  const [incoming] = useState(() => (wide ? null : readFlight(place?.id)));
+  const [pour] = useState(() => (wide ? null : readPour(place?.id)));
   //* Amíg a kiöntött csepp úton van, az ikon a HEGYÉN utazik (lásd `pour.ts`)
   //* — a cella saját ikonja addig nem látszik, különben kettő lenne.
   const flyOpacity = useMotionValue(pour ? 0 : 1);
@@ -904,23 +1104,100 @@ export function PillNav({
   //! A „HÉT" KÉT KÜLÖNBÖZŐ LAP (`weekRouteFor`), A „MA" EGY.
   const weekHref = weekRouteFor(identity);
 
-  const pickIdentity = (next: Identity) => {
-    if (next === identity) return;
+  const pickRole = (next: Role) => {
+    if (next === role) return;
+    setPickOpen(false);
+    if (next === "room") {
+      router.push("/terem");
+      return;
+    }
     saveIdentity(next);
     //! CSAK A HETES RÁCS UGRIK ÁT. A „Ma" EGY útvonal mindkét alanynak: ott a
-    //! lap a `notifyPrefsChanged` jelére épül újra a helyén.
+    //! lap a `notifyPrefsChanged` jelére épül újra a helyén. A terem rácsa
+    //! (`/terem`) is hetes: onnan a személyre váltás a személy hetére visz.
     if (activeView === "week") router.push(weekRouteFor(next));
   };
+
+  //! ─── A GYORSVÁLASZTÓ ──────────────────────────────────────────────────
+  const [pickOpen, setPickOpen] = useState(false);
+  const [toast, setToast] = useState(false);
+  const pickTriggerRef = useRef<HTMLButtonElement>(null);
+  const nativeRef = useRef<HTMLSelectElement>(null);
+  const pickId = `pn-pick-${uid}`;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: az útvonal a jel
+  useEffect(() => setPickOpen(false), [pathname]);
+  useEffect(() => {
+    if (!pickOpen) return;
+    //* Kívülre koppintva becsukódik; a váltón belüli koppintást a saját
+    //* gombja intézi (újra az aktív szerep: becsuk, másik szerep: átvált).
+    const onDown = (e: globalThis.PointerEvent) => {
+      if (navRef.current?.contains(e.target as Node)) return;
+      setPickOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [pickOpen]);
+  const closePick = useCallback((opts?: { refocus?: boolean }) => {
+    setPickOpen(false);
+    if (opts?.refocus) pickTriggerRef.current?.focus();
+  }, []);
+  const goLegacy = () => {
+    setPickOpen(false);
+    saveQuickPick(false);
+    setToast(true);
+    //! A NATÍV LISTA RÖGTÖN NYÍLIK, ahol a böngésző engedi (`showPicker`);
+    //! máshol a fókusz kerül rá, és a következő koppintás nyitja. A `<select>`
+    //! a beállítás átváltása UTÁN születik meg, ezért egy képkockát várunk.
+    requestAnimationFrame(() => {
+      const el = nativeRef.current;
+      if (!el) return;
+      try {
+        el.showPicker();
+      } catch {
+        el.focus();
+      }
+    });
+  };
+  const hideToast = useCallback(() => setToast(false), []);
 
   const squash = (e: PointerEvent) => {
     if (reduced || e.button !== 0) return;
     //* A buborékban tett koppintás nem a tok megnyomása.
-    if ((e.target as Element).closest(`#${panelId}`)) return;
+    if ((e.target as Element).closest(`#${panelId}, #${pickId}`)) return;
     animate(press, 0.94, PRESS);
   };
   const release = () => {
     if (press.get() === 1) return;
     animate(press, 1, RELEASE);
+  };
+
+  //! A FOLYADÉK ELÖNTI A LAPOT, ÉS CSAK VÍZ ALATT VÁLT (lásd `flood.ts`). Új
+  //! lapra nyitás és módosított kattintás marad a böngészőé. A nézetek és a
+  //! sáv-alak helyei ugyanígy indulnak: mind egy cella a váltóban.
+  const floodFrom = (
+    e: ReactMouseEvent<HTMLAnchorElement>,
+    active: boolean,
+    label: string,
+  ) => {
+    const nav = navRef.current;
+    const cell = e.currentTarget.parentElement;
+    if (
+      active ||
+      !nav ||
+      !cell ||
+      e.button !== 0 ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      e.altKey
+    )
+      return;
+    const href = e.currentTarget.getAttribute("href");
+    if (
+      href &&
+      launchFlood({ nav, cell, label, navigate: () => router.push(href) })
+    )
+      e.preventDefault();
   };
 
   //* A szöveg halványítása ugyanaz minden inaktív cellán.
@@ -932,7 +1209,9 @@ export function PillNav({
 
   const placesActive = activeView === "places";
   const placesWasActive = fromView ? fromView === "places" : placesActive;
-  const PlaceIcon = place?.Icon ?? Compass;
+  //* Sáv-alakban a hely a saját cellájában áll — az iránytű ott csak a
+  //* rejtett helyekhez vezet, tehát iránytű marad.
+  const PlaceIcon = (!wide && place?.Icon) || Compass;
 
   return (
     <nav
@@ -962,9 +1241,15 @@ export function PillNav({
       <div data-pn-ink className="contents">
         <GooFilter id={filterId} />
         {activeView && (
-          <div className="pointer-events-none absolute inset-1">
+          //! ALAKVÁLTÁSKOR A FOLYADÉK ÚJRA ÁLL FEL, NEM ÁTFOLYIK. A hidratálás
+          //! után (és ablakméretezéskor) a cellák sora kicserélődik — a régi
+          //! cella helyéről átfolyni egy már nem létező cellából folyna.
+          <div
+            key={wide ? "wide" : "narrow"}
+            className="pointer-events-none absolute inset-1"
+          >
             <LiquidLayer
-              order={VIEW_KEYS}
+              order={order}
               activeKey={activeView}
               fromKey={fromView}
               hoverKey={hoverView}
@@ -999,35 +1284,7 @@ export function PillNav({
                   href={id === "today" ? "/ma" : weekHref}
                   title={title}
                   aria-current={active ? "page" : undefined}
-                  onClick={(e) => {
-                    //! A FOLYADÉK ELÖNTI A LAPOT, ÉS CSAK VÍZ ALATT VÁLT (lásd
-                    //! `flood.ts`). Új lapra nyitás és módosított kattintás
-                    //! marad a böngészőé.
-                    const nav = navRef.current;
-                    const cell = e.currentTarget.parentElement;
-                    if (
-                      active ||
-                      !nav ||
-                      !cell ||
-                      e.button !== 0 ||
-                      e.metaKey ||
-                      e.ctrlKey ||
-                      e.shiftKey ||
-                      e.altKey
-                    )
-                      return;
-                    const href = e.currentTarget.getAttribute("href");
-                    if (
-                      href &&
-                      launchFlood({
-                        nav,
-                        cell,
-                        label,
-                        navigate: () => router.push(href),
-                      })
-                    )
-                      e.preventDefault();
-                  }}
+                  onClick={(e) => floodFrom(e, active, label)}
                   onPointerEnter={(e) =>
                     e.pointerType === "mouse" && setHoverView(id)
                   }
@@ -1078,15 +1335,132 @@ export function PillNav({
                   className="flex h-full items-center [overflow-x:clip]"
                 >
                   <div data-liquid-extra className="shrink-0 pr-1">
-                    <RoleToggle
-                      role={identity}
+                    <RoleSwitch
+                      role={role}
+                      keys={ROLE_KEYS_OF[id]}
                       fromRole={fromRole}
-                      onToggle={pickIdentity}
+                      onToggle={pickRole}
                       filterId={filterId}
                       hidden={!active}
+                      picker={active ? rolePicker : null}
+                      quick={quick}
+                      open={pickOpen}
+                      onOpen={() => {
+                        setPlacesOpen(false);
+                        setPickOpen((v) => !v);
+                      }}
+                      pickId={pickId}
+                      triggerRef={active ? pickTriggerRef : undefined}
+                      selectRef={active ? nativeRef : undefined}
                     />
                   </div>
                 </motion.div>
+              </div>
+            );
+          })}
+
+          {/*//! ─── SÁV-ALAKBAN A HELYEK SAJÁT CELLÁT KAPNAK ─────────────────────
+            //! Asztalon az eszköztár második sora eddig MÁSODSZOR is kirakta
+            //! a helyeket, pirulaként — ugyanaz a hat hivatkozás két helyen, a
+            //! váltóban egy buborék mögött, alatta ikonsorként. Most egy helyen
+            //! állnak: a váltóban, ikonnyi cellákként, és a folyadék egyenesen
+            //! arra folyik, ahol állsz. A név a buborékban áll (`RailTips`,
+            //! gyorsbillentyűvel), az aktív cellán kiírva.
+            //*
+            //! TELEFONON MARAD AZ IRÁNYTŰ. Hat ikon 375 px-en a sor elől venné
+            //! el a helyet — ott a buborék a jó válasz (lásd lentebb).
+            //*
+            //! A TESTRESZABÓ ITT A VÁLTÓT RÖVIDÍTI. Ami rejtett, nem kap cellát
+            //! (kivéve, ha épp ott állsz), és az iránytű visszajön a végére: a
+            //! buborék a rejtett helyek útja marad. */}
+          {inline.map((p) => {
+            const active = p.id === activeView;
+            const wasActive = fromView ? p.id === fromView : active;
+            return (
+              <div
+                key={p.id}
+                ref={(el) => {
+                  if (el) itemsRef.current.set(p.id, el);
+                  else itemsRef.current.delete(p.id);
+                }}
+                data-pn-cell={p.id}
+                data-active={active || undefined}
+                className="relative flex items-center"
+              >
+                <Link
+                  href={p.href}
+                  aria-label={p.label}
+                  aria-current={active ? "page" : undefined}
+                  data-tip={p.label}
+                  data-tip-hint={p.hint}
+                  data-key={p.hotkey}
+                  onClick={(e) => floodFrom(e, active, p.label)}
+                  onPointerEnter={(e) =>
+                    e.pointerType === "mouse" && setHoverView(p.id)
+                  }
+                  onPointerLeave={() => setHoverView(null)}
+                  className={cn(
+                    "group relative flex h-full items-center rounded-full pr-1 pl-2.5 text-sm font-semibold tracking-[-0.01em] outline-none",
+                    "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
+                    active && "cursor-default",
+                  )}
+                >
+                  <InkLabel
+                    label={
+                      <p.Icon
+                        aria-hidden
+                        className="size-4"
+                        strokeWidth={2.25}
+                      />
+                    }
+                    rowRef={rowRef}
+                    left={liquidLeft}
+                    right={liquidRight}
+                    liquid
+                    className={cn(
+                      "transition-opacity duration-200 motion-reduce:transition-none",
+                      idleInk(active),
+                    )}
+                  />
+                  <motion.span
+                    aria-hidden
+                    initial={
+                      fromView
+                        ? {
+                            width: wasActive ? "auto" : 6,
+                            opacity: wasActive ? 1 : 0,
+                          }
+                        : false
+                    }
+                    animate={{
+                      width: active ? "auto" : 6,
+                      opacity: active ? 1 : 0,
+                    }}
+                    transition={
+                      reduced
+                        ? INSTANT
+                        : {
+                            width: COLLAPSE,
+                            opacity: active
+                              ? { duration: 0.22, delay: 0.14 }
+                              : { duration: 0.1 },
+                          }
+                    }
+                    className="flex h-full items-center [overflow-x:clip]"
+                  >
+                    <span data-liquid-extra className="block w-max min-w-1.5">
+                      <span className="block px-1.5">
+                        <InkLabel
+                          label={p.label}
+                          rowRef={rowRef}
+                          left={liquidLeft}
+                          right={liquidRight}
+                          liquid={active}
+                        />
+                      </span>
+                    </span>
+                  </motion.span>
+                </Link>
               </div>
             );
           })}
@@ -1100,109 +1474,121 @@ export function PillNav({
             //! A GOMB NYITVA IS GOMB MARAD. Újra megnyomva becsukja a
             //! buborékot; a folyadék közben nem mozdul, mert a hely, ahol
             //! állsz, nem változott. */}
-          <div
-            ref={(el) => {
-              if (el) itemsRef.current.set("places", el);
-              else itemsRef.current.delete("places");
-            }}
-            data-pn-cell="places"
-            data-active={placesActive || undefined}
-            className="relative flex items-center"
-          >
-            <button
-              ref={triggerRef}
-              type="button"
-              aria-expanded={placesOpen}
-              aria-controls={placesOpen ? panelId : undefined}
-              aria-label={place ? `Helyek — most: ${place.label}` : "Helyek"}
-              title="Ügyelet, teremkereső, kivetítés, nyitólap"
-              onClick={() => setPlacesOpen((v) => !v)}
-              onPointerEnter={(e) =>
-                e.pointerType === "mouse" && setHoverView("places")
-              }
-              onPointerLeave={() => setHoverView(null)}
-              className={cn(
-                "group relative flex h-full cursor-pointer items-center rounded-full pr-1 pl-2.5 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3",
-                "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
-              )}
+          {overflow && (
+            <div
+              ref={(el) => {
+                if (el) itemsRef.current.set("places", el);
+                else itemsRef.current.delete("places");
+              }}
+              data-pn-cell="places"
+              data-active={placesActive || undefined}
+              className="relative flex items-center"
             >
-              <motion.span
-                ref={iconRef}
-                className="relative flex"
-                style={{
-                  x: flyX,
-                  y: flyY,
-                  scale: flyScale,
-                  opacity: flyOpacity,
+              <button
+                ref={triggerRef}
+                type="button"
+                aria-expanded={placesOpen}
+                aria-controls={placesOpen ? panelId : undefined}
+                aria-label={
+                  place && !wide ? `Helyek — most: ${place.label}` : "Helyek"
+                }
+                title={
+                  wide
+                    ? "A többi hely (a testreszabóban elrejtettek)"
+                    : "Ügyelet, teremkereső, kivetítés, nyitólap"
+                }
+                onClick={() => {
+                  setPickOpen(false);
+                  setPlacesOpen((v) => !v);
                 }}
+                onPointerEnter={(e) =>
+                  e.pointerType === "mouse" && setHoverView("places")
+                }
+                onPointerLeave={() => setHoverView(null)}
+                className={cn(
+                  "group relative flex h-full cursor-pointer items-center rounded-full pr-1 pl-2.5 text-sm font-semibold tracking-[-0.01em] outline-none sm:pl-3",
+                  "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring",
+                )}
               >
-                <InkLabel
-                  label={
-                    <motion.span
-                      key={place?.id ?? "compass"}
-                      className="flex"
-                      initial={false}
-                      animate={{
-                        rotate: placesOpen && !placesActive ? 135 : 0,
-                      }}
-                      transition={reduced ? INSTANT : ROLL}
-                    >
-                      <PlaceIcon className="size-4" strokeWidth={2.25} />
-                    </motion.span>
+                <motion.span
+                  ref={iconRef}
+                  className="relative flex"
+                  style={{
+                    x: flyX,
+                    y: flyY,
+                    scale: flyScale,
+                    opacity: flyOpacity,
+                  }}
+                >
+                  <InkLabel
+                    label={
+                      <motion.span
+                        key={place?.id ?? "compass"}
+                        className="flex"
+                        initial={false}
+                        animate={{
+                          rotate: placesOpen && !placesActive ? 135 : 0,
+                        }}
+                        transition={reduced ? INSTANT : ROLL}
+                      >
+                        <PlaceIcon className="size-4" strokeWidth={2.25} />
+                      </motion.span>
+                    }
+                    rowRef={rowRef}
+                    left={liquidLeft}
+                    right={liquidRight}
+                    liquid={Boolean(activeView)}
+                    follow={flyFollow}
+                    className={cn(
+                      "transition-opacity duration-200 motion-reduce:transition-none",
+                      idleInk(placesActive || placesOpen),
+                    )}
+                  />
+                </motion.span>
+                <motion.span
+                  initial={
+                    fromView
+                      ? {
+                          width: placesWasActive ? "auto" : 6,
+                          opacity: placesWasActive ? 1 : 0,
+                        }
+                      : false
                   }
-                  rowRef={rowRef}
-                  left={liquidLeft}
-                  right={liquidRight}
-                  liquid={Boolean(activeView)}
-                  follow={flyFollow}
-                  className={cn(
-                    "transition-opacity duration-200 motion-reduce:transition-none",
-                    idleInk(placesActive || placesOpen),
-                  )}
-                />
-              </motion.span>
-              <motion.span
-                initial={
-                  fromView
-                    ? {
-                        width: placesWasActive ? "auto" : 6,
-                        opacity: placesWasActive ? 1 : 0,
-                      }
-                    : false
-                }
-                animate={{
-                  width: placesActive ? "auto" : 6,
-                  opacity: placesActive ? 1 : 0,
-                }}
-                transition={
-                  reduced
-                    ? INSTANT
-                    : {
-                        width: COLLAPSE,
-                        opacity: placesActive
-                          ? { duration: 0.22, delay: 0.14 }
-                          : { duration: 0.1 },
-                      }
-                }
-                className="flex h-full items-center [overflow-x:clip]"
-              >
-                <span data-liquid-extra className="block w-max min-w-1.5">
-                  <span className="block pr-1.5 pl-1.5 max-sm:hidden">
-                    <InkLabel
-                      label={place?.label ?? ""}
-                      rowRef={rowRef}
-                      left={liquidLeft}
-                      right={liquidRight}
-                      liquid={placesActive}
-                    />
+                  animate={{
+                    width: placesActive ? "auto" : 6,
+                    opacity: placesActive ? 1 : 0,
+                  }}
+                  transition={
+                    reduced
+                      ? INSTANT
+                      : {
+                          width: COLLAPSE,
+                          opacity: placesActive
+                            ? { duration: 0.22, delay: 0.14 }
+                            : { duration: 0.1 },
+                        }
+                  }
+                  className="flex h-full items-center [overflow-x:clip]"
+                >
+                  <span data-liquid-extra className="block w-max min-w-1.5">
+                    <span className="block pr-1.5 pl-1.5 max-sm:hidden">
+                      <InkLabel
+                        label={place?.label ?? ""}
+                        rowRef={rowRef}
+                        left={liquidLeft}
+                        right={liquidRight}
+                        liquid={placesActive}
+                      />
+                    </span>
                   </span>
-                </span>
-              </motion.span>
-            </button>
-          </div>
+                </motion.span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
+      {wide && <RailTips railRef={navRef} />}
       <PlacesPanel
         open={placesOpen}
         onClose={closePlaces}
@@ -1211,6 +1597,23 @@ export function PillNav({
         floating={floating}
         current={place}
         panelId={panelId}
+      />
+      {rolePicker && (
+        <SubjectQuickPick
+          spec={rolePicker}
+          open={pickOpen && quick}
+          onClose={closePick}
+          onLegacy={goLegacy}
+          panelId={pickId}
+        />
+      )}
+      <QuickPickToast
+        open={toast}
+        onUndo={() => {
+          saveQuickPick(true);
+          setToast(false);
+        }}
+        onDismiss={hideToast}
       />
     </nav>
   );

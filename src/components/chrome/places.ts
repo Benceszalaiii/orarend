@@ -1,6 +1,5 @@
 import {
   BookOpen,
-  CalendarClock,
   Cast,
   DoorOpen,
   House,
@@ -56,17 +55,10 @@ export const PLACES: readonly Place[] = [
     Icon: DoorOpen,
     hotkey: "k",
   },
-  //* A terem heti rácsa — ugyanaz a lap, mint az `/orarend` és a `/tanari`,
-  //* csak az alany egy terem. Nézet helyett HELY, mert senki nem „jár" egy
-  //* terembe: a Hét/Ma tengely a saját órarendé marad.
-  {
-    id: "roomTimetable",
-    href: "/terem",
-    label: "Terem-órarend",
-    hint: "Egy terem heti foglaltsága",
-    Icon: CalendarClock,
-    hotkey: "h",
-  },
+  //! A TEREM HETI RÁCSA (`/terem`) MÁR NEM HELY. A váltóban a „Hét" cella
+  //! harmadik szerepe lett (Diák · Tanár · Terem, lásd `pill-nav.tsx`), mert
+  //! ugyanaz a rács, csak más alannyal. A `roomTimetable` jel a
+  //! testreszabóban kihasználatlanul marad (szerződés, lásd `menu-items.ts`).
   {
     id: "subjects",
     href: "/tantargyak",

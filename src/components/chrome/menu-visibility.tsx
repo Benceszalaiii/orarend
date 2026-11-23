@@ -1,6 +1,12 @@
 "use client";
 
-import { Eye, EyeOff, RotateCcw, SlidersHorizontal } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  LayoutGrid,
+  RotateCcw,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useState } from "react";
 import {
   SHEET_POPOVER,
@@ -18,6 +24,7 @@ import {
   MENU_ITEMS,
   type MenuItemGroup,
 } from "@/lib/menu-items";
+import { saveQuickPick, useQuickPick } from "@/lib/quick-pick";
 import type { HiddenMenu } from "@/lib/use-hidden-menu";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +48,7 @@ import { cn } from "@/lib/utils";
 //! ez a sor sem: egy kapcsoló, ami magát is kikapcsolhatja, zsákutca.
 //! ═══════════════════════════════════════════════════════════════════════════
 
-const GROUPS: MenuItemGroup[] = ["settings", "site"];
+const GROUPS: MenuItemGroup[] = ["settings", "site", "nav"];
 
 export function MenuVisibilityMenu({
   menu,
@@ -180,6 +187,18 @@ export function MenuVisibilityMenu({
           ))}
         </div>
 
+        {/*//! A VÁLASZTÓ ALAKJA IS ITT ÁLL, MERT INNEN KAPCSOLHATÓ VISSZA. A
+            //! gyorsválasztó sarkában álló „Hagyományos lista" ide küldi a
+            //! diákot (lásd a felugró üzenetet a `subject-quick-pick.tsx`-ben).
+            //! Nem elrejthető sor, hanem a választó módja — ezért külön
+            //! szakasz, a sorok listáján kívül. */}
+        <section className="border-t border-border px-1.5 py-2">
+          <h3 className="px-1.5 pb-1 text-[11px] font-semibold text-muted-foreground">
+            Választó
+          </h3>
+          <QuickPickSwitch />
+        </section>
+
         {/*//! A VISSZAÁLLÍTÁS CSAK AKKOR VAN OTT, AMIKOR VAN MIT VISSZAÁLLÍTANI
             //! — ugyanaz a szabály, mint a sorban álló „Ma"-nál: egy vezérlő,
             //! aminek nincs dolga, nem foglal helyet. */}
@@ -198,5 +217,52 @@ export function MenuVisibilityMenu({
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+function QuickPickSwitch() {
+  const on = useQuickPick();
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => saveQuickPick(!on)}
+      className={cn(
+        "flex w-full min-h-11 items-center gap-2.5 rounded-lg px-1.5 py-1 text-left transition-colors",
+        "hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
+      )}
+    >
+      <LayoutGrid
+        className={cn(
+          "size-4 shrink-0",
+          on ? "text-primary" : "text-muted-foreground",
+        )}
+        aria-hidden
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-foreground">
+          Gyorsválasztás
+        </span>
+        <span className="block text-xs text-pretty text-muted-foreground">
+          Évfolyam, betű vagy emelet, aztán egy koppintás. Kikapcsolva a
+          böngésző saját listája nyílik.
+        </span>
+      </span>
+      <span
+        aria-hidden
+        className={cn(
+          "flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors motion-reduce:transition-none",
+          on ? "bg-primary" : "bg-muted-foreground/35",
+        )}
+      >
+        <span
+          className={cn(
+            "size-4 rounded-full bg-background transition-transform motion-reduce:transition-none",
+            on && "translate-x-4",
+          )}
+        />
+      </span>
+    </button>
   );
 }

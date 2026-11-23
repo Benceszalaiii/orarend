@@ -82,6 +82,7 @@ function stableStringify(prefs: SyncedPrefs): string {
     //* A lista rendezett és duplikátummentes (`sanitizeHiddenMenu`), tehát
     //* ugyanaz a halmaz két készüléken ugyanazt a szöveget adja.
     prefs.hiddenMenu,
+    prefs.quickPick,
   ]);
 }
 

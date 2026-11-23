@@ -1,13 +1,9 @@
 "use client";
 
-import { Merge, Users } from "lucide-react";
+import { Merge } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import {
-  SheetDivider,
-  SheetRow,
-  SheetSection,
-} from "@/components/chrome/chrome-sheet";
+import { SheetSection } from "@/components/chrome/chrome-sheet";
 import { daySummary } from "@/components/ma/day";
 import { DayList, DayRibbon } from "@/components/ma/day-list";
 import {
@@ -25,7 +21,6 @@ import { DualPanel } from "@/components/ma/dual-setup";
 import { ErrorPanel } from "@/components/ma/error-panel";
 import { NowBlock } from "@/components/ma/now-block";
 import { RestHero } from "@/components/ma/rest-hero";
-import { SubjectPicker } from "@/components/ma/subject-picker";
 import { useDayView } from "@/components/ma/use-day-view";
 import {
   MovedThisWeek,
@@ -107,40 +102,22 @@ export function StudentDay() {
   //* Melyik sorokat hagyta meg a diák a fejléc lapjában (`use-hidden-menu.ts`).
   const menu = useHiddenMenu();
 
-  const sheet = (
+  //* Üres szakasz helyett nincs lap-rész: a közös „Az oldal" és „Fiók" marad.
+  const sheet = menu.shows("notify") && (
     <>
-      <SheetSection title="Kit nézel">
-        <SheetRow icon={<Users className="size-4" />} label="Osztály">
-          <SubjectPicker
-            subjects={classes}
-            value={selectedClass}
-            disabled={dv.pending}
-            label="Osztály"
-            offlineHint="Az osztálylista most nem érhető el — csak a mentett osztályod látszik."
-            onChange={(next) => {
-              setSelectedClass(next);
-              saveCachedClass(next);
-            }}
-          />
-        </SheetRow>
-      </SheetSection>
+      {/*//! „KIT NÉZEL" NINCS TÖBBÉ A LAPBAN: az osztály a váltó aktív
+          //! szerepén választható (`picker` lentebb, lásd `pill-nav.tsx`). */}
       {/*//! A SZAKASZ EGYETLEN SORBÓL ÁLL, EZÉRT EGYÜTT IS TŰNIK EL VELE. Ha a
           //! diák kikapcsolta az értesítést a testreszabóban (lásd
           //! `lib/menu-items.ts`), egy üres „Beállítások" cím maradna itt egy
           //! hajszálvonal alatt — cím anélkül, amit megnevezne. */}
       {menu.shows("notify") && (
-        <>
-          <SheetDivider />
-          <SheetSection title="Beállítások">
-            {/*//! A VEZÉRLŐ MAGA A SOR — nincs köré csomagolt `SheetRow`. Amíg
+        <SheetSection title="Beállítások">
+          {/*//! A VEZÉRLŐ MAGA A SOR — nincs köré csomagolt `SheetRow`. Amíg
                 //! volt, a felirat KÉTSZER jelent meg: egyszer a csomagolón,
                 //! egyszer a gombon belül. Lásd `sheetItem`. */}
-            <NotificationMenu
-              subjects={classes}
-              currentSubject={selectedClass}
-            />
-          </SheetSection>
-        </>
+          <NotificationMenu subjects={classes} currentSubject={selectedClass} />
+        </SheetSection>
       )}
     </>
   );
@@ -149,6 +126,16 @@ export function StudentDay() {
     <DayView
       dv={dv}
       lineSubject={selectedClass || "Osztály"}
+      picker={{
+        kind: "class",
+        subjects: classes,
+        value: selectedClass,
+        disabled: dv.pending,
+        onChange: (next) => {
+          setSelectedClass(next);
+          saveCachedClass(next);
+        },
+      }}
       sheet={sheet}
       emptyFallback={
         dv.error ? (

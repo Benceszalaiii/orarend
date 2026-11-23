@@ -12,6 +12,7 @@ import { loadIdentity, saveIdentity } from "./identity";
 import { loadLastView, saveLastView } from "./last-view";
 import { loadHiddenMenu, saveHiddenMenu } from "./menu-items";
 import { type SyncedPrefs, sanitizePrefs } from "./prefs-shared";
+import { loadQuickPick, saveQuickPick } from "./quick-pick";
 import {
   loadCachedClass,
   loadCachedTeacher,
@@ -57,6 +58,7 @@ export function collectLocalPrefs(): SyncedPrefs {
     merge: loadAllLocalPreferences(),
     dual: loadAllDualSchedules(),
     hiddenMenu: loadHiddenMenu(),
+    quickPick: loadQuickPick(),
   });
 }
 
@@ -105,6 +107,7 @@ export function applyLocalPrefs(prefs: SyncedPrefs): void {
   //* A `saveHiddenMenu` maga jelez (`notifyPrefsChanged`), tehát a lap a
   //* szinkron pillanatában áll át: nem kell hozzá újratöltés.
   if (prefs.hiddenMenu !== null) saveHiddenMenu(prefs.hiddenMenu);
+  if (prefs.quickPick !== null) saveQuickPick(prefs.quickPick);
 }
 
 //! ─── AZ ÖSSZEFÉSÜLÉS ───────────────────────────────────────────────────────
@@ -151,6 +154,7 @@ export function mergePrefs(
     //! „visszakapcsoltam" művelet a másik készülék régi listájából mindig
     //! visszaszivárogna. A lista egészében egy döntés; a frissebb oldalé nyer.
     hiddenMenu: winner.hiddenMenu ?? loser.hiddenMenu,
+    quickPick: winner.quickPick ?? loser.quickPick,
   };
 }
 

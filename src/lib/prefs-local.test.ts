@@ -65,6 +65,7 @@ describe("böngészőben", () => {
       merge: { "10B": [{ clusterKey: "k", chosen: "c" }] },
       dual: { "10B": { A: [1], B: [] } },
       hiddenMenu: ["duty", "rooms"],
+      quickPick: false,
     };
     applyLocalPrefs(prefs);
     expect(loadCachedClass()).toBe("10B");

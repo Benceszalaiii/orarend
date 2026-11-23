@@ -1,8 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { announcementInput } from "@/lib/announcement-input";
 import { requireAdmin } from "@/lib/announcement-store";
-import { announcementInput, parsePaths } from "@/lib/announcements";
+import { parsePaths } from "@/lib/announcements";
 import prisma from "@/lib/prisma";
 
 //! MINDEN ACTION NYILVÁNOS VÉGPONT. Bárki POST-olhat rá, aki ismeri az

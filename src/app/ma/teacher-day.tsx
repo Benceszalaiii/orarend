@@ -1,13 +1,9 @@
 "use client";
 
-import { AlertTriangle, GraduationCap } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import {
-  SheetDivider,
-  SheetRow,
-  SheetSection,
-} from "@/components/chrome/chrome-sheet";
+import { SheetSection } from "@/components/chrome/chrome-sheet";
 import { daySummary } from "@/components/ma/day";
 import { DayList, DayRibbon } from "@/components/ma/day-list";
 import { ChangeRow, DayPlanRow, StaleNote } from "@/components/ma/day-status";
@@ -155,31 +151,27 @@ export function TeacherDay() {
   //* Melyik sorokat hagyta meg a tanár a fejléc lapjában (`use-hidden-menu.ts`).
   const menu = useHiddenMenu();
 
-  const sheet = (
+  //* Üres szakasz helyett nincs lap-rész: a közös „Az oldal" és „Fiók" marad.
+  const sheet = sessionIsTeacher && menu.shows("notify") && (
     <>
-      <SheetSection title="Kit nézel">
-        <SheetRow icon={<GraduationCap className="size-4" />} label="Tanár">
-          {picker}
-        </SheetRow>
-      </SheetSection>
+      {/*//! „KIT NÉZEL" NINCS TÖBBÉ A LAPBAN: a tanár a váltó aktív
+          //! szerepén választható (`picker` lentebb). Az üres érkezési lapon
+          //! a natív választó marad, mert ott még nincs mit mutatnia a sornak. */}
       {/*//! KÉT FELTÉTEL, KÉT KÜLÖNBÖZŐ OKBÓL. A tanári harang belépéshez kötött
           //! (a végpont is csak igazolt tanártól fogad el feliratkozást), a
           //! testreszabó pedig arról szól, hogy a tanár KÉRI-E ezt a sort. A
           //! szakasz a soránál nem élhet tovább: egy üres cím a hajszálvonal
           //! alatt nem nevez meg semmit. */}
       {sessionIsTeacher && menu.shows("notify") && (
-        <>
-          <SheetDivider />
-          <SheetSection title="Beállítások">
-            {/*//! A VEZÉRLŐ MAGA A SOR — nincs köré csomagolt `SheetRow`,
+        <SheetSection title="Beállítások">
+          {/*//! A VEZÉRLŐ MAGA A SOR — nincs köré csomagolt `SheetRow`,
                 //! ugyanúgy, mint a diák lapján (lásd `sheetItem`). */}
-            <NotificationMenu
-              mode="teacher"
-              subjects={teachers}
-              currentSubject={selected}
-            />
-          </SheetSection>
-        </>
+          <NotificationMenu
+            mode="teacher"
+            subjects={teachers}
+            currentSubject={selected}
+          />
+        </SheetSection>
       )}
     </>
   );
@@ -211,6 +203,16 @@ export function TeacherDay() {
         //* 25 karakternél a hét dátumát nyomná ki a sorból.
         selected || "Tanár"
       }
+      picker={{
+        kind: "teacher",
+        subjects: teachers,
+        value: selected,
+        disabled: dv.pending,
+        onChange: (next) => {
+          setSelected(next);
+          saveCachedTeacher(next);
+        },
+      }}
       sheet={sheet}
       standalone={empty || undefined}
       emptyFallback={

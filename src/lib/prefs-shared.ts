@@ -71,6 +71,9 @@ export type SyncedPrefs = {
   //! pedig „megnézte, és mindent meghagyott" (lásd `menu-items.ts`).
   /** A lapból elrejtett sorok (`orarend:menu-hidden:v1`). */
   hiddenMenu: MenuItemId[] | null;
+  //* Ugyanaz az érv: a választó alakja a diák döntése, nem a készüléké.
+  /** Gyorsválasztás a natív lista helyett (`orarend:quick-pick:v1`). */
+  quickPick: boolean | null;
 };
 
 /**
@@ -100,6 +103,7 @@ export const EMPTY_PREFS: SyncedPrefs = {
   merge: {},
   dual: {},
   hiddenMenu: null,
+  quickPick: null,
 };
 
 //! ─── A KORLÁTOK ─────────────────────────────────────────────────────────────
@@ -269,6 +273,10 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
       ? null
       : sanitizeHiddenMenu(input.hiddenMenu);
 
+  //* Csak a valódi logikai érték megy át; minden más „nem nyilatkozott".
+  const quickPick =
+    typeof input.quickPick === "boolean" ? input.quickPick : null;
+
   return {
     class: cls,
     teacher,
@@ -279,6 +287,7 @@ export function sanitizePrefs(input: unknown): SyncedPrefs {
     merge,
     dual,
     hiddenMenu,
+    quickPick,
   };
 }
 
@@ -293,7 +302,8 @@ export function hasAnyPrefs(prefs: SyncedPrefs): boolean {
     prefs.palette !== null ||
     Object.keys(prefs.merge).length > 0 ||
     Object.keys(prefs.dual).length > 0 ||
-    prefs.hiddenMenu !== null
+    prefs.hiddenMenu !== null ||
+    prefs.quickPick !== null
   );
 }
 

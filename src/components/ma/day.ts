@@ -7,6 +7,7 @@ import { periodsOfDay, type TimetableView } from "@/lib/timetable";
 import {
   type LessonRun,
   type MergePreference,
+  type PeriodLike,
   resolveDay,
 } from "@/lib/timetable-merge";
 
@@ -65,7 +66,14 @@ export type DayModel = {
   /** A nap első órájának kezdete és utolsó órájának vége (percben). */
   firstMin: number;
   lastMin: number;
+  /** Hány órablokk (futam) van a napon — egy dupla óra itt EGY. */
   lessonCount: number;
+  //! A NAP ÓRASZÁMA NEM A BLOKKOK SZÁMA. Egy dupla vagy tripla óra egyetlen
+  //! futam, de két-három csengetési sávot foglal; a „4 óra" egy nyolcórás
+  //! napon a fejléc legnagyobb hazugsága lenne. Ez a lefedett sávok száma, a
+  //! nap saját csengetésén mérve — ugyanaz a szám, amit a heti nézet összead.
+  /** Hány tanítási sávot (csengetési órát) fed le a nap. */
+  periodCount: number;
   //! ELDÖNTETLEN CSOPORTBONTÁS. Amíg egy ütközést nem oldott fel a diák, két óra
   //! állítja ugyanarról a percről, hogy „most ez megy" — és a napi nézetnek
   //! nincs vezérlője, amivel ezt itt helyben elintézhetné. A szám azért kerül a
@@ -78,6 +86,44 @@ export type DayModel = {
 //! összefűzésénél. Ami ennél hosszabb, az már saját szakasz — annyi helyet is
 //! kap a nap sávjában.
 export const GAP_MIN_MIN = 25;
+
+export type Span = { startMin: number; endMin: number };
+
+//* Ugyanaz a tanítási idő, sávokra bontva: a futam ideje, a benne lévő szünetek
+//* kivágásával. A hosszuk összege pontosan a `netMinutes`.
+export function teachingSpans(run: LessonRun): Span[] {
+  const spans: Span[] = [];
+  let cursor = run.startMin;
+  for (const gap of [...run.breaks].sort((a, b) => a.startMin - b.startMin)) {
+    if (gap.startMin > cursor) {
+      spans.push({ startMin: cursor, endMin: gap.startMin });
+    }
+    cursor = Math.max(cursor, gap.endMin);
+  }
+  if (run.endMin > cursor) spans.push({ startMin: cursor, endMin: run.endMin });
+  return spans;
+}
+
+export function mergeSpans(spans: Span[]): Span[] {
+  const out: Span[] = [];
+  for (const span of [...spans].sort((a, b) => a.startMin - b.startMin)) {
+    const last = out[out.length - 1];
+    if (last && span.startMin <= last.endMin) {
+      last.endMin = Math.max(last.endMin, span.endMin);
+      continue;
+    }
+    out.push({ ...span });
+  }
+  return out;
+}
+
+//* Ugyanez órákban: hány tanítási sávot érint a nap lefedett ideje.
+export function coveredPeriods(merged: Span[], periods: PeriodLike[]): number {
+  const hit = periods.filter((p) =>
+    merged.some((s) => p.startMin < s.endMin && s.startMin < p.endMin),
+  ).length;
+  return hit > 0 ? hit : merged.length;
+}
 
 export function buildDayModel(
   view: TimetableView,
@@ -96,13 +142,10 @@ export function buildDayModel(
   //! párhuzamos csoportját visszaadja; feloldás nélkül két óra állítaná
   //! ugyanarról a percről, hogy „most ez megy". A napi nézet feloldva vagy
   //! sehogy.
-  const { runs, conflicts } = resolveDay(
-    dayLessons,
-    prefs,
-    //* Rövidített napon a nap SAJÁT csengetése — abból jönnek a többórás
-    //* blokkon belüli szünetek (lásd `periodsOfDay`).
-    periodsOfDay(view, day),
-  );
+  //* Rövidített napon a nap SAJÁT csengetése — abból jönnek a többórás
+  //* blokkon belüli szünetek (lásd `periodsOfDay`).
+  const dayRings = periodsOfDay(view, day);
+  const { runs, conflicts } = resolveDay(dayLessons, prefs, dayRings);
   const ordered = [...runs].sort(
     (a, b) => a.startMin - b.startMin || a.endMin - b.endMin,
   );
@@ -155,6 +198,10 @@ export function buildDayModel(
     firstMin: ordered[0]?.startMin ?? 0,
     lastMin: ordered[ordered.length - 1]?.endMin ?? 0,
     lessonCount: ordered.length,
+    periodCount:
+      ordered.length > 0
+        ? coveredPeriods(mergeSpans(ordered.flatMap(teachingSpans)), dayRings)
+        : 0,
     conflicts: conflicts.length,
   };
 }
@@ -288,7 +335,7 @@ export function daySummary(day: DayModel, isToday: boolean): string {
   }
   if (day.lessonCount === 0) return `${when} nincs órád.`;
   const gaps = day.segments.filter((s) => s.kind === "gap").length;
-  const parts = [`${day.lessonCount} óra`];
+  const parts = [`${day.periodCount} óra`];
   if (gaps > 0) parts.push(gaps === 1 ? "1 lyukasóra" : `${gaps} lyukasóra`);
   return parts.join(" · ");
 }

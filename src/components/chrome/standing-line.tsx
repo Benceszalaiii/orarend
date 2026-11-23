@@ -1,21 +1,16 @@
 "use client";
 
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { AccountMenu } from "@/components/account-menu";
 import { AppearanceMenu } from "@/components/appearance/appearance-menu";
-import {
-  SheetDivider,
-  SheetItemBody,
-  SheetSection,
-  sheetItem,
-} from "@/components/chrome/chrome-sheet";
+import { SheetDivider, SheetSection } from "@/components/chrome/chrome-sheet";
 import { MenuVisibilityMenu } from "@/components/chrome/menu-visibility";
 import { PillNav } from "@/components/chrome/pill-nav";
-import { PLACES, type PlaceId } from "@/components/chrome/places";
 import { RailTips } from "@/components/chrome/rail-tips";
+import type { SubjectPickerSpec } from "@/components/chrome/subject-quick-pick";
+import { useWideChrome } from "@/components/chrome/use-wide-chrome";
 import { isViewRoute, saveLastView } from "@/lib/last-view";
 import { useHiddenMenu } from "@/lib/use-hidden-menu";
 import { cn } from "@/lib/utils";
@@ -117,36 +112,17 @@ export const SITE_BAR_METRICS = "gap-x-2 px-3 sm:gap-x-3 sm:px-4";
 //! olvasónévként. Telefonon és táblagépen pedig változatlanul a névvel kiírt
 //! lap fut, mert ott sem egér, sem billentyű nincs hozzá.
 //*
-//* Mobil-első alapérték: kiszolgálón és az első képkockán a keskeny alak fut,
-//* és csak utána vált — így a hidratálás nem talál eltérést.
-function useWideChrome(): boolean {
-  const [wide, setWide] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 80rem)");
-    const sync = () => setWide(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-  return wide;
-}
-
-//* A sáv sorrendje a régi: a nyitólap elöl, mögötte az iskola lapjai.
-const RAIL_ORDER: readonly PlaceId[] = [
-  "home",
-  "duty",
-  "rooms",
-  "roomTimetable",
-  "subjects",
-  "screens",
-];
-const RAIL_PLACES = RAIL_ORDER.flatMap((id) =>
-  PLACES.filter((p) => p.id === id),
-);
+//* A küszöb a `chrome/use-wide-chrome.ts`-ben áll: a váltó is onnan dönti el,
+//* hogy a helyeket saját cellákra bontja-e.
 
 export type LineContent = {
   /** Az alany, ahogy a sor elején áll: „13C" vagy „Kovács B." */
   subject: string;
+  //! AZ ALANY VÁLASZTÓJA A VÁLTÓBAN ÁLL, NEM A LAPBAN. A folyékony váltó aktív
+  //! szerepe („13C") maga a kapu: rákoppintva a gyorsválasztó nyílik, vagy —
+  //! ha a diák így kérte — a böngésző saját listája (`chrome/subject-quick-pick.tsx`).
+  /** A lap alanyválasztója; elhagyva a váltó csak a szerepet mutatja. */
+  picker?: SubjectPickerSpec;
   /** A hely az adatban: „aug. 31 – szept. 4." vagy „P 09.04". */
   context?: string;
   /** Az A/B hét betűje, ha a nézett héten értelmezhető. */
@@ -218,68 +194,17 @@ export function StandingLine({
           <SheetDivider />
         </>
       )}
-      {/*//! A NYITÓLAP NEM KAP IKONT A SÁVBAN, ÉS EZ NEM FELEDÉKENYSÉG. A régi
-          //! sávban egy `House` ikon állt a váltó mellett, felirat nélkül — az
-          //! egyik a nyolc néma ikonból, ami a 375 px-es túlcsordulást
-          //! okozta (lásd fentebb a mérést). A visszaút viszont KELL: a `/home`
-          //! ma az egyetlen lap, ahonnan semmi nem vezet vissza, mert a
-          //! lábléc is csak a `/valtozasok`-ra és az `/adatvedelem`-re mutat.
-          //*
-          //! EZÉRT ITT VAN, NÉVVEL KIÍRVA — pontosan az a csere, amit a jobb
-          //! oldali csoport megjegyzése ígér. A helye a lap alján van, a fiók
-          //! mellett: a nyitólap nem NÉZET ugyanarra az adatra (az a váltó
-          //! dolga), hanem a lapról szóló hivatkozás, amihez félévente egyszer
-          //! nyúlnak. Sáv-alakban ugyanez egy pirula lesz a műveletsor végén
-          //! (`.chrome-rail .sheet-item`, lásd `globals.css`). */}
       <SheetSection title="Az oldal">
         {/*//! A MEGJELENÉS AZ „AZ OLDAL" SZAKASZBA TARTOZIK, NEM A NÉZETEK
             //! MELLÉ. A világos/sötét és a tantárgyszínek nem arról szólnak,
-            //! KIT vagy MELYIK HETET nézed — a lapról magáról szólnak, ahogy a
-            //! nyitólapra vezető hivatkozás is. A szakasz sorrendje pedig itt
-            //! is gyakoriság szerinti: a témát váltogatják, a nyitólapra
-            //! félévente mennek vissza. */}
+            //! KIT vagy MELYIK HETET nézed — a lapról magáról szólnak. */}
         {menu.shows("appearance") && <AppearanceMenu />}
-        {/*//! A HELYEK SÁVBAN IS OTT VANNAK, GYORSGOMBKÉNT. A váltó „Helyek"
-            //! buboréka MINDEN lapon eléri őket (lásd `chrome/places.ts`); itt
-            //! egy koppintással közelebb vannak annak, aki gyakran jár oda — és
-            //! a testreszabóban egyenként elrejthetők annak, aki nem. A lista
-            //! ugyanaz, mint a buboréké, tehát a kettő nem térhet el. */}
-        {/*//! A KÉT MELLÉKLAP A NYITÓLAP ALÁ KERÜL, NEM A VÁLTÓBA. Az ügyelet
-            //! és a teremkereső NEM ugyanarra az adatra néző NÉZET — nem az a
-            //! kérdés, kinek és melyik hetét mutatják, hanem az iskoláról
-            //! mondanak valamit, amit az órarend rácsa nem tud. A `PillNav`
-            //! négy cellája pont attól olvasható tengelynek, hogy CSAK az
-            //! alany és a nézet van benne; egy ötödik-hatodik cella
-            //! visszahozná a régi, rendezetlen pirulasort.
-            //*
-            //! ITT VISZONT KELL EGY ÚT HOZZÁJUK: eddig egyik lapról sem
-            //! vezetett rájuk hivatkozás — csak a beírt cím. Ugyanaz az érv,
-            //! amiért a nyitólap is ide került, egy sorral feljebb.
-            //*
-            //! ÉS MOSTANTÓL A SÁVBAN IS OTT VANNAK. Kiírt felirattal nem fértek
-            //! bele (a két pirula 240 px, a sor 1452-re nőtt volna), ezért
-            //! viselték eddig a `sheet-item-aside`-ot. Az eszköztár-alakban a
-            //! pirula az ikonjára zsugorodik: a kettő együtt ~84 px, és a
-            //! `globals.css` régi megjegyzésének a feltétele („kivéve, ha
-            //! közben felszabadul 240 px") teljesült. Ezzel megszűnt az az ára
-            //! is, amit az a megjegyzés tudott hiányként vállalt. */}
-        {RAIL_PLACES.map((place) =>
-          menu.shows(place.id) ? (
-            <Link
-              key={place.id}
-              href={place.href}
-              data-key={place.hotkey}
-              aria-current={pathname === place.href ? "page" : undefined}
-              className={sheetItem("aria-[current=page]:bg-muted")}
-            >
-              <place.Icon
-                aria-hidden
-                className="size-4 shrink-0 text-muted-foreground"
-              />
-              <SheetItemBody label={place.label} hint={place.hint} />
-            </Link>
-          ) : null,
-        )}
+        {/*//! A HELYEK NEM ITT VANNAK, HANEM A VÁLTÓBAN. Egy darabig itt is
+            //! álltak, gyorsgombként — asztalon így ugyanaz a hat hivatkozás
+            //! kétszer szerepelt: a váltó buborékában és alatta, ikonsorként.
+            //! Most a folyékony váltó viszi őket (`chrome/pill-nav.tsx`):
+            //! asztalon saját cellában, telefonon az iránytű buborékában. A
+            //! testreszabó jelei maradtak, és ott a váltót rövidítik. */}
         {/*//! A TESTRESZABÓ A SZAKASZ VÉGÉN ÁLL, ÉS SOSEM REJTHETŐ EL. Ez a
             //! szakasz utolsó sora, mert ez az, amihez a legritkábban nyúlnak —
             //! de ott KELL lennie mindenhol, ahol lap van: ez az EGYETLEN út
@@ -431,6 +356,7 @@ export function StandingLine({
                 sheetId={sheetId}
                 interactive={collapsible}
                 railShown={Boolean(sheet) && wide}
+                subjectInNav={Boolean(line.picker)}
                 title={sheet ? undefined : "Beállítások és fiók"}
                 onToggle={() => setOpen((v) => !v)}
               />
@@ -469,7 +395,7 @@ export function StandingLine({
           //! BIZTOSÍTÉK. Két pirula és a fiók — se harang, se osztályválasztó,
           //! se nyitólap-ikon. Ami kimaradt, az a lapban van, névvel kiírva. */}
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <PillNav floating={floating} />
+          <PillNav floating={floating} picker={line?.picker} />
           {/*//! A FIÓK NEM NÉZET, ÉS NEM IS A NÉZETEK TESTVÉRE. A belépésnek
             //! ebben az alkalmazásban EGYETLEN haszna van: átviszi a
             //! beállításokat a másik készülékre (lásd `account-menu.tsx` —
@@ -563,6 +489,7 @@ function LineButton({
   sheetId,
   interactive,
   railShown,
+  subjectInNav,
   title = "Osztály, hét és beállítások",
   onToggle,
 }: {
@@ -572,6 +499,11 @@ function LineButton({
   interactive: boolean;
   /** Igaz, ha alatta a sáv-alak áll: ott az alany és a szűrések száma már kint van. */
   railShown: boolean;
+  //! HA A VÁLTÓ AKTÍV SZEREPE VISELI AZ ALANYT („102 ▾"), A SOR NEM ISMÉTLI.
+  //! Mérve 375 px-en a `/terem`-en: a kettő együtt a sort egy „102 · B"
+  //! pöttyé nyomta, a dátum teljesen eltűnt. Ugyanaz a szabály, mint a
+  //! sáv-alaknál: ami kint áll, az a sorban csak a képernyőolvasónak marad.
+  subjectInNav: boolean;
   /** A kapu buboréka — azt mondja, ami a lapban van. */
   title?: string;
   onToggle: () => void;
@@ -596,14 +528,14 @@ function LineButton({
       <span
         className={cn(
           "max-w-[9rem] shrink-0 truncate font-bold tracking-tight text-foreground",
-          railShown && "sr-only",
+          (railShown || subjectInNav) && "sr-only",
         )}
       >
         {line.subject}
       </span>
       {line.context && (
         <>
-          {!railShown && (
+          {!railShown && !subjectInNav && (
             <span aria-hidden className="shrink-0 text-muted-foreground">
               ·
             </span>

@@ -48,7 +48,10 @@ export type MenuItemId =
   | "legend";
 
 /** Melyik szakaszban áll a sor a lapon — a testreszabó ugyanígy csoportosít. */
-export type MenuItemGroup = "settings" | "site";
+//* A „nav" a folyékony váltó helyei: asztalon ezek a váltó saját cellái
+//* (`chrome/pill-nav.tsx`), az elrejtés ott rövidíti a váltót. Telefonon az
+//* iránytű buboréka mindig mindet mutatja — a testreszabás az utat nem vágja el.
+export type MenuItemGroup = "settings" | "site" | "nav";
 
 export type MenuItemMeta = {
   id: MenuItemId;
@@ -109,43 +112,38 @@ export const MENU_ITEMS: readonly MenuItemMeta[] = [
     id: "home",
     label: "Nyitólap",
     hint: "Mit tud ez az órarend",
-    group: "site",
+    group: "nav",
   },
   {
     id: "duty",
     label: "Ügyelet",
     hint: "Ki ügyel most, és hol",
-    group: "site",
+    group: "nav",
   },
   {
     id: "rooms",
     label: "Teremkereső",
     hint: "Melyik terem üres most",
-    group: "site",
-  },
-  {
-    id: "roomTimetable",
-    label: "Terem-órarend",
-    hint: "Egy terem heti foglaltsága",
-    group: "site",
+    group: "nav",
   },
   {
     id: "subjects",
     label: "Tantárgyak",
     hint: "Ki tanítja, és kiknek",
-    group: "site",
+    group: "nav",
   },
   {
     id: "screens",
     label: "Kivetítés",
     hint: "A termek kivetítői",
-    group: "site",
+    group: "nav",
   },
 ];
 
 export const MENU_GROUP_TITLE: Record<MenuItemGroup, string> = {
   settings: "Beállítások",
   site: "Az oldal",
+  nav: "Navigáció (asztalon)",
 };
 
 //! AZ „ÜGYELET" ALAPBÓL REJTVE VAN, amíg a diák meg nem nyitja a

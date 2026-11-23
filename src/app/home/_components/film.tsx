@@ -892,14 +892,21 @@ export function GridFilm() {
                 className="mb-7 text-lg text-[oklch(0.26_0.05_248)]"
               />
               <h1 className="text-[clamp(2.1rem,5vw,3.9rem)] font-bold leading-[0.98] tracking-[-0.045em] text-[oklch(0.26_0.05_248)]">
-                Amire eddig vágytatok.
+                {/*//! A CÍM VISELI A KULCSSZÓT. A keresőnek a H1 mondja meg, miről
+                    //! szól a lap; az „Amire eddig vágytatok." semmit nem árult el
+                    //! arról, hogy ez a Jedlik órarendje. A hangnem marad. */}
+                A Jedlik órarendje, amire vágytatok.
                 <span className="mt-2 block font-script text-[clamp(2.9rem,7.4vw,5.75rem)] leading-[0.86] text-primary">
                   Már valóság
                 </span>
               </h1>
               <p className="mt-8 max-w-[34ch] text-base leading-7 text-[oklch(0.26_0.05_248/0.72)] md:text-lg">
-                A Jedlik órarendje, végre úgy, ahogy a heted tényleg kinéz. Ez
-                itt a 13A egy B hete — görgess, és nézd meg közelebbről.
+                {/*//! A BEKEZDÉS HOSSZA KÖTÖTT: telefonon a nyitószakasz az aljához
+                    //! igazodik, és minden új sor a márkajelet a rács képébe tolja
+                    //! föl. Ezért a kulcsszavak a régi mondat HELYÉRE kerültek. */}
+                A győri Jedlik Ányos technikum órarendje osztályra, tanárra és
+                teremre. Ez itt a 13A egy B hete — görgess, és nézd meg
+                közelebbről.
               </p>
               <Link
                 href="/orarend"
