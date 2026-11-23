@@ -1,15 +1,8 @@
 "use client";
 
-import { ExternalLink, Maximize2, Minimize2, WifiOff, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ExternalLink, WifiOff } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
 import {
   formatScreenAddress,
   isIpv4Literal,
@@ -17,7 +10,6 @@ import {
   screenTaskFrameUrl,
   screenTaskPageUrl,
 } from "@/lib/lesson-extras";
-import { cn } from "@/lib/utils";
 
 //! ═══════════════════════════════════════════════════════════════════════════
 //! SCREENTASK-NÉZŐ — A TANÁR KÉPERNYŐJE A HELYI HÁLÓZATRÓL
@@ -77,12 +69,8 @@ export function canViewInPage(host: string): boolean {
   );
 }
 
-const DARK_BUTTON =
-  "text-white/80 hover:bg-white/10 hover:text-white dark:hover:bg-white/10";
-
 //! ─── A KÉPKOCKA-HUROK ──────────────────────────────────────────────────────
-//! A részletlap beágyazott nézője és a `/kivetites` önálló lapja ugyanezt a
-//! hurkot használja. A képelemeket a hurok közvetlenül a `frameRef` elembe
+//! A `/kivetites/[terem]` lap hurka (az órarend részletlapja is oda visz). A képelemeket a hurok közvetlenül a `frameRef` elembe
 //! teszi (`replaceChildren`) — annak az elemnek ne legyen React-gyereke.
 export function useScreenTaskFeed(
   screen: ScreenAddress | null,
@@ -179,177 +167,45 @@ export function feedStatusText(link: LinkState, hasFrame: boolean): string {
     : link === "connecting"
       ? "kapcsolódás…"
       : hasFrame
-        ? "megszakadt, újrapróbálom…"
+        ? "megszakadt, újracsatlakozás…"
         : "nem érhető el";
-}
-
-export function ScreenTaskViewer({
-  screen,
-  title,
-  onClose,
-}: {
-  screen: ScreenAddress;
-  title: string;
-  onClose: () => void;
-}) {
-  const stageRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<HTMLDivElement>(null);
-  const { link, hasFrame } = useScreenTaskFeed(screen, frameRef);
-  const [canFullscreen, setCanFullscreen] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
-
-  useEffect(() => {
-    //* iPhone-on nincs elem-szintű teljes képernyő — ott a gomb meg sem jelenik.
-    setCanFullscreen(document.fullscreenEnabled === true);
-    const onChange = () =>
-      setFullscreen(
-        stageRef.current !== null &&
-          document.fullscreenElement === stageRef.current,
-      );
-    document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
-
-  const toggleFullscreen = () => {
-    if (document.fullscreenElement) {
-      void document.exitFullscreen();
-    } else {
-      void stageRef.current?.requestFullscreen().catch(() => {});
-    }
-  };
-
-  const statusText = feedStatusText(link, hasFrame);
-
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent
-        showCloseButton={false}
-        className="top-0 left-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none bg-black p-0 text-white ring-0 sm:max-w-none"
-      >
-        <div className="flex shrink-0 items-center gap-3 border-b border-white/10 pt-[max(0.5rem,env(safe-area-inset-top))] pr-[max(0.75rem,env(safe-area-inset-right))] pb-2 pl-[max(0.75rem,env(safe-area-inset-left))]">
-          <span
-            aria-hidden
-            className={cn(
-              "size-2 shrink-0 rounded-full",
-              link === "live" && "bg-emerald-400",
-              link === "lost" && "bg-red-400",
-              link === "connecting" && "animate-pulse bg-white/50",
-            )}
-          />
-          <div className="min-w-0 flex-1">
-            <DialogTitle className="truncate text-sm font-semibold text-white">
-              {title}
-            </DialogTitle>
-            <DialogDescription className="truncate text-[11px] text-white/60">
-              <span className="font-mono">{formatScreenAddress(screen)}</span>
-              {" · "}
-              <span aria-live="polite">{statusText}</span>
-            </DialogDescription>
-          </div>
-          {canFullscreen && hasFrame && (
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              className={DARK_BUTTON}
-              aria-label={
-                fullscreen ? "Kilépés a teljes képernyőből" : "Teljes képernyő"
-              }
-              onClick={toggleFullscreen}
-            >
-              {fullscreen ? <Minimize2 /> : <Maximize2 />}
-            </Button>
-          )}
-          <Button
-            asChild
-            size="icon-sm"
-            variant="ghost"
-            className={DARK_BUTTON}
-          >
-            <a
-              href={screenTaskPageUrl(screen)}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Megnyitás a ScreenTask saját oldalán"
-              title="Megnyitás a ScreenTask saját oldalán"
-            >
-              <ExternalLink />
-            </a>
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            className={DARK_BUTTON}
-            aria-label="Bezárás"
-            onClick={onClose}
-          >
-            <X />
-          </Button>
-        </div>
-
-        <div
-          ref={stageRef}
-          className="relative flex min-h-0 flex-1 items-center justify-center bg-black"
-        >
-          {/*//! A képkockákat a hurok teszi ide közvetlenül (`replaceChildren`) —
-              //! ennek a elemnek szándékosan nincs React-gyereke. */}
-          <div
-            ref={frameRef}
-            className="flex size-full items-center justify-center"
-          />
-
-          {!hasFrame &&
-            (link === "lost" ? (
-              <Unreachable screen={screen} />
-            ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-sm text-white/70">
-                <Spinner className="size-5" />
-                Kapcsolódás a tanári géphez…
-              </div>
-            ))}
-
-          {hasFrame && link === "lost" && (
-            <output className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1.5 text-xs text-white ring-1 ring-white/15">
-              Megszakadt a kapcsolat — újrapróbálom…
-            </output>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 //! A HIBA OKA ITT NEM TUDHATÓ, CSAK A LEHETSÉGES OKOK. A böngésző egy elbukott
 //! képnél nem mondja meg, miért bukott el (rossz hálózat, leállított szerver,
 //! megtagadott engedély, jelszavas megosztás) — ezért mind a négyet kimondjuk,
 //! a leggyakoribbal kezdve, és mindegyik mellé azt, mit tehet a diák.
+//!
+//! A LAP NEM BESZÉL EGYES SZÁM ELSŐ SZEMÉLYBEN. Nem „nem érem el", hanem „nem
+//! érhető el": a tény az oldalé, a teendő a diáké (felszólító mód, tegezve).
 export function Unreachable({ screen }: { screen: ScreenAddress }) {
   return (
     <div className="absolute inset-0 flex items-center justify-center overflow-y-auto p-6">
       <div className="max-w-md text-sm text-white/80">
         <p className="flex items-center gap-2 text-base font-semibold text-white">
-          <WifiOff className="size-4 shrink-0" aria-hidden />
-          Nem érem el a tanár képernyőjét
+          <WifiOff className="size-4 shrink-0" aria-hidden />A tanár képernyője
+          nem érhető el
         </p>
         <ul className="mt-3 list-disc space-y-1.5 pl-5 text-pretty">
-          <li>Ugyanarra a wifire csatlakozol, mint a tanári gép?</li>
           <li>
-            Fut a ScreenTask, és elindult a megosztás? A címnek egyeznie kell:{" "}
+            Ellenőrizd, hogy ugyanarra a wifire csatlakozol-e, mint a tanári
+            gép.
+          </li>
+          <li>
+            Ellenőrizd, hogy fut-e a ScreenTask, és elindult-e a megosztás. A
+            tanári gépen ennek a címnek kell megjelennie:{" "}
             <span className="font-mono text-white">
               {formatScreenAddress(screen)}
             </span>
           </li>
           <li>
-            Ha a böngésző a helyi hálózat eléréséről kérdez, engedélyezd. Egyes
-            böngészők (Safari, Firefox) ezt a lapról nem engedik — ott a
-            ScreenTask saját oldala működik.
+            Ha a böngésző engedélyt kér a helyi hálózat eléréséhez, engedélyezd.
+            Safariban és Firefoxban ez nem lehetséges, ott a ScreenTask saját
+            oldalát használd.
           </li>
           <li>
-            Jelszavas megosztás csak a ScreenTask saját oldalán nyílik meg.
+            Jelszóval védett megosztás csak a ScreenTask saját oldalán nyílik
+            meg.
           </li>
         </ul>
         <Button asChild className="mt-4 gap-1.5 rounded-full px-4">
@@ -363,7 +219,8 @@ export function Unreachable({ screen }: { screen: ScreenAddress }) {
           </a>
         </Button>
         <p className="mt-2 text-xs text-white/50">
-          Addig a háttérben tovább próbálkozom.
+          Az oldal közben tovább próbálkozik, és magától megjeleníti a képet,
+          amint elérhető.
         </p>
       </div>
     </div>

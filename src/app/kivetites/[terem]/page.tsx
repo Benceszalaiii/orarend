@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { KivetitesRoom } from "../kivetites-client";
 
-type Props = { params: Promise<{ terem: string }> };
+type Props = {
+  params: Promise<{ terem: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
 
 function roomOf(raw: string): string {
   try {
@@ -21,6 +24,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function Page({ params }: Props) {
-  return <KivetitesRoom room={roomOf((await params).terem)} />;
+export default async function Page({ params, searchParams }: Props) {
+  //* `?tanar=` — az órarendből érkezve: a diák saját (tartalék) címét ehhez a
+  //* tanárhoz keressük. Közvetlen (QR-kódos) megnyitásnál nincs, és nem is kell.
+  const tanar = (await searchParams).tanar;
+  return (
+    <KivetitesRoom
+      room={roomOf((await params).terem)}
+      teacher={typeof tanar === "string" ? tanar : null}
+    />
+  );
 }

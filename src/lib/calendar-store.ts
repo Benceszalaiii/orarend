@@ -1,7 +1,7 @@
 import { Redis } from "@upstash/redis";
 import type { FeedWeek } from "./calendar-feed";
 import type { CalendarFeedRequest } from "./calendar-shared";
-import { subjectStoreKey, type TimetableSubjectKind } from "./timetable";
+import { type PersonSubjectKind, subjectStoreKey } from "./timetable";
 
 //! CSAK A SZERVEREN. Ez a modul az írás-jogú tokent olvassa a környezetből —
 //! kliens bundle-be SOHA nem kerülhet be.
@@ -139,11 +139,11 @@ export type CachedWindow = {
   weeks: StoredWeek[];
 };
 
-const WINDOW_KEY = (kind: TimetableSubjectKind, short: string) =>
+const WINDOW_KEY = (kind: PersonSubjectKind, short: string) =>
   `cal:weeks:${subjectStoreKey(kind, short)}`;
 
 export async function readWindow(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
 ): Promise<CachedWindow | null> {
   if (!redis) return null;
@@ -151,7 +151,7 @@ export async function readWindow(
 }
 
 export async function writeWindow(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
   weeks: StoredWeek[],
 ): Promise<void> {
@@ -175,7 +175,7 @@ export async function writeWindow(
 const REFRESH_LEASE_SECONDS = 120;
 
 export async function leaseWindowRefresh(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
 ): Promise<boolean> {
   if (!redis) return false;

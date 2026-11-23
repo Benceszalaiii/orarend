@@ -10,7 +10,7 @@ import {
   sanitizeDual,
   sanitizeMergeList,
 } from "./prefs-shared";
-import type { TimetableSubjectKind } from "./timetable";
+import type { PersonSubjectKind } from "./timetable";
 
 //! ═══════════════════════════════════════════════════════════════════════════
 //! A NAPTÁR-FELIRATKOZÁS KÖZÖS SZERZŐDÉSE
@@ -36,7 +36,7 @@ import type { TimetableSubjectKind } from "./timetable";
 
 /** Amit a böngésző feltölt, amikor linket kér (vagy frissít). */
 export type CalendarFeedRequest = {
-  kind: TimetableSubjectKind;
+  kind: PersonSubjectKind;
   /** Az alany jele — `13C` vagy `KJ`. */
   short: string;
   //! A DÖNTÉSEK NYERSEN, NEM KILAPÍTVA. Kézenfekvő lenne „elrejtett órák
@@ -70,8 +70,7 @@ export function sanitizeFeedRequest(
   }
   const raw = input as Record<string, unknown>;
 
-  const kind: TimetableSubjectKind =
-    raw.kind === "teacher" ? "teacher" : "class";
+  const kind: PersonSubjectKind = raw.kind === "teacher" ? "teacher" : "class";
 
   if (typeof raw.short !== "string") return null;
   const short = raw.short.trim();

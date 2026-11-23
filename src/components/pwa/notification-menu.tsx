@@ -31,9 +31,9 @@ import {
 } from "@/lib/push";
 import { maxSubjects, type PushPrefs, subjectsOf } from "@/lib/push-shared";
 import {
+  type PersonSubjectKind,
   SUBJECT_WORDS,
   type TimetableSubject,
-  type TimetableSubjectKind,
 } from "@/lib/timetable";
 import { cn } from "@/lib/utils";
 
@@ -87,7 +87,7 @@ export function NotificationMenu({
   className,
 }: {
   /** Kire szól ez a harang — osztályra vagy tanárra. */
-  mode?: TimetableSubjectKind;
+  mode?: PersonSubjectKind;
   subjects: readonly TimetableSubject[];
   /** Az éppen nézett alany — ez a párbeszéd alapértelmezett választása. */
   currentSubject: string;

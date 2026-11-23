@@ -136,6 +136,7 @@ const RAIL_ORDER: readonly PlaceId[] = [
   "home",
   "duty",
   "rooms",
+  "roomTimetable",
   "subjects",
   "screens",
 ];

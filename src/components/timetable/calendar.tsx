@@ -2314,9 +2314,12 @@ export function TimetableCalendar({
           endMin: r.endMin,
           title: r.lesson.subjectShort || r.lesson.subject,
           fullTitle: r.lesson.subject || r.lesson.subjectShort,
+          //* A terem órarendjén az osztály ÉS a tanár is ki van töltve (lásd
+          //* `classroomLessons`); a másik két nézetben ezek egyike üres.
           meta: [
             r.rooms.join(" · "),
-            r.lesson.teacherShort || r.lesson.classShort,
+            r.lesson.classShort,
+            r.lesson.teacherShort,
           ].filter(Boolean),
           room: r.rooms.join(" · "),
           //* A rács sávján a rövid alak fér ki; a tanári lekérésnél a tanár
@@ -2528,8 +2531,10 @@ export function TimetableCalendar({
                 //! — az a sor elején nem mond semmit. Tanári lapon ezért a NÉV
                 //! áll ott; a hosszát a sor felső korlátja fogja meg, nem egy
                 //! rövidítés (lásd `standing-line.tsx`).
+                //* A TEREMNÉL ugyanígy: a „Könyvtár" jel mellett a teljes
+                //* név („118 - Könyvtár") mondja meg, hol van.
                 subject:
-                  (mode === "teacher"
+                  (mode !== "class"
                     ? view.subject?.name || view.subject?.short
                     : view.subject?.short) || words.oneCapital,
                 context: weekLabel(weekStart, narrowBar),
@@ -2569,7 +2574,7 @@ export function TimetableCalendar({
                             }
                             className={cn(
                               "h-9 touch-target appearance-none rounded-full border border-input bg-transparent py-1 pr-7 pl-3 text-sm transition-colors outline-none",
-                              mode === "teacher" ? "w-[160px]" : "w-[104px]",
+                              mode !== "class" ? "w-[160px]" : "w-[104px]",
                               "hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
                               "disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
                               !selectedSubject && "text-muted-foreground",
@@ -3570,9 +3575,13 @@ function ChoosePrompt({
           ? hasSubjects
             ? "Válaszd ki a nevedet a jobb felső sarokban, és megjelenik az órarended."
             : "Nincs kiválasztva tanár, és a tanárlista sem érhető el most."
-          : hasSubjects
-            ? "Válaszd ki az osztályod a jobb felső sarokban, és megjelenik az órarend."
-            : "Nincs beállítva az osztályod, és az osztálylista sem érhető el most."}
+          : mode === "classroom"
+            ? hasSubjects
+              ? "Válassz egy termet a jobb felső sarokban, és megjelenik a heti foglaltsága."
+              : "Nincs kiválasztva terem, és a teremlista sem érhető el most."
+            : hasSubjects
+              ? "Válaszd ki az osztályod a jobb felső sarokban, és megjelenik az órarend."
+              : "Nincs beállítva az osztályod, és az osztálylista sem érhető el most."}
       </p>
     </div>
   );

@@ -1,6 +1,6 @@
 import type { CalendarFeedLinks } from "./calendar-shared";
 import { loadDualSchedule } from "./dual-schedule";
-import { subjectStoreKey, type TimetableSubjectKind } from "./timetable";
+import { type PersonSubjectKind, subjectStoreKey } from "./timetable";
 import { loadLocalPreferences } from "./timetable-merge";
 
 //! ═══════════════════════════════════════════════════════════════════════════
@@ -27,7 +27,7 @@ import { loadLocalPreferences } from "./timetable-merge";
 const STORAGE_KEY = "orarend:calendar:v1";
 
 export type StoredFeed = CalendarFeedLinks & {
-  kind: TimetableSubjectKind;
+  kind: PersonSubjectKind;
   short: string;
   /** Fiókhoz kötött-e a feed (a felület ettől ígér többet vagy kevesebbet). */
   bound: boolean;
@@ -106,7 +106,7 @@ function fingerprintOf(
 
 /** A készüléken ÉPP érvényes állapot egy alanyra — ezt töltjük fel. */
 export function currentFeedState(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
 ): {
   storeKey: string;
@@ -141,7 +141,7 @@ export type FeedResult =
  *   írja át, tehát a már felvett naptár-feliratkozás érvényben marad.
  */
 export async function requestFeed(input: {
-  kind: TimetableSubjectKind;
+  kind: PersonSubjectKind;
   short: string;
   token?: string;
   signal?: AbortSignal;

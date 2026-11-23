@@ -14,6 +14,12 @@ fekvő lapra is kinyomtatható.
 
 - **Heti rács.** A suli listájából bármelyik osztály, regisztráció nélkül. Az
   utoljára választott osztály megmarad az eszközön.
+- **Terem-órarend** (`/terem`). Egy terem heti rácsa, a Helyek menüből a
+  Teremkereső mellől: mikor, melyik osztály és melyik tanár van benne. Ugyanaz a
+  lap, mint az osztályé és a tanáré, a Jedlikinfo `timetable/classrooms`
+  listájával és a `timetable/cards` `classroom` szűrőjével; a link megosztható
+  (`?classroom=102`). Értesítés, naptár-feliratkozás és duális beosztás itt
+  nincs — a termet nézik, nem követik. A választott terem csak az eszközön marad.
 - **Csoportbontás összevonása.** Az API az osztály minden párhuzamos csoportjának
   kártyáját visszaadja, ezért a bontott órák a rácsban egymásra csúsznak. Az
   ütköző kártyák azonosság szerint csoportokba kerülnek, a diák kiválasztja a
@@ -37,6 +43,14 @@ fekvő lapra is kinyomtatható.
   kezd. Egy tárgyon belül osztályonként (alapból) vagy tanáronként nézhető
   (`&nezet=tanar`); ha az órarendben választottál osztályt, az kerül előre, és
   meg is van jelölve — ezt a lap csak a böngészőből olvassa, nem küldi el.
+- **Kivetítés** (`/kivetites/<terem>`). A tanári gépen futó ScreenTask képe
+  saját lapon, ugyanarról a wifiről: a böngésző közvetlenül a tanári gépről
+  tölti le, a szerverünk nem látja. A terem címét egy tanár egyszer beállítja,
+  onnantól a link (akár QR-kódként az ajtón) mindenkinek működik. Az óra
+  részletlapjának „Kivetítés megnyitása" gombja is erre a lapra visz
+  (`?tanar=<jel>`, hogy a diák saját, tartalék címe is meglegyen), a vissza gomb
+  pedig az órarendre. Ahol a böngésző nem engedi a lapba ágyazott képet
+  (Safari, Firefox, `.local` név), a ScreenTask saját oldala nyílik új lapon.
 - **Nyomtatás.** `@page { size: A4 landscape }`, saját világos palettával, ami
   megtartja a tantárgyak színeit: a szín itt információ, nem dekoráció.
 - **Megnevezett hibák.** Az órarend adatai nem a mieink, ezért minden hibafajtának
@@ -346,6 +360,7 @@ src/
     orarend/       heti rács (alapértelmezett útvonal)
     ma/            a mai nap egy képernyőn
     tanari/        tanári heti nézet
+    terem/         egy terem heti nézete
     valtozasok/    változások listája
     belepes/       opcionális iskolai belépés
     adatvedelem/   adatvédelmi tájékoztató

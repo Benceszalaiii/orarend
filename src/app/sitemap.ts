@@ -29,6 +29,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "daily",
       priority: 0.8,
     },
+    {
+      url: "https://jedlik.info/terem",
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 0.6,
+    },
     //* Az iskolai lapok (lásd `chrome/places.ts`). A kivetítés nincs itt: az
     //* termenkénti link, és a lapja `noindex`.
     {

@@ -12,7 +12,7 @@ import {
   addDays,
   getTimetableWeek,
   mondayOf,
-  type TimetableSubjectKind,
+  type PersonSubjectKind,
 } from "./timetable";
 
 //! CSAK A SZERVEREN: ez a modul a Jedlikinfót hívja közvetlenül (nincs böngésző
@@ -117,7 +117,7 @@ export type FeedWindow = {
  * elküldése UTÁN (`after()`): a naptárnak nem kell megvárnia öt lekérést.
  */
 export async function servableWindow(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
 ): Promise<FeedWindow> {
   const cached = await readWindow(kind, short);
@@ -134,7 +134,7 @@ export async function servableWindow(
  * ablakot, ha a frissítés nem indult el (más kérés épp fut) vagy elbukott.
  */
 export async function refreshWindow(
-  kind: TimetableSubjectKind,
+  kind: PersonSubjectKind,
   short: string,
 ): Promise<FeedWindow> {
   const before = await readWindow(kind, short);

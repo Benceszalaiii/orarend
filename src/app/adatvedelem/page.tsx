@@ -27,7 +27,7 @@ export default function AdatvedelemPage() {
           Adatvédelmi tájékoztató
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Utolsó frissítés: 2026. október 4.
+          Utolsó frissítés: 2026. november 23.
         </p>
 
         <div className="mt-8 flex flex-col gap-8 text-sm leading-relaxed text-muted-strong">
@@ -491,7 +491,8 @@ export default function AdatvedelemPage() {
               Helyi tárolás a böngészőben
             </h2>
             <p>
-              A kiválasztott osztály, a beállítások (pl. összevont
+              A kiválasztott osztály (a tanári és a terem-órarenden a
+              kiválasztott tanár, illetve terem), a beállítások (pl. összevont
               csoportbontások, duális beosztás) és az utoljára megnyitott nézet
               a böngésző saját, helyi tárolójában (localStorage) mentődnek,
               kizárólag a te eszközödön. Bejelentkezés nélkül ezek a beállítások

@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  CalendarClock,
   Cast,
   DoorOpen,
   House,
@@ -23,7 +24,7 @@ import type { MenuItemId } from "@/lib/menu-items";
 
 export type PlaceId = Extract<
   MenuItemId,
-  "duty" | "rooms" | "subjects" | "screens" | "home"
+  "duty" | "rooms" | "roomTimetable" | "subjects" | "screens" | "home"
 >;
 
 export type Place = {
@@ -54,6 +55,17 @@ export const PLACES: readonly Place[] = [
     hint: "Melyik terem üres most",
     Icon: DoorOpen,
     hotkey: "k",
+  },
+  //* A terem heti rácsa — ugyanaz a lap, mint az `/orarend` és a `/tanari`,
+  //* csak az alany egy terem. Nézet helyett HELY, mert senki nem „jár" egy
+  //* terembe: a Hét/Ma tengely a saját órarendé marad.
+  {
+    id: "roomTimetable",
+    href: "/terem",
+    label: "Terem-órarend",
+    hint: "Egy terem heti foglaltsága",
+    Icon: CalendarClock,
+    hotkey: "h",
   },
   {
     id: "subjects",

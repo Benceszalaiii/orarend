@@ -63,7 +63,7 @@ import {
 } from "@/lib/shared-extras-store";
 import { liveStreamOfTeacher, useLiveStreams } from "@/lib/webrtc-live";
 import type { StreamSummary } from "@/lib/webrtc-shared";
-import { canViewInPage, ScreenTaskViewer } from "./screentask-viewer";
+import { canViewInPage } from "./screentask-viewer";
 
 //* ---------------------------------------------------------------------------
 //* Linkek és kivetítés a részletlapon
@@ -106,10 +106,6 @@ export function LessonExtrasSection({
   //* Közös, lassú lekérdezés — akárhány doboz kérdezi, egy kérés megy (lásd
   //* `webrtc-live.ts`).
   const live = liveStreamOfTeacher(useLiveStreams(), teacher);
-  const [viewing, setViewing] = useState<{
-    screen: ScreenAddress;
-    room: string;
-  } | null>(null);
 
   //! TANÁR NÉLKÜL NINCS KULCS. Mindkét sor a tanárhoz kötődik; ha a forrás nem
   //! adott tanárt, nincs mihez menteni — a szakasz ilyenkor meg sem jelenik.
@@ -155,17 +151,9 @@ export function LessonExtrasSection({
           shared={sharedScreenFor(shared, room)}
           personal={screenFor(extras, teacher, room)}
           loading={loading || sharedLoading}
-          onOpen={(screen) => setViewing({ screen, room })}
         />
       ))}
       {!userId && <GuestNote />}
-      {viewing && (
-        <ScreenTaskViewer
-          screen={viewing.screen}
-          title={`Kivetítés · ${viewing.room}`}
-          onClose={() => setViewing(null)}
-        />
-      )}
     </>
   );
 }
@@ -629,7 +617,6 @@ function ScreenBlock({
   shared,
   personal,
   loading,
-  onOpen,
 }: {
   //* `null` = vendég: a sorok ezen a készüléken, `localStorage`-ban élnek.
   userId: string | null;
@@ -645,7 +632,6 @@ function ScreenBlock({
   //! állította be a termet; amint van közös cím, az nyer, és a saját elbújik.
   personal: ScreenHost | null;
   loading: boolean;
-  onOpen: (screen: ScreenAddress) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -683,7 +669,11 @@ function ScreenBlock({
           : Promise.resolve({ ok: true } as const),
     );
 
-  const pageHref = `/kivetites/${encodeURIComponent(room)}`;
+  //! SAJÁT LAP, NEM ABLAK. A kivetítés a terem lapján nyílik (`/kivetites/…`):
+  //! könyvjelzőzhető, a vissza gomb az órarendre hoz, és ugyanaz a néző fut,
+  //! mint a QR-kódos megnyitásnál. A tanár jele a diák saját (tartalék)
+  //! címéhez kell — lásd `KivetitesRoom`.
+  const pageHref = `/kivetites/${encodeURIComponent(room)}?tanar=${encodeURIComponent(teacher)}`;
 
   return (
     <div className="px-4 py-3">
@@ -731,12 +721,14 @@ function ScreenBlock({
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 pl-7">
           {inPage ? (
             <Button
+              asChild
               size="sm"
               className="h-8 gap-1.5 rounded-full px-3 text-xs"
-              onClick={() => onOpen(screen)}
             >
-              <Cast className="size-3.5" aria-hidden />
-              Kivetítés megnyitása
+              <Link href={pageHref}>
+                <Cast className="size-3.5" aria-hidden />
+                Kivetítés megnyitása
+              </Link>
             </Button>
           ) : (
             <Button
@@ -758,7 +750,7 @@ function ScreenBlock({
               </a>
             </Button>
           )}
-          {shared && (
+          {shared && !inPage && (
             <Button
               asChild
               size="sm"

@@ -37,6 +37,7 @@ export type MenuItemId =
   | "home"
   | "duty"
   | "rooms"
+  | "roomTimetable"
   | "subjects"
   | "screens"
   | "merge"
@@ -120,6 +121,12 @@ export const MENU_ITEMS: readonly MenuItemMeta[] = [
     id: "rooms",
     label: "Teremkereső",
     hint: "Melyik terem üres most",
+    group: "site",
+  },
+  {
+    id: "roomTimetable",
+    label: "Terem-órarend",
+    hint: "Egy terem heti foglaltsága",
     group: "site",
   },
   {

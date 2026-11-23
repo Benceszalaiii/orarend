@@ -63,6 +63,7 @@ describe("subjectStoreKey", () => {
   test("tanár előtaggal, osztály anélkül, üres üres", () => {
     expect(subjectStoreKey("class", "12A")).toBe("12A");
     expect(subjectStoreKey("teacher", "LM")).toBe("tanar:LM");
+    expect(subjectStoreKey("classroom", "102")).toBe("terem:102");
     expect(subjectStoreKey("teacher", "")).toBe("");
   });
 });
@@ -413,6 +414,92 @@ describe("getTimetableWeek", () => {
       wholeClass: false,
       group: "lányok",
     });
+  });
+
+  test("terem: bal sarok = tanár, jobb = osztály; közös óra egy kártya", async () => {
+    const ROOMS = [
+      { short: "102", name: "102" },
+      { short: "Könyvtár", name: "118 - Könyvtár" },
+    ];
+    const { calls } = jedlik((url) => {
+      if (url.endsWith("timetable/classrooms")) return json(ROOMS);
+      if (url.endsWith("timetable/cards"))
+        return json({
+          ...WEEK,
+          cards: [
+            card({
+              leftBottom: "LM",
+              leftBottomTitle: "Lipták Mária",
+              rightBottom: "12A",
+              rightBottomTitle: "12A",
+              groupName: "12A-12A A csoport",
+              type: "classroom",
+            }),
+            //* Két osztály közös órája ugyanannál a tanárnál: EGY óra.
+            card({
+              text: "eti",
+              leftBottom: "KB",
+              leftBottomTitle: "Kovács Béla",
+              rightBottom: "09B",
+              dayOfWeek: 2,
+              date: "2032.01.06",
+              type: "classroom",
+            }),
+            card({
+              text: "eti",
+              leftBottom: "KB",
+              leftBottomTitle: "Kovács Béla",
+              rightBottom: "12A",
+              dayOfWeek: 2,
+              date: "2032.01.06",
+              type: "classroom",
+            }),
+            //* Ütközés: más tanár, ugyanabban a percben.
+            card({
+              text: "fiz",
+              leftBottom: "LM",
+              rightBottom: "11C",
+              dayOfWeek: 2,
+              date: "2032.01.06",
+              type: "classroom",
+            }),
+          ],
+        });
+      return undefined;
+    });
+    const week = await getTimetableWeek({
+      kind: "classroom",
+      classroom: "könyvtár",
+      weekStart: "2032-01-05",
+    });
+    expect(week.ok).toBe(true);
+    expect(week.subject).toEqual(ROOMS[1]);
+    const body = JSON.parse(
+      String(calls.find((c) => c.url.endsWith("timetable/cards"))?.init?.body),
+    );
+    expect(body).toMatchObject({
+      class: "",
+      teacher: "",
+      classroom: "Könyvtár",
+    });
+    expect(week.lessons).toHaveLength(3);
+    const [mat, eti, fiz] = week.lessons;
+    expect(mat).toMatchObject({
+      teacher: "Lipták Mária",
+      teacherShort: "LM",
+      classShort: "12A",
+      room: "",
+      wholeClass: false,
+      group: "12A-12A A csoport",
+    });
+    expect(eti).toMatchObject({
+      classShort: "09B, 12A",
+      teacherShort: "KB",
+      wholeClass: true,
+      groupColumn: 0,
+      groupCount: 2,
+    });
+    expect(fiz).toMatchObject({ groupColumn: 1, groupCount: 2 });
   });
 
   test("ismeretlen alany: hibás hét, lekérés nélkül", async () => {

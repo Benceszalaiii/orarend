@@ -36,9 +36,9 @@ import {
 import type { MergePreference } from "@/lib/timetable-merge";
 
 //! ═══════════════════════════════════════════════════════════════════════════
-//! A HETI RÁCS LAPJA — KÉT ALANYRA, EGY PÉLDÁNYBAN
+//! A HETI RÁCS LAPJA — HÁROM ALANYRA, EGY PÉLDÁNYBAN
 //! ═══════════════════════════════════════════════════════════════════════════
-//! AZ `/orarend` ÉS A `/tanari` UGYANAZ A LAP. Ugyanaz a rács, ugyanaz a
+//! AZ `/orarend`, A `/tanari` ÉS A `/terem` UGYANAZ A LAP. Ugyanaz a rács, ugyanaz a
 //! lapozás, ugyanaz az offline tartalék, ugyanaz a duális beosztás — a
 //! különbség annyi, hogy KI az órarend alanya: egy osztály vagy egy tanár.
 //! Ez a különbség egyetlen `mode` értékben áll, és minden más ebből
@@ -190,16 +190,22 @@ export function TimetablePage({
   //*
   //* Az osztályos lapon nincs feltétel: az osztály órarendje amúgy is
   //* bárkinek megnyitható, az értesítés semmit nem ad hozzá, amit ne látna.
-  const notifyAllowed = mode === "class" || sessionIsTeacher;
+  //*
+  //! A TEREM LAPJÁN NINCS HARANG, NAPTÁR ÉS DUÁLIS BEOSZTÁS. Mindhárom egy
+  //! EMBER napjáról szól; a terem órarendjét nézik, nem követik (lásd
+  //! `PersonSubjectKind`).
+  const personMode = mode === "classroom" ? null : mode;
+  const notifyAllowed =
+    personMode !== null && (personMode === "class" || sessionIsTeacher);
   const notifySetup = useCallback(
     ({ subjectShort }: { subjectShort: string }) => (
       <NotificationMenu
-        mode={mode}
+        mode={personMode ?? "class"}
         subjects={subjects}
         currentSubject={subjectShort}
       />
     ),
-    [subjects, mode],
+    [subjects, personMode],
   );
 
   //! ─── A NAPTÁR-FELIRATKOZÁS UGYANAZT A HATÁRT KAPJA, MINT A HARANG ────────
@@ -236,12 +242,12 @@ export function TimetablePage({
       //! következménye némán elmaradó újrarajzolás.
       <CalendarFeedMenu
         key={`calendar-${subjectShort}`}
-        mode={mode}
+        mode={personMode ?? "class"}
         subjectShort={subjectShort}
         hasDecisions={prefs.length > 0}
       />
     ),
-    [mode],
+    [personMode],
   );
 
   //! ═════════════════════════════════════════════════════════════════════════
@@ -278,6 +284,8 @@ export function TimetablePage({
   //!    oldotta meg (közös, még futó kérés) — itt annyi látszik belőle, hogy
   //!    a `buildTimetableView` feloldása már nem indít újabb kört.
   //!
+  //! A TEREM-LAP SEM TIPPEL: 71 terem közül egyik sem „az enyém" — aki
+  //! először nyitja meg, a választót kapja.
   //! AMI NEM VÁLTOZOTT: a tanári lap TOVÁBBRA SEM TIPPEL. Akinél nincs
   //! emlékezett tanár, ott az alany csak a listából (és a belépés nevéből)
   //! derülhet ki — ott a régi sorrend fut tovább, mert ott tényleg kell.
@@ -398,8 +406,8 @@ export function TimetablePage({
           subjects={subjects}
           subjectsError={subjectsError}
           variant="fullscreen"
-          dualStatusForDay={dualStatusForDay}
-          dualSetup={dualSetup}
+          dualStatusForDay={personMode ? dualStatusForDay : undefined}
+          dualSetup={personMode ? dualSetup : undefined}
           notifySetup={notifyAllowed ? notifySetup : undefined}
           //* Ugyanaz a feltétel, mint a harangnál: az osztályos lapon nincs
           //* kapu, a tanárin igazolt tanári fiók kell hozzá.
@@ -429,7 +437,8 @@ export function TimetablePage({
 //! A tanári lap harmadik forrása (a belépés NEVE, a tanárlistához mérve) itt
 //! szándékosan nincs benne: ahhoz kell a lista, tehát az marad a lassú úton.
 function subjectWithoutList(mode: TimetableSubjectKind): string {
-  //* A címben kért alany mindent megelőz (`?class=13C`, `?teacher=…`).
+  //* A címben kért alany mindent megelőz (`?class=13C`, `?teacher=…`,
+  //* `?classroom=102`).
   const linked = loadUrlSubject(mode);
   if (linked) return linked;
   const remembered = loadCachedSubject(mode);
@@ -472,6 +481,7 @@ function initialSubject({
     );
     return match?.short ?? "";
   }
+  if (mode === "classroom") return "";
 
   return PUBLIC_DEFAULT_CLASS;
 }

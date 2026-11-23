@@ -129,8 +129,17 @@ export function LessonBlock({
   //! forrás mindkettőt ugyanabban a mezőpárban adja, és mindig pontosan az van
   //! kitöltve, amelyik az adott nézetben új (lásd `timetable.ts`) — ezért itt
   //! nincs `mode`, csak az, hogy melyik mező szólal meg.
+  //*
+  //! A TEREM ÓRARENDJÉN MINDKETTŐ SZÓL: melyik osztály ül bent, és ki tartja.
+  //! Ott az osztály áll elöl (az a hangsúlyos), a tanár mögötte.
   const counterpart = lesson.classShort || lesson.teacherShort;
-  const counterpartLong = lesson.className || lesson.teacher;
+  const secondary = lesson.classShort ? lesson.teacherShort : "";
+  const counterpartLong = [
+    lesson.className || lesson.classShort,
+    lesson.teacher,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const title = [
     lesson.subject,
@@ -272,6 +281,7 @@ export function LessonBlock({
                 {counterpart}
               </span>
             )}
+            {secondary && <span>{secondary}</span>}
           </div>
         )}
       </div>

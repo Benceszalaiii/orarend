@@ -25,10 +25,14 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useSession } from "@/lib/auth-client";
 import {
+  extrasKey,
   formatScreenAddress,
+  type ScreenAddress,
+  screenFor,
   screenTaskPageUrl,
   sharedScreenFor,
 } from "@/lib/lesson-extras";
+import { useLessonExtras } from "@/lib/lesson-extras-store";
 import {
   refreshSharedExtras,
   saveRoomScreen,
@@ -45,6 +49,12 @@ import { cn } from "@/lib/utils";
 //! könyvjelzőbe lehet tenni, és soha senkinek nem kell IP-címet gépelnie. Ha a
 //! gép új címet kap, EGY tanár átírja, és a nyitva hagyott lapok is átállnak
 //! (megszakadt kapcsolatnál percenként újraolvassuk a terem címét).
+//!
+//! AZ ÓRARENDBŐL IS IDE JÖN A DIÁK. A részletlap „Kivetítés megnyitása" gombja
+//! nem ablakot nyit, hanem erre a lapra visz (`?tanar=<jel>`). Ha a teremnek
+//! még nincs közös címe, a diák SAJÁT, csak neki mentett címe a tartalék — azt
+//! a tanár + terem pár azonosítja, ezért kell a tanár jele. A vissza gomb ilyenkor
+//! az órarendre visz, nem a termek listájára.
 //! ═══════════════════════════════════════════════════════════════════════════
 
 //* Megszakadt kapcsolatnál ilyen sűrűn nézzük meg, nem írta-e át egy tanár.
@@ -53,15 +63,38 @@ const LOST_RECHECK_MS = 60_000;
 const DARK_BUTTON =
   "text-white/80 hover:bg-white/10 hover:text-white dark:hover:bg-white/10";
 
-export function KivetitesRoom({ room }: { room: string }) {
-  const { data: session } = useSession();
-  const self = useTeacherSelf(
-    session?.user.id ?? null,
-    session?.user.isTeacher === true,
-  );
-  const { status, shared } = useSharedExtras();
-  const screen = sharedScreenFor(shared, room);
+export function KivetitesRoom({
+  room,
+  teacher,
+}: {
+  room: string;
+  //* Az órarendből érkezve a kártya tanára — a saját cím kulcsához kell.
+  teacher: string | null;
+}) {
+  const router = useRouter();
+  const { data: session, isPending } = useSession();
+  const userId = session?.user.id ?? null;
+  const self = useTeacherSelf(userId, session?.user.isTeacher === true);
+  const { status: sharedStatus, shared } = useSharedExtras();
+  const { status: extrasStatus, extras } = useLessonExtras(userId);
+  const roomScreen = sharedScreenFor(shared, room);
+  //! A KÖZÖS CÍM NYER, a saját csak tartalék (mint a részletlapon). Tanár jele
+  //! nélkül az első saját cím ehhez a teremhez — egy diáknak egy teremben
+  //! jellemzően csak egy van.
+  const roomKey = extrasKey(room);
+  const personal = roomScreen
+    ? null
+    : teacher
+      ? screenFor(extras, teacher, room)
+      : (extras.screens.find((s) => s.room === roomKey) ?? null);
+  const screen: ScreenAddress | null = roomScreen ?? personal;
+  const status =
+    sharedStatus === "loading" ||
+    (!roomScreen && (isPending || extrasStatus === "loading"))
+      ? "loading"
+      : sharedStatus;
   const [editing, setEditing] = useState(false);
+  const fromTimetable = teacher !== null;
 
   const host = screen?.host ?? null;
   const [inPage, setInPage] = useState(false);
@@ -110,7 +143,17 @@ export function KivetitesRoom({ room }: { room: string }) {
     <main className="flex h-dvh flex-col bg-black text-white">
       <header className="flex shrink-0 items-center gap-2 border-b border-white/10 pt-[max(0.5rem,env(safe-area-inset-top))] pr-[max(0.75rem,env(safe-area-inset-right))] pb-2 pl-[max(0.5rem,env(safe-area-inset-left))]">
         <Button asChild size="icon-sm" variant="ghost" className={DARK_BUTTON}>
-          <Link href="/kivetites" aria-label="Minden terem">
+          <Link
+            href={fromTimetable ? "/orarend" : "/kivetites"}
+            aria-label={fromTimetable ? "Vissza az órarendhez" : "Minden terem"}
+            onClick={(event) => {
+              //* Az órarendből jöttünk: vissza ugyanoda, ugyanabba az állapotba.
+              if (fromTimetable && window.history.length > 1) {
+                event.preventDefault();
+                router.back();
+              }
+            }}
+          >
             <ChevronLeft />
           </Link>
         </Button>
@@ -131,6 +174,7 @@ export function KivetitesRoom({ room }: { room: string }) {
             {screen ? (
               <>
                 <span className="font-mono">{formatScreenAddress(screen)}</span>
+                {personal && " (saját)"}
                 {showStage && (
                   <>
                     {" · "}
@@ -215,7 +259,7 @@ export function KivetitesRoom({ room }: { room: string }) {
               ))}
             {hasFrame && link === "lost" && (
               <output className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1.5 text-xs text-white ring-1 ring-white/15">
-                Megszakadt a kapcsolat — újrapróbálom…
+                Megszakadt a kapcsolat. Újracsatlakozás…
               </output>
             )}
           </>
